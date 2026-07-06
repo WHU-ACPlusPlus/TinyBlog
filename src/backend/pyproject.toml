@@ -1,0 +1,10 @@
+[project]
+name = "TinyBlogBackend"
+version = "0.0.0"
+description = "The Backend of Tiny Blog."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.139.0",
+    "uvicorn>=0.50.0",
+]
