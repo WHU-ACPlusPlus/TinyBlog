@@ -101,6 +101,38 @@ if __name__ == "__main__":
     );
 """
             )
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            owner_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (owner_id) REFERENCES users(id)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_in_group (
+            group_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL DEFAULT 'member',
+            joined_at TEXT DEFAULT (datetime('now')),
+            last_read_id INTEGER DEFAULT 0,
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id) REFERENCES groups(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS group_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            sender_id INTEGER NOT NULL,
+            content TEXT,
+            sent_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (group_id) REFERENCES groups(id),
+            FOREIGN KEY (sender_id) REFERENCES users(id)
+        )
+    """)
     conn.commit()
 
 # Server Functions
@@ -389,7 +421,7 @@ def send_msg(body: Send_Msg):
             (user_id, body.to_whom_id, body.content,)
             )
     conn.commit()
-    return {"stauts": "success"}
+    return {"status": "success"}
 
 class Recv_Msg(BaseModel):
     cookie: str
@@ -552,5 +584,186 @@ def get_post(body: Get_Post):
         "media": [dict(m) for m in media]
     }
 
+class Create_Group_Req(BaseModel):
+    cookie: str
+    name: str
+
+@app.post("/create-group")
+def create_group(body: Create_Group_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    if not body.name:
+        return {"error": "Group name cannot be empty."}
+    user_id = row["user_id"]
+    cursor.execute(
+            "INSERT INTO groups (name, owner_id) VALUES (?, ?)",
+            (body.name, user_id)
+            )
+    group_id = cursor.lastrowid
+    cursor.execute(
+            "INSERT INTO user_in_group (group_id, user_id, role) VALUES (?, ?, ?)",
+            (group_id, user_id, "owner")
+            )
+    conn.commit()
+    return {"group_id": group_id}
+
+class Join_Group_Req(BaseModel):
+    cookie: str
+    group_id: int
+
+@app.post("/join-group")
+def join_group(body: Join_Group_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    group = cursor.execute(
+            "SELECT id FROM groups WHERE id = ?",
+            (body.group_id,)
+            ).fetchone()
+    if not group:
+        return {"error": "Group not exist."}
+    cursor.execute(
+            "INSERT OR IGNORE INTO user_in_group (group_id, user_id) VALUES (?, ?)",
+            (body.group_id, user_id)
+            )
+    conn.commit()
+    return {"status": "success"}
+
+class Leave_Group_Req(BaseModel):
+    cookie: str
+    group_id: int
+
+@app.post("/leave-group")
+def leave_group(body: Leave_Group_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    cursor.execute(
+            "DELETE FROM user_in_group WHERE group_id = ? AND user_id = ?",
+            (body.group_id, user_id)
+            )
+    conn.commit()
+    return {"status": "success"}
+
+class Send_Group_Msg_Req(BaseModel):
+    cookie: str
+    group_id: int
+    content: str
+
+@app.post("/send-group-msg")
+def send_group_msg(body: Send_Group_Msg_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    in_group = cursor.execute(
+            "SELECT role FROM user_in_group WHERE group_id = ? AND user_id = ?",
+            (body.group_id, user_id)
+            ).fetchone()
+    if not in_group:
+        return {"error": "You are not in this group."}
+    if not body.content:
+        return {"error": "Empty message not allowed."}
+    cursor.execute(
+            "INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)",
+            (body.group_id, user_id, body.content)
+            )
+    conn.commit()
+    return {"status": "success"}
+
+class Recv_Group_Msg_Req(BaseModel):
+    cookie: str
+    group_id: int
+    count: int = 20
+
+@app.post("/recv-group-msg")
+def recv_group_msg(body: Recv_Group_Msg_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    membership = cursor.execute(
+            "SELECT last_read_id FROM user_in_group WHERE group_id = ? AND user_id = ?",
+            (body.group_id, user_id)
+            ).fetchone()
+    if not membership:
+        return {"error": "You are not in this group."}
+    messages = cursor.execute("""
+            SELECT gm.id, gm.sender_id, u.username, u.nickname, gm.content, gm.sent_at
+            FROM group_messages gm
+            JOIN users u ON u.id = gm.sender_id
+            WHERE gm.group_id = ? AND gm.id > ?
+            ORDER BY gm.id ASC
+            LIMIT ?
+    """, (body.group_id, membership["last_read_id"], body.count)).fetchall()
+    if messages:
+        cursor.execute(
+                "UPDATE user_in_group SET last_read_id = ? WHERE group_id = ? AND user_id = ?",
+                (messages[-1]["id"], body.group_id, user_id)
+                )
+        conn.commit()
+    return {"messages": [dict(m) for m in messages]}
+
+class Get_Group_Members_Req(BaseModel):
+    cookie: str
+    group_id: int
+
+@app.post("/get-group-members")
+def get_group_members(body: Get_Group_Members_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    members = cursor.execute("""
+            SELECT u.id, u.username, u.nickname, ug.role, ug.joined_at
+            FROM user_in_group ug
+            JOIN users u ON u.id = ug.user_id
+            WHERE ug.group_id = ?
+            ORDER BY ug.joined_at ASC
+    """, (body.group_id,)).fetchall()
+    return {"members": [dict(m) for m in members]}
+
+class Get_My_Groups_Req(BaseModel):
+    cookie: str
+
+@app.post("/get-my-groups")
+def get_my_groups(body: Get_My_Groups_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    groups = cursor.execute("""
+            SELECT g.id, g.name, g.owner_id, ug.role, ug.joined_at
+            FROM user_in_group ug
+            JOIN groups g ON g.id = ug.group_id
+            WHERE ug.user_id = ?
+            ORDER BY ug.joined_at DESC
+    """, (user_id,)).fetchall()
+    return {"groups": [dict(g) for g in groups]}
+
 if __name__ == "__main__":
+    uvicorn.run(app, port = 18999)
     uvicorn.run(app, port = 18999)
