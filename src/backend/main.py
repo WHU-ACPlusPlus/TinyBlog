@@ -1,9 +1,10 @@
+#!/usr/bin/env -S uv run python3
 # Tiny Blog - 微微博最小可用后端主文件
 # Copyright (c) 2026 Becharm Kon. All Rights Reserved.
 
 # Databases
 
-import sqlite3
+import sqlite3, bcrypt, secrets
 
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
@@ -15,8 +16,8 @@ if __name__ == "__main__":
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
                     nickname TEXT NOT NULL,
-                    passhash TEXT NOT NULL,
-                    email_address TEXT NOT NULL
+                    password_hash TEXT NOT NULL,
+                    email_address TEXT NOT NULL DEFAULT ''
                    )
                    """)
     cursor.execute("""
@@ -116,44 +117,58 @@ from pydantic import BaseModel
 
 class Reg_Req(BaseModel):
     username: str
-    passhash: str
+    password: str
     nickname: str
 
 @app.post("/register-request")
-def reg_req(body: Reg_Req): # To get an verification code
+def reg_req(body: Reg_Req):
     if not body.username:
         return {"error": "Bad username."}
     if not body.nickname:
         return {"error": "Bad nickname."}
-    if not body.passhash:
-        return {"error": "Bad passhash."}
+    if not body.password:
+        return {"error": "Bad password."}
     existing = cursor.execute(
             "SELECT id FROM users WHERE username = ?",
             (body.username,)
             ).fetchone()
     if existing:
         return {"error": "Username occupied."}
-    return {"verify-path": "", "cookie": ""}
+    password_hash = bcrypt.hashpw(
+            body.password.encode(), bcrypt.gensalt()
+            ).decode()
+    cursor.execute(
+            "INSERT INTO users (username, nickname, password_hash) VALUES (?, ?, ?)",
+            (body.username, body.nickname, password_hash)
+            )
+    user_id = cursor.lastrowid
+    cookie = secrets.token_hex(32)
+    cursor.execute(
+            "INSERT INTO cookies (user_id, token, expires_at) VALUES (?, ?, ?)",
+            (user_id, cookie, "2099-12-31 13:59:59")
+            )
+    conn.commit()
+    return {"cookie": cookie}
 
 class Log_Req(BaseModel):
     username: str
-    passhash: str
-
-import secrets
+    password: str
 
 @app.post("/login-request")
-def log_req(body: Log_Req):  # 此处实现不完善！！！
+def log_req(body: Log_Req):
     if not body.username:
         return {"error": "Bad username."}
-    if not body.passhash:
-        return {"error": "Bad passhash."}
+    if not body.password:
+        return {"error": "Bad password."}
     log = cursor.execute(
             "SELECT * FROM users WHERE username = ?",
             (body.username,)
             ).fetchone()
     if not log:
         return {"error": "User not exist."}
-    if body.passhash != log["passhash"]:
+    if not bcrypt.checkpw(
+            body.password.encode(), log["password_hash"].encode()
+            ):
         return {"error": "Incorrect password."}
     cookie = secrets.token_hex(32)
     cursor.execute(
@@ -161,7 +176,7 @@ def log_req(body: Log_Req):  # 此处实现不完善！！！
             (log["id"], cookie, "2099-12-31 13:59:59")
             )
     conn.commit()
-    return {"verify-path": "", "cookie": cookie}
+    return {"cookie": cookie}
 
 class Get_Follower(BaseModel):
     cookie: str
@@ -189,7 +204,7 @@ def get_follow_list(body: Get_Follower):
             """
             SELECT u.id, u.username, u.nickname
             FROM following f
-            JOIN users u ON u.id == f.follower
+            JOIN users u ON u.id == f.followee
             WHERE f.follower == ?
             """,
             (user_id,)
@@ -199,6 +214,155 @@ def get_follow_list(body: Get_Follower):
             "followers": followers,
             "followees": followees
             }
+
+class Follow_Req(BaseModel):
+    cookie: str
+    followee_id: int
+
+@app.post("/follow")
+def follow(body: Follow_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if user_id == body.followee_id:
+        return {"error": "Cannot follow yourself."}
+    target = cursor.execute(
+            "SELECT id FROM users WHERE id = ?",
+            (body.followee_id,)
+            ).fetchone()
+    if not target:
+        return {"error": "User not exist."}
+    cursor.execute(
+            "INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
+            (user_id, body.followee_id)
+            )
+    conn.commit()
+    return {"status": "success"}
+
+@app.post("/unfollow")
+def unfollow(body: Follow_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    cursor.execute(
+            "DELETE FROM following WHERE follower = ? AND followee = ?",
+            (user_id, body.followee_id)
+            )
+    conn.commit()
+    return {"status": "success"}
+
+class Like_Req(BaseModel):
+    cookie: str
+    post_id: int
+
+@app.post("/like")
+def like(body: Like_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    post = cursor.execute(
+            "SELECT id FROM posts WHERE id = ?",
+            (body.post_id,)
+            ).fetchone()
+    if not post:
+        return {"error": "Post not exist."}
+    cursor.execute(
+            "INSERT OR IGNORE INTO liking_users (post_id, liker_id) VALUES (?, ?)",
+            (body.post_id, user_id)
+            )
+    if cursor.rowcount > 0:
+        cursor.execute(
+                "UPDATE posts SET like_num = like_num + 1 WHERE id = ?",
+                (body.post_id,)
+                )
+    conn.commit()
+    return {"status": "success"}
+
+@app.post("/unlike")
+def unlike(body: Like_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    cursor.execute(
+            "DELETE FROM liking_users WHERE post_id = ? AND liker_id = ?",
+            (body.post_id, user_id)
+            )
+    if cursor.rowcount > 0:
+        cursor.execute(
+                "UPDATE posts SET like_num = like_num - 1 WHERE id = ?",
+                (body.post_id,)
+                )
+    conn.commit()
+    return {"status": "success"}
+
+class Comment_Req(BaseModel):
+    cookie: str
+    post_id: int
+    content: str
+
+@app.post("/comment")
+def comment(body: Comment_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if not body.content:
+        return {"error": "Empty comment not allowed."}
+    post = cursor.execute(
+            "SELECT id FROM posts WHERE id = ?",
+            (body.post_id,)
+            ).fetchone()
+    if not post:
+        return {"error": "Post not exist."}
+    cursor.execute(
+            "INSERT INTO comments (post_id, commenter_id, content) VALUES (?, ?, ?)",
+            (body.post_id, user_id, body.content)
+            )
+    conn.commit()
+    return {"status": "success"}
+
+class Get_Comments_Req(BaseModel):
+    cookie: str
+    post_id: int
+
+@app.post("/get-comments")
+def get_comments(body: Get_Comments_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    cursor.execute(
+            """
+            SELECT c.id, u.username, u.nickname, c.content, c.commented_at
+            FROM comments c
+            JOIN users u ON u.id = c.commenter_id
+            WHERE c.post_id = ?
+            ORDER BY c.commented_at ASC
+            """,
+            (body.post_id,)
+            )
+    return {"comments": [dict(r) for r in cursor.fetchall()]}
 
 class Send_Msg(BaseModel):
     cookie: str
