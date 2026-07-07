@@ -22,6 +22,7 @@
 // ─── 后端英文错误 → 中文翻译 ───
 static QString trBackendError(const QString& msg) {
     static const QHash<QString, QString> map = {
+        {QStringLiteral("Bad cookie."),          QStringLiteral("登录已过期，请重新登录")},
         {QStringLiteral("Bad username."),          QStringLiteral("无效的用户名")},
         {QStringLiteral("Bad nickname."),          QStringLiteral("无效的昵称")},
         {QStringLiteral("Bad password."),          QStringLiteral("无效的密码")},
@@ -360,7 +361,12 @@ bool ApiClient::checkReply(QNetworkReply* reply, QJsonObject& out) {
 
     // 检查服务端返回的错误
     if (out.contains("error")) {
-        emit errorOccurred(trBackendError(out["error"].toString()));
+        QString errMsg = out["error"].toString();
+        // 检测到 cookie 失效 → 清除本地认证状态，UI 自动切回登录页
+        if (errMsg == "Bad cookie.") {
+            clearAuth();
+        }
+        emit errorOccurred(trBackendError(errMsg));
         return false;
     }
 
@@ -411,8 +417,8 @@ void ApiClient::checkCookie() {
     });
 }
 
-void ApiClient::registerUser(const QString& username, const QString& password,
-                             const QString& nickname) {
+void ApiClient::startRegister(const QString& username, const QString& password,
+                               const QString& nickname) {
     QJsonObject body{{"username", username},
                      {"password", password},
                      {"nickname", nickname}};
@@ -422,15 +428,97 @@ void ApiClient::registerUser(const QString& username, const QString& password,
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
+        emit registerStep1Done(
+            obj["cookie"].toString(),
+            obj["captcha"].toString()
+        );
+    });
+}
+
+void ApiClient::verifyRegister(const QString& cookie, const QString& captcha,
+                               const QString& email) {
+    QJsonObject body{{"cookie", cookie},
+                     {"captcha", captcha},
+                     {"email", email}};
+
+    QNetworkReply* reply = postJson("/register-verify", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit registerStep2Done();
+    });
+}
+
+void ApiClient::completeRegister(const QString& cookie, const QString& emailCode) {
+    QJsonObject body{{"cookie", cookie},
+                     {"email_code", emailCode}};
+
+    QNetworkReply* reply = postJson("/register-finish", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
         setCookie(obj["cookie"].toString());
         emit registerSuccess(m_cookie);
     });
 }
 
-void ApiClient::login(const QString& username, const QString& password) {
+void ApiClient::startLogin(const QString& username, const QString& password) {
     QJsonObject body{{"username", username}, {"password", password}};
 
     QNetworkReply* reply = postJson("/login-request", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        // 如有 error 字段由 checkReply 处理
+        emit loginStep1Done(
+            obj["cookie"].toString(),
+            obj["need_captcha"].toBool(),
+            obj["need_email"].toBool(),
+            obj["captcha"].toString(),
+            obj["email"].toString()
+        );
+    });
+}
+
+void ApiClient::loginVerifyCaptcha(const QString& cookie, const QString& captcha) {
+    QJsonObject body{{"cookie", cookie}, {"captcha", captcha}};
+    QNetworkReply* reply = postJson("/login-verify-captcha", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit loginStep2Done();
+    });
+}
+
+void ApiClient::loginSendEmailCode(const QString& cookie) {
+    QJsonObject body{{"cookie", cookie}};
+    QNetworkReply* reply = postJson("/login-send-email-code", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit loginStep3Done();
+    });
+}
+
+void ApiClient::loginVerifyEmail(const QString& cookie, const QString& emailCode) {
+    QJsonObject body{{"cookie", cookie}, {"email_code", emailCode}};
+    QNetworkReply* reply = postJson("/login-verify-email", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit loginStep3Done();
+    });
+}
+
+void ApiClient::completeLogin(const QString& cookie) {
+    QJsonObject body{{"cookie", cookie}};
+    QNetworkReply* reply = postJson("/login-finish", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))

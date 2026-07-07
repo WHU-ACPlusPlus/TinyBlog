@@ -1025,7 +1025,10 @@ Rectangle {
 
         function onLoggedInChanged() {
             if (!api.isLoggedIn) {
-                // 登出后清空发布页状态
+                // 登出后清空所有用户数据，防止不同用户串台
+                posts = []
+                _newPostIds = []
+                _newPostsMap = ({})
                 publishing = false
                 textInput.text = ""
                 selectedMedia = []

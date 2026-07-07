@@ -6,8 +6,21 @@ Rectangle {
     color: "#ededed"
 
     // ── 内部状态 ──
-    property int step: 0       // 0=欢迎页, 1=注册填表, 2=登录填表
+    property int step: 0       // 0=欢迎, 1=注册填表, 2=验证码+邮箱, 3=邮箱验证码, 4=登录填表, 5=登录验证码, 6=登录邮箱
     property string errorText: ""
+
+    // 注册流程暂存
+    property string regCookie: ""
+    property string captchaB64: ""
+    property string regEmail: ""
+
+    // 登录流程暂存
+    property string loginCookie: ""
+    property bool loginNeedCaptcha: false
+    property bool loginNeedEmail: false
+    property string loginCaptchaB64: ""
+    property string loginEmail: ""
+    property bool loginEmailSent: false
 
     // ── 欢迎页 (step=0) ──
     ColumnLayout {
@@ -55,12 +68,12 @@ Rectangle {
             text: qsTr("登录")
             onClicked: {
                 errorText = ""
-                step = 2
+                step = 4
             }
         }
     }
 
-    // ── 注册页 (step=1) ──
+    // ── 注册第一步：填写资料 (step=1) ──
     ColumnLayout {
         anchors.centerIn: parent
         spacing: 14
@@ -94,7 +107,6 @@ Rectangle {
             echoMode: TextInput.Password
         }
 
-        // 错误提示
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: errorText
@@ -106,30 +118,148 @@ Rectangle {
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 16
-
             Button {
                 text: qsTr("取消")
                 onClicked: step = 0
             }
             Button {
-                text: qsTr("确认")
+                text: qsTr("下一步")
                 onClicked: {
                     if (!regUsername.text || !regNickname.text || !regPassword.text) {
                         errorText = qsTr("请填写所有字段")
                         return
                     }
                     errorText = ""
-                    api.registerUser(regUsername.text, regPassword.text, regNickname.text)
+                    api.startRegister(regUsername.text, regPassword.text, regNickname.text)
                 }
             }
         }
     }
 
-    // ── 登录页 (step=2) ──
+    // ── 注册第二步：图形验证码 + 邮箱 (step=2) ──
     ColumnLayout {
         anchors.centerIn: parent
         spacing: 14
         visible: step === 2
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("验证身份")
+            font.pixelSize: 24
+            font.bold: true
+            color: "#333"
+        }
+
+        Image {
+            id: captchaImg
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredWidth: captchaImg.sourceSize.width
+            Layout.preferredHeight: captchaImg.sourceSize.height
+            source: captchaB64 ? "data:image/png;base64," + captchaB64 : ""
+            fillMode: Image.PreserveAspectFit
+        }
+
+        TextField {
+            id: captchaInput
+            Layout.preferredWidth: 260
+            Layout.alignment: Qt.AlignHCenter
+            placeholderText: qsTr("输入图片中的字符")
+        }
+
+        TextField {
+            id: emailInput
+            Layout.preferredWidth: 260
+            Layout.alignment: Qt.AlignHCenter
+            placeholderText: qsTr("邮箱地址")
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: errorText
+            color: "red"
+            visible: errorText !== ""
+            font.pixelSize: 13
+        }
+
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 16
+            Button {
+                text: qsTr("上一步")
+                onClicked: { step = 1; errorText = "" }
+            }
+            Button {
+                text: qsTr("发送验证码")
+                onClicked: {
+                    if (!captchaInput.text) { errorText = qsTr("请输入图形验证码"); return }
+                    if (!emailInput.text) { errorText = qsTr("请输入邮箱地址"); return }
+                    regEmail = emailInput.text
+                    errorText = ""
+                    api.verifyRegister(regCookie, captchaInput.text, regEmail)
+                }
+            }
+        }
+    }
+
+    // ── 注册第三步：邮箱验证码 (step=3) ──
+    ColumnLayout {
+        anchors.centerIn: parent
+        spacing: 14
+        visible: step === 3
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("验证邮箱")
+            font.pixelSize: 24
+            font.bold: true
+            color: "#333"
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("验证码已发送至 %1").arg(regEmail)
+            font.pixelSize: 13
+            color: "#888"
+        }
+
+        TextField {
+            id: emailCodeInput
+            Layout.preferredWidth: 260
+            Layout.alignment: Qt.AlignHCenter
+            placeholderText: qsTr("输入邮件中的验证码")
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: errorText
+            color: "red"
+            visible: errorText !== ""
+            font.pixelSize: 13
+        }
+
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 16
+            Button {
+                text: qsTr("上一步")
+                onClicked: { step = 2; errorText = "" }
+            }
+            Button {
+                text: qsTr("确认")
+                onClicked: {
+                    if (!emailCodeInput.text) { errorText = qsTr("请输入验证码"); return }
+                    errorText = ""
+                    api.completeRegister(regCookie, emailCodeInput.text)
+                }
+            }
+        }
+    }
+
+    // ── 登录页 (step=4) ──
+    ColumnLayout {
+        anchors.centerIn: parent
+        spacing: 14
+        visible: step === 4
 
         Text {
             Layout.alignment: Qt.AlignHCenter
@@ -151,14 +281,9 @@ Rectangle {
             Layout.alignment: Qt.AlignHCenter
             placeholderText: qsTr("密码")
             echoMode: TextInput.Password
-            onAccepted: {
-                // 回车快速登录
-                if (logUsername.text && logPassword.text)
-                    doLogin()
-            }
+            onAccepted: { tryLogin() }
         }
 
-        // 错误提示
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: errorText
@@ -170,34 +295,247 @@ Rectangle {
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 16
-
             Button {
                 text: qsTr("取消")
                 onClicked: step = 0
             }
             Button {
-                text: qsTr("确认")
-                onClicked: doLogin()
+                text: qsTr("登录")
+                onClicked: tryLogin()
             }
         }
     }
 
-    // ── 登录逻辑 ──
-    function doLogin() {
+    // ── 登录验证码 (step=5) ──
+    ColumnLayout {
+        anchors.centerIn: parent
+        spacing: 14
+        visible: step === 5
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("安全验证")
+            font.pixelSize: 24
+            font.bold: true
+            color: "#333"
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("登录尝试过于频繁，请输入验证码")
+            font.pixelSize: 13
+            color: "#888"
+        }
+
+        Image {
+            id: loginCaptchaImg
+            Layout.alignment: Qt.AlignHCenter
+            source: loginCaptchaB64 ? "data:image/png;base64," + loginCaptchaB64 : ""
+            fillMode: Image.PreserveAspectFit
+        }
+
+        TextField {
+            id: loginCaptchaInput
+            Layout.preferredWidth: 260
+            Layout.alignment: Qt.AlignHCenter
+            placeholderText: qsTr("输入图片中的字符")
+            onAccepted: { submitLoginCaptcha() }
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: errorText
+            color: "red"
+            visible: errorText !== ""
+            font.pixelSize: 13
+        }
+
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 16
+            Button {
+                text: qsTr("返回")
+                onClicked: { step = 4; errorText = "" }
+            }
+            Button {
+                text: qsTr("确认")
+                onClicked: submitLoginCaptcha()
+            }
+        }
+    }
+
+    // ── 登录邮箱验证 (step=6) ──
+    ColumnLayout {
+        anchors.centerIn: parent
+        spacing: 14
+        visible: step === 6
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("邮箱验证")
+            font.pixelSize: 24
+            font.bold: true
+            color: "#333"
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: loginEmailSent
+                  ? qsTr("验证码已发送至 %1").arg(loginEmail)
+                  : qsTr("验证码将发送至 %1").arg(loginEmail)
+            font.pixelSize: 13
+            color: "#888"
+            visible: loginEmail !== ""
+        }
+
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            visible: !loginEmailSent
+            Button {
+                text: qsTr("发送验证码")
+                onClicked: {
+                    errorText = ""
+                    api.loginSendEmailCode(loginCookie)
+                }
+            }
+        }
+
+        TextField {
+            id: loginEmailCodeInput
+            Layout.preferredWidth: 260
+            Layout.alignment: Qt.AlignHCenter
+            placeholderText: qsTr("输入邮件中的验证码")
+            visible: loginEmailSent
+            onAccepted: { submitLoginEmailCode() }
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: errorText
+            color: "red"
+            visible: errorText !== ""
+            font.pixelSize: 13
+        }
+
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 16
+            visible: loginEmailSent
+            Button {
+                text: qsTr("返回")
+                onClicked: { step = 4; errorText = "" }
+            }
+            Button {
+                text: qsTr("确认")
+                onClicked: submitLoginEmailCode()
+            }
+        }
+    }
+
+    // ── 登录辅助函数 ──
+    function tryLogin() {
         if (!logUsername.text || !logPassword.text) {
             errorText = qsTr("请填写所有字段")
             return
         }
         errorText = ""
-        api.login(logUsername.text, logPassword.text)
+        api.startLogin(logUsername.text, logPassword.text)
     }
 
-    // ── 监听 API 错误（发生在当前步骤时显示）──
+    function submitLoginCaptcha() {
+        if (!loginCaptchaInput.text) {
+            errorText = qsTr("请输入验证码")
+            return
+        }
+        errorText = ""
+        api.loginVerifyCaptcha(loginCookie, loginCaptchaInput.text)
+    }
+
+    function submitLoginEmailCode() {
+        if (!loginEmailCodeInput.text) {
+            errorText = qsTr("请输入验证码")
+            return
+        }
+        errorText = ""
+        api.loginVerifyEmail(loginCookie, loginEmailCodeInput.text)
+    }
+
+    function proceedAfterLoginFinish() {
+        // 如果还有 email 验证未完成，跳到邮箱页
+        if (loginNeedEmail && !loginEmailSent) {
+            step = 6
+        } else {
+            // 所有验证完成，完成登录
+            api.completeLogin(loginCookie)
+        }
+    }
+
+    // ── 监听 API 信号 ──
     Connections {
         target: api
+
+        // ── 注册信号 ──
+        function onRegisterStep1Done(cookie, captcha) {
+            regCookie = cookie
+            captchaB64 = captcha
+            errorText = ""
+            step = 2
+        }
+        function onRegisterStep2Done() {
+            errorText = qsTr("验证码已发送，请查收邮件")
+            step = 3
+        }
+        function onRegisterSuccess(cookie) {
+            // api 已自动保存 cookie，进入主界面
+        }
+
+        // ── 登录信号 ──
+        function onLoginStep1Done(cookie, needCaptcha, needEmail, captcha, email) {
+            loginCookie = cookie
+            loginNeedCaptcha = needCaptcha
+            loginNeedEmail = needEmail
+            loginCaptchaB64 = captcha
+            loginEmail = email || ""
+            loginEmailSent = false
+
+            if (needCaptcha) {
+                // 先校验图形验证码
+                step = 5
+            } else if (needEmail) {
+                // 直接进邮箱验证
+                step = 6
+            } else {
+                // 无需额外验证，直接完成登录
+                api.completeLogin(cookie)
+            }
+        }
+
+        function onLoginStep2Done() {
+            // 图形验证码通过 → 如果还需要邮箱则跳邮箱页，否则完成
+            if (loginNeedEmail) {
+                step = 6
+            } else {
+                api.completeLogin(loginCookie)
+            }
+        }
+
+        function onLoginStep3Done() {
+            // 邮箱验证码已发送或已校验 → 如果已发送但未校验则等待输入
+            if (step === 6 && loginEmailSent) {
+                // 已发送、已校验 → 完成登录
+                api.completeLogin(loginCookie)
+            } else {
+                // 首次进入或刚发送 → 显示输入框
+                loginEmailSent = !loginEmailSent
+            }
+        }
+
+        function onLoginSuccess(cookie) {
+            // api 已自动保存 cookie，进入主界面
+        }
+
         function onErrorOccurred(msg) {
-            // 只在登录/注册步骤时显示错误，避免干扰
-            if (step === 1 || step === 2)
+            if (step >= 1 && step <= 6)
                 errorText = msg
         }
     }
