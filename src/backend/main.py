@@ -4,7 +4,7 @@
 
 # Databases
 
-import sqlite3, bcrypt, secrets, threading
+import sqlite3, bcrypt, secrets, threading, base64
 
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
@@ -188,6 +188,23 @@ if __name__ == "__main__":
             FOREIGN KEY (post_id) REFERENCES posts(id)
         )
     """)
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            from_user_id INTEGER NOT NULL,
+            post_id INTEGER DEFAULT NULL,
+            comment_id INTEGER DEFAULT NULL,
+            content TEXT NOT NULL DEFAULT '',
+            is_read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (from_user_id) REFERENCES users(id),
+            FOREIGN KEY (post_id) REFERENCES posts(id),
+            FOREIGN KEY (comment_id) REFERENCES comments(id)
+        )
+    """)
     db_commit()
 
 # Server Functions
@@ -322,6 +339,11 @@ def follow(body: Follow_Req):
     db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
             (user_id, body.followee_id)
             )
+    if db_rowcount() > 0:
+        db_execute(
+                "INSERT INTO notifications (user_id, type, from_user_id, content) VALUES (?, 'follow', ?, '')",
+                (body.followee_id, user_id)
+                )
     db_commit()
     return {"status": "success"}
 
@@ -367,6 +389,15 @@ def like(body: Like_Req):
                 "UPDATE posts SET like_num = like_num + 1 WHERE id = ?",
                 (body.post_id,)
                 )
+        post_owner = db_fetchone(
+                "SELECT publisher_id FROM posts WHERE id = ?",
+                (body.post_id,)
+                )
+        if post_owner and post_owner["publisher_id"] != user_id:
+            db_execute(
+                    "INSERT INTO notifications (user_id, type, from_user_id, post_id, content) VALUES (?, 'like', ?, ?, '')",
+                    (post_owner["publisher_id"], user_id, body.post_id)
+                    )
     db_commit()
     return {"status": "success"}
 
@@ -415,6 +446,16 @@ def comment(body: Comment_Req):
     db_execute("INSERT INTO comments (post_id, commenter_id, content) VALUES (?, ?, ?)",
             (body.post_id, user_id, body.content)
             )
+    comment_id = db_lastrowid()
+    post_owner = db_fetchone(
+            "SELECT publisher_id FROM posts WHERE id = ?",
+            (body.post_id,)
+            )
+    if post_owner and post_owner["publisher_id"] != user_id:
+        db_execute(
+                "INSERT INTO notifications (user_id, type, from_user_id, post_id, comment_id, content) VALUES (?, 'comment', ?, ?, ?, ?)",
+                (post_owner["publisher_id"], user_id, body.post_id, comment_id, body.content[:50])
+                )
     db_commit()
     return {"status": "success"}
 
@@ -463,6 +504,10 @@ def send_msg(body: Send_Msg):
         return {"error": "Bad `to_whom_id`"}
     db_execute("INSERT INTO offline_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
             (user_id, body.to_whom_id, body.content,)
+            )
+    db_execute(
+            "INSERT INTO notifications (user_id, type, from_user_id, content) VALUES (?, 'message', ?, ?)",
+            (body.to_whom_id, user_id, body.content[:50])
             )
     db_commit()
     return {"status": "success"}
@@ -527,10 +572,11 @@ def pub_post(body: Pub_Post):
 class Post_Fetch(BaseModel):
     cookie: str
     count: int = 20
+    before_id: int = 0
 
 @app.post("/post-fetch")
 def post_fetch(body: Post_Fetch):
-    print(f"DEBUG post_fetch: cookie={repr(body.cookie)}, count={body.count}", flush=True)
+    print(f"DEBUG post_fetch: cookie={repr(body.cookie)}, count={body.count}, before_id={body.before_id}", flush=True)
     row = db_fetchone(
         "SELECT user_id FROM cookies WHERE token = ?",
         (body.cookie,)
@@ -539,32 +585,39 @@ def post_fetch(body: Post_Fetch):
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
 
+    before_clause = ""
+    before_param = ()
+    if body.before_id > 0:
+        before_clause = " AND p.id < ?"
+        before_param = (body.before_id,)
+
     # 1. 关注的人发的帖子
-    followed = db_fetchall("""
+    followed = db_fetchall(f"""
         SELECT p.*, u.username, u.nickname
         FROM posts p
         JOIN users u ON u.id = p.publisher_id
         WHERE p.publisher_id IN (
             SELECT followee FROM following WHERE follower = ?
-        )
-    """, (user_id,))
+        ){before_clause}
+    """, (user_id,) + before_param)
 
     # 2. 最火的帖子
-    hot = db_fetchall("""
+    hot = db_fetchall(f"""
         SELECT p.*, u.username, u.nickname
         FROM posts p
         JOIN users u ON u.id = p.publisher_id
-        WHERE p.like_num > 0
+        WHERE p.like_num > 0{before_clause}
         ORDER BY p.like_num DESC LIMIT 50
-    """)
+    """, before_param)
 
     # 3. 最新的帖子
-    recent = db_fetchall("""
+    recent = db_fetchall(f"""
         SELECT p.*, u.username, u.nickname
         FROM posts p
         JOIN users u ON u.id = p.publisher_id
+        WHERE 1=1{before_clause}
         ORDER BY p.created_at DESC LIMIT 50
-    """)
+    """, before_param)
 
     # 排除已读
     seen = set()
@@ -579,7 +632,8 @@ def post_fetch(body: Post_Fetch):
             seen.add(post["id"])
             combined.append(dict(post))
 
-    random.shuffle(combined)
+    if body.before_id == 0:
+        random.shuffle(combined)
 
     # 截断到 count 条（计为最大数，不足则全返），返回 ID 列表
     result = combined[:body.count]
@@ -589,7 +643,8 @@ def post_fetch(body: Post_Fetch):
             (user_id, post["id"])
         )
     db_commit()
-    return {"posts": [p["id"] for p in result], "count": len(result)}
+    next_cursor = result[-1]["id"] if result else 0
+    return {"posts": [p["id"] for p in result], "count": len(result), "next_cursor": next_cursor}
 
 class Get_Post(BaseModel):
     cookie: str
@@ -603,9 +658,10 @@ def get_post(body: Get_Post):
     )
     if not row:
         return {"error": "Bad cookie."}
+    user_id = row["user_id"]
 
     post = db_fetchone(
-        "SELECT p.*, u.username, u.nickname FROM posts p JOIN users u ON u.id = p.publisher_id WHERE p.id = ?",
+        "SELECT p.*, u.username, u.nickname, u.avatar FROM posts p JOIN users u ON u.id = p.publisher_id WHERE p.id = ?",
         (body.post_id,)
     )
     if not post:
@@ -616,15 +672,34 @@ def get_post(body: Get_Post):
         (body.post_id,)
     )
 
+    liked = db_fetchone(
+        "SELECT 1 FROM liking_users WHERE post_id = ? AND liker_id = ?",
+        (body.post_id, user_id)
+    ) is not None
+
+    bookmarked = db_fetchone(
+        "SELECT 1 FROM bookmarks WHERE post_id = ? AND user_id = ?",
+        (body.post_id, user_id)
+    ) is not None
+
+    comment_count = db_fetchone(
+        "SELECT COUNT(*) as cnt FROM comments WHERE post_id = ?",
+        (body.post_id,)
+    )
+
     return {
         "id": post["id"],
         "publisher_id": post["publisher_id"],
         "username": post["username"],
         "nickname": post["nickname"],
+        "avatar": post["avatar"],
         "content": post["content"],
         "like_num": post["like_num"],
         "created_at": post["created_at"],
         "repost_id": post["repost_id"],
+        "is_liked": liked,
+        "is_bookmarked": bookmarked,
+        "comment_count": comment_count["cnt"] if comment_count else 0,
         "media": [dict(m) for m in media]
     }
 
@@ -1083,6 +1158,337 @@ def get_avatar(user_id: int = 0):
     if not row:
         return {"error": "User not found."}
     return {"user_id": user_id, "avatar": row["avatar"], "signature": row["signature"]}
+
+# =============================================================================
+# P1: 搜索系统 — 全局搜索用户/帖子/群组
+# POST /search
+# =============================================================================
+class Search_Req(BaseModel):
+    cookie: str
+    keyword: str
+
+@app.post("/search")
+def search(body: Search_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    if not body.keyword:
+        return {"error": "Keyword required."}
+    kw = "%" + body.keyword + "%"
+    users = [dict(u) for u in db_fetchall(
+            "SELECT id, username, nickname, avatar, signature FROM users WHERE username LIKE ? OR nickname LIKE ? LIMIT 20",
+            (kw, kw)
+            )]
+    posts = [dict(p) for p in db_fetchall(
+            "SELECT p.id, p.content, p.created_at, u.username, u.nickname FROM posts p JOIN users u ON u.id = p.publisher_id WHERE p.content LIKE ? ORDER BY p.created_at DESC LIMIT 20",
+            (kw,)
+            )]
+    groups = [dict(g) for g in db_fetchall(
+            "SELECT id, name, owner_id, created_at FROM groups WHERE name LIKE ? LIMIT 20",
+            (kw,)
+            )]
+    return {"users": users, "posts": posts, "groups": groups}
+
+# =============================================================================
+# P1: 通知系统 — 获取通知列表（游标分页）
+# POST /get-notifications
+# =============================================================================
+class Get_Notifications_Req(BaseModel):
+    cookie: str
+    before_id: int = 0
+    count: int = 20
+
+@app.post("/get-notifications")
+def get_notifications(body: Get_Notifications_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if body.before_id > 0:
+        notis = db_fetchall("""
+                SELECT n.*, u.username, u.nickname
+                FROM notifications n
+                JOIN users u ON u.id = n.from_user_id
+                WHERE n.user_id = ? AND n.id < ?
+                ORDER BY n.id DESC LIMIT ?
+        """, (user_id, body.before_id, body.count))
+    else:
+        notis = db_fetchall("""
+                SELECT n.*, u.username, u.nickname
+                FROM notifications n
+                JOIN users u ON u.id = n.from_user_id
+                WHERE n.user_id = ?
+                ORDER BY n.id DESC LIMIT ?
+        """, (user_id, body.count))
+    unread = db_fetchone(
+            "SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ? AND is_read = 0",
+            (user_id,)
+            )
+    next_cursor = notis[-1]["id"] if notis else 0
+    return {
+            "notifications": [dict(n) for n in notis],
+            "unread_count": unread["cnt"] if unread else 0,
+            "next_cursor": next_cursor
+            }
+
+# =============================================================================
+# P1: 通知系统 — 标记已读
+# POST /mark-notifications-read
+# =============================================================================
+class Mark_Read_Req(BaseModel):
+    cookie: str
+    notification_id: int = 0
+
+@app.post("/mark-notifications-read")
+def mark_notifications_read(body: Mark_Read_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if body.notification_id > 0:
+        db_execute(
+                "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
+                (body.notification_id, user_id)
+                )
+    else:
+        db_execute(
+                "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0",
+                (user_id,)
+                )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P1: 用户系统 — 查看用户主页（帖子时间线，游标分页）
+# POST /get-user-posts
+# =============================================================================
+class Get_User_Posts_Req(BaseModel):
+    cookie: str
+    user_id: int
+    before_id: int = 0
+    count: int = 20
+
+@app.post("/get-user-posts")
+def get_user_posts(body: Get_User_Posts_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    target_user = db_fetchone(
+            "SELECT id, username, nickname, avatar, signature FROM users WHERE id = ?",
+            (body.user_id,)
+            )
+    if not target_user:
+        return {"error": "User not exist."}
+    if body.before_id > 0:
+        posts = db_fetchall("""
+                SELECT p.*, u.username, u.nickname
+                FROM posts p
+                JOIN users u ON u.id = p.publisher_id
+                WHERE p.publisher_id = ? AND p.id < ?
+                ORDER BY p.id DESC LIMIT ?
+        """, (body.user_id, body.before_id, body.count))
+    else:
+        posts = db_fetchall("""
+                SELECT p.*, u.username, u.nickname
+                FROM posts p
+                JOIN users u ON u.id = p.publisher_id
+                WHERE p.publisher_id = ?
+                ORDER BY p.id DESC LIMIT ?
+        """, (body.user_id, body.count))
+    next_cursor = posts[-1]["id"] if posts else 0
+    result = []
+    for p in posts:
+        media = db_fetchall(
+                "SELECT offset, content FROM post_media WHERE post_id = ? ORDER BY offset",
+                (p["id"],)
+                )
+        result.append({
+            "id": p["id"],
+            "content": p["content"],
+            "like_num": p["like_num"],
+            "created_at": p["created_at"],
+            "repost_id": p["repost_id"],
+            "media": [dict(m) for m in media]
+        })
+    return {
+            "user": {
+                "id": target_user["id"],
+                "username": target_user["username"],
+                "nickname": target_user["nickname"],
+                "avatar": target_user["avatar"],
+                "signature": target_user["signature"]
+                },
+            "posts": result,
+            "next_cursor": next_cursor
+            }
+
+# =============================================================================
+# P1: 用户系统 — 查看用户详细资料（含关注状态和统计）
+# POST /get-user-profile
+# =============================================================================
+class Get_User_Profile_Req(BaseModel):
+    cookie: str
+    user_id: int
+
+@app.post("/get-user-profile")
+def get_user_profile(body: Get_User_Profile_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    my_id = row["user_id"]
+    target = db_fetchone(
+            "SELECT id, username, nickname, avatar, signature, email_address FROM users WHERE id = ?",
+            (body.user_id,)
+            )
+    if not target:
+        return {"error": "User not exist."}
+    is_following = db_fetchone(
+            "SELECT 1 FROM following WHERE follower = ? AND followee = ?",
+            (my_id, body.user_id)
+            ) is not None
+    is_followed = db_fetchone(
+            "SELECT 1 FROM following WHERE follower = ? AND followee = ?",
+            (body.user_id, my_id)
+            ) is not None
+    post_count = db_fetchone(
+            "SELECT COUNT(*) as cnt FROM posts WHERE publisher_id = ?",
+            (body.user_id,)
+            )
+    follower_count = db_fetchone(
+            "SELECT COUNT(*) as cnt FROM following WHERE followee = ?",
+            (body.user_id,)
+            )
+    followee_count = db_fetchone(
+            "SELECT COUNT(*) as cnt FROM following WHERE follower = ?",
+            (body.user_id,)
+            )
+    return {
+            "id": target["id"],
+            "username": target["username"],
+            "nickname": target["nickname"],
+            "avatar": target["avatar"],
+            "signature": target["signature"],
+            "email_address": target["email_address"],
+            "is_following": is_following,
+            "is_followed": is_followed,
+            "post_count": post_count["cnt"] if post_count else 0,
+            "follower_count": follower_count["cnt"] if follower_count else 0,
+            "followee_count": followee_count["cnt"] if followee_count else 0
+            }
+
+# =============================================================================
+# P1: 帖子系统 — 编辑帖子（仅发布者本人）
+# POST /edit-post
+# =============================================================================
+class Edit_Post_Req(BaseModel):
+    cookie: str
+    post_id: int
+    content: str
+
+@app.post("/edit-post")
+def edit_post(body: Edit_Post_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    post = db_fetchone(
+            "SELECT publisher_id FROM posts WHERE id = ?",
+            (body.post_id,)
+            )
+    if not post:
+        return {"error": "Post not exist."}
+    if post["publisher_id"] != user_id:
+        return {"error": "Not your post."}
+    db_execute(
+            "UPDATE posts SET content = ? WHERE id = ?",
+            (body.content, body.post_id)
+            )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P1: 互动系统 — 获取点赞用户列表（游标分页）
+# POST /get-post-likers
+# =============================================================================
+class Get_Post_Likers_Req(BaseModel):
+    cookie: str
+    post_id: int
+    before_liker_id: int = 0
+    count: int = 20
+
+@app.post("/get-post-likers")
+def get_post_likers(body: Get_Post_Likers_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    if body.before_liker_id > 0:
+        likers = db_fetchall("""
+                SELECT u.id, u.username, u.nickname, u.avatar, lu.liked_at
+                FROM liking_users lu
+                JOIN users u ON u.id = lu.liker_id
+                WHERE lu.post_id = ? AND lu.liker_id < ?
+                ORDER BY lu.liked_at DESC LIMIT ?
+        """, (body.post_id, body.before_liker_id, body.count))
+    else:
+        likers = db_fetchall("""
+                SELECT u.id, u.username, u.nickname, u.avatar, lu.liked_at
+                FROM liking_users lu
+                JOIN users u ON u.id = lu.liker_id
+                WHERE lu.post_id = ?
+                ORDER BY lu.liked_at DESC LIMIT ?
+        """, (body.post_id, body.count))
+    total = db_fetchone(
+            "SELECT like_num FROM posts WHERE id = ?",
+            (body.post_id,)
+            )
+    next_cursor = likers[-1]["id"] if likers else 0
+    return {
+            "likers": [dict(l) for l in likers],
+            "total": total["like_num"] if total else 0,
+            "next_cursor": next_cursor
+            }
+
+# =============================================================================
+# P1: 文件上传 — multipart/form-data 上传，返回 Base64
+# POST /upload-media
+# =============================================================================
+@app.post("/upload-media")
+async def upload_media(
+        cookie: str = fastapi.Form(...),
+        file: fastapi.UploadFile = fastapi.File(...)
+        ):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    data = await file.read()
+    if len(data) > (1 << 24):
+        return {"error": "Media cannot be larger than 16MiB."}
+    encoded = base64.b64encode(data).decode()
+    return {"filename": file.filename, "content_type": file.content_type, "data": encoded}
 
 if __name__ == "__main__":
     uvicorn.run(app, port = 18999)
