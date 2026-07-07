@@ -36,7 +36,7 @@ Rectangle {
             Layout.alignment: Qt.AlignHCenter
             placeholderText: "http://127.0.0.1:18999"
             Component.onCompleted: text = api.baseUrl
-            onTextChanged: api.setBaseUrl(text)
+            onTextChanged: api.baseUrl = text
         }
 
         Button {

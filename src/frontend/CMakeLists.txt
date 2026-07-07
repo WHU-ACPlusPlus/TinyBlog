@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(QT_QML_GENERATE_QMLLS_INI ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2)
+find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -31,7 +31,7 @@ qt_add_qml_module(appfrontend
 )
 
 target_link_libraries(appfrontend
-    PRIVATE Qt6::Quick Qt6::Network Qt6::QuickDialogs2
+    PRIVATE Qt6::Quick Qt6::Network Qt6::QuickDialogs2 Qt6::Multimedia
 )
 
 set_target_properties(appfrontend PROPERTIES

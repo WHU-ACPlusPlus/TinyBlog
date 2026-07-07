@@ -15,6 +15,7 @@ int main(int argc, char *argv[])
     app.setOrganizationName("TinyChat");
     app.setApplicationName("TinyChat");
 
+
     // 创建 API 客户端，暴露给 QML 侧使用
     ApiClient api;
     api.setBaseUrl("http://127.0.0.1:18999");
