@@ -4,7 +4,7 @@
 
 # Databases
 
-import sqlite3, bcrypt, secrets, threading, base64
+import sqlite3, bcrypt, secrets, threading, base64, re
 
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
@@ -12,15 +12,16 @@ conn.execute("PRAGMA journal_mode=WAL")
 
 # 线程锁：保护所有数据库操作，防止并发读同一连接导致段错误
 db_lock = threading.Lock()
+_thread_local = threading.local()  # 线程本地存储，防止 lastrowid/rowcount 跨线程串扰
 
 # 用 conn.execute() 替代全局 cursor，每次获取新游标，线程安全
-_last_cursor = None
 
 def db_execute(sql, params=()):
-    global _last_cursor
     with db_lock:
-        _last_cursor = conn.execute(sql, params)
-        return _last_cursor
+        cur = conn.execute(sql, params)
+        _thread_local.lastrowid = cur.lastrowid
+        _thread_local.rowcount = cur.rowcount
+        return cur
 
 def db_fetchone(sql, params=()):
     with db_lock:
@@ -35,14 +36,19 @@ def db_commit():
         conn.commit()
 
 def db_lastrowid():
-    with db_lock:
-        return _last_cursor.lastrowid if _last_cursor is not None else -1
+    return getattr(_thread_local, 'lastrowid', -1)
 
 def db_rowcount():
-    with db_lock:
-        if _last_cursor is not None:
-            return _last_cursor.rowcount
-        return 0
+    return getattr(_thread_local, 'rowcount', 0)
+
+# ─── 工具函数 ───────────────────────────────────────────
+
+def extract_hashtags(text: str) -> list[str]:
+    """从文本中提取去重的 #标签，支持中文标签"""
+    if not text:
+        return []
+    tags = re.findall(r'#([\w\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]+)', text)
+    return list(dict.fromkeys(tags))  # 保持顺序去重
 
 if __name__ == "__main__":
     db_execute("""
@@ -205,6 +211,49 @@ if __name__ == "__main__":
             FOREIGN KEY (comment_id) REFERENCES comments(id)
         )
     """)
+    # ─── P2 新增表 ────────────────────────────────────────
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS blocks (
+            blocker_id INTEGER NOT NULL,
+            blocked_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (blocker_id, blocked_id),
+            FOREIGN KEY (blocker_id) REFERENCES users(id),
+            FOREIGN KEY (blocked_id) REFERENCES users(id)
+        )
+    """)
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reporter_id INTEGER NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id INTEGER NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (reporter_id) REFERENCES users(id)
+        )
+    """)
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS hashtags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL
+        )
+    """)
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS post_hashtags (
+            post_id INTEGER NOT NULL,
+            hashtag_id INTEGER NOT NULL,
+            PRIMARY KEY (post_id, hashtag_id),
+            FOREIGN KEY (post_id) REFERENCES posts(id),
+            FOREIGN KEY (hashtag_id) REFERENCES hashtags(id)
+        )
+    """)
+    # 为旧数据库补加 visibility 列
+    try:
+        db_execute("ALTER TABLE posts ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'")
+    except sqlite3.OperationalError:
+        pass
     db_commit()
 
 # Server Functions
@@ -539,6 +588,7 @@ class Pub_Post(BaseModel):
     cookie: str
     text: str
     media: list[str] = []
+    visibility: str = "public"  # public | followers_only | private
 
 @app.post("/pub-post")
 def pub_post(body: Pub_Post):
@@ -553,11 +603,13 @@ def pub_post(body: Pub_Post):
         return {"error": "Empty post not allowed."}
     if len(body.media) > 9:
         return {"error": "Too many media."}
+    if body.visibility not in ("public", "followers_only", "private"):
+        return {"error": "Invalid visibility."}
     for medium in body.media:
         if len(medium) > (1 << 24):
             return {"error": "Media cannot be larger than 16MiB."}
-    db_execute("INSERT INTO posts (publisher_id, content) VALUES (?, ?)",
-            (user_id, body.text)
+    db_execute("INSERT INTO posts (publisher_id, content, visibility) VALUES (?, ?, ?)",
+            (user_id, body.text, body.visibility)
             )
     db_commit()
     post_id = db_lastrowid()
@@ -566,8 +618,17 @@ def pub_post(body: Pub_Post):
                 "INSERT INTO post_media (post_id, offset, content) VALUES (?, ?, ?)",
                 (post_id, i, body.media[i],)
                 )
+    # 提取并存储 #标签
+    tags = extract_hashtags(body.text)
+    for tag in tags:
+        db_execute("INSERT OR IGNORE INTO hashtags (name) VALUES (?)", (tag,))
+        db_commit()
+        ht = db_fetchone("SELECT id FROM hashtags WHERE name = ?", (tag,))
+        if ht:
+            db_execute("INSERT OR IGNORE INTO post_hashtags (post_id, hashtag_id) VALUES (?, ?)",
+                    (post_id, ht["id"]))
     db_commit()
-    return {"status": "success"}
+    return {"status": "success", "post_id": post_id, "hashtags": tags}
 
 class Post_Fetch(BaseModel):
     cookie: str
@@ -591,6 +652,29 @@ def post_fetch(body: Post_Fetch):
         before_clause = " AND p.id < ?"
         before_param = (body.before_id,)
 
+    # 获取已屏蔽和被屏蔽的用户列表
+    blocked_ids = set()
+    for r in db_fetchall("SELECT blocked_id FROM blocks WHERE blocker_id = ?", (user_id,)):
+        blocked_ids.add(r["blocked_id"])
+    for r in db_fetchall("SELECT blocker_id FROM blocks WHERE blocked_id = ?", (user_id,)):
+        blocked_ids.add(r["blocker_id"])
+
+    block_filter = ""
+    block_params = ()
+    if blocked_ids:
+        placeholders = ",".join("?" for _ in blocked_ids)
+        block_filter = f" AND p.publisher_id NOT IN ({placeholders})"
+        block_params = tuple(blocked_ids)
+
+    # 可见性过滤：private 仅自己可见；followers_only 仅粉丝和本人可见
+    vis_clause = """AND (
+        p.visibility = 'public'
+        OR p.publisher_id = ?
+        OR (p.visibility = 'followers_only' AND p.publisher_id IN (
+            SELECT followee FROM following WHERE follower = ?
+        ))
+    )"""
+
     # 1. 关注的人发的帖子
     followed = db_fetchall(f"""
         SELECT p.*, u.username, u.nickname
@@ -598,26 +682,29 @@ def post_fetch(body: Post_Fetch):
         JOIN users u ON u.id = p.publisher_id
         WHERE p.publisher_id IN (
             SELECT followee FROM following WHERE follower = ?
-        ){before_clause}
-    """, (user_id,) + before_param)
+        ){before_clause}{block_filter}
+        AND (p.visibility != 'private' OR p.publisher_id = ?)
+    """, (user_id,) + before_param + block_params + (user_id,))
 
     # 2. 最火的帖子
     hot = db_fetchall(f"""
         SELECT p.*, u.username, u.nickname
         FROM posts p
         JOIN users u ON u.id = p.publisher_id
-        WHERE p.like_num > 0{before_clause}
+        WHERE p.like_num > 0{before_clause}{block_filter}
+        {vis_clause}
         ORDER BY p.like_num DESC LIMIT 50
-    """, before_param)
+    """, before_param + block_params + (user_id, user_id))
 
     # 3. 最新的帖子
     recent = db_fetchall(f"""
         SELECT p.*, u.username, u.nickname
         FROM posts p
         JOIN users u ON u.id = p.publisher_id
-        WHERE 1=1{before_clause}
+        WHERE 1=1{before_clause}{block_filter}
+        {vis_clause}
         ORDER BY p.created_at DESC LIMIT 50
-    """, before_param)
+    """, before_param + block_params + (user_id, user_id))
 
     # 排除已读
     seen = set()
@@ -767,6 +854,14 @@ def leave_group(body: Leave_Group_Req):
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
+    group = db_fetchone(
+            "SELECT owner_id FROM groups WHERE id = ?",
+            (body.group_id,)
+            )
+    if not group:
+        return {"error": "Group not exist."}
+    if group["owner_id"] == user_id:
+        return {"error": "Owner cannot leave. Transfer ownership or disband the group first."}
     db_execute("DELETE FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
             )
@@ -926,6 +1021,9 @@ def delete_post(body: Del_Post_Req):
     db_execute("DELETE FROM comments WHERE post_id = ?", (body.post_id,))
     db_execute("DELETE FROM post_media WHERE post_id = ?", (body.post_id,))
     db_execute("DELETE FROM read_posts WHERE post_id = ?", (body.post_id,))
+    db_execute("DELETE FROM bookmarks WHERE post_id = ?", (body.post_id,))
+    db_execute("DELETE FROM post_hashtags WHERE post_id = ?", (body.post_id,))
+    db_execute("DELETE FROM notifications WHERE post_id = ?", (body.post_id,))
     db_execute("DELETE FROM posts WHERE id = ?", (body.post_id,))
     db_commit()
     return {"status": "success"}
@@ -1118,8 +1216,14 @@ def repost(body: Repost_Req):
             "INSERT INTO posts (publisher_id, content, repost_id) VALUES (?, ?, ?)",
             (user_id, body.text, body.post_id)
             )
+    new_post_id = db_lastrowid()
+    # 通知原帖作者被转发
+    db_execute(
+            "INSERT INTO notifications (user_id, type, from_user_id, post_id, content) VALUES (?, 'repost', ?, ?, '')",
+            (original["publisher_id"], user_id, new_post_id)
+            )
     db_commit()
-    return {"status": "success", "new_post_id": db_lastrowid()}
+    return {"status": "success", "new_post_id": new_post_id}
 
 class Patch_Avatar_Req(BaseModel):
     cookie: str
@@ -1593,6 +1697,409 @@ async def upload_media(
         return {"error": "Media cannot be larger than 16MiB."}
     encoded = base64.b64encode(data).decode()
     return {"filename": file.filename, "content_type": file.content_type, "data": encoded}
+
+# =============================================================================
+# P2: 用户系统 — 修改密码
+# POST /change-password
+# =============================================================================
+class Change_Password_Req(BaseModel):
+    cookie: str
+    old_password: str
+    new_password: str
+
+@app.post("/change-password")
+def change_password(body: Change_Password_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if not body.old_password or not body.new_password:
+        return {"error": "Password cannot be empty."}
+    if len(body.new_password) < 6:
+        return {"error": "Password must be at least 6 characters."}
+    user = db_fetchone(
+            "SELECT password_hash FROM users WHERE id = ?",
+            (user_id,)
+            )
+    if not bcrypt.checkpw(body.old_password.encode(), user["password_hash"].encode()):
+        return {"error": "Incorrect old password."}
+    new_hash = bcrypt.hashpw(body.new_password.encode(), bcrypt.gensalt()).decode()
+    db_execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P2: 用户系统 — 注销账号（级联清理所有用户数据）
+# POST /delete-account
+# =============================================================================
+class Delete_Account_Req(BaseModel):
+    cookie: str
+    password: str
+
+@app.post("/delete-account")
+def delete_account(body: Delete_Account_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    user = db_fetchone(
+            "SELECT password_hash FROM users WHERE id = ?",
+            (user_id,)
+            )
+    if not bcrypt.checkpw(body.password.encode(), user["password_hash"].encode()):
+        return {"error": "Incorrect password."}
+    # 级联清理所有关联数据
+    db_execute("DELETE FROM cookies WHERE user_id = ?", (user_id,))
+    db_execute("DELETE FROM following WHERE follower = ? OR followee = ?", (user_id, user_id))
+    db_execute("DELETE FROM liking_users WHERE liker_id = ?", (user_id,))
+    db_execute("DELETE FROM comments WHERE commenter_id = ?", (user_id,))
+    db_execute("DELETE FROM offline_messages WHERE sender_id = ? OR receiver_id = ?", (user_id, user_id))
+    db_execute("DELETE FROM read_posts WHERE user_id = ?", (user_id,))
+    db_execute("DELETE FROM bookmarks WHERE user_id = ?", (user_id,))
+    db_execute("DELETE FROM notifications WHERE user_id = ? OR from_user_id = ?", (user_id, user_id))
+    db_execute("DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?", (user_id, user_id))
+    db_execute("DELETE FROM reports WHERE reporter_id = ?", (user_id,))
+    db_execute("DELETE FROM user_in_group WHERE user_id = ?", (user_id,))
+    db_execute("DELETE FROM group_messages WHERE sender_id = ?", (user_id,))
+    # 删除用户发布的帖子和关联数据
+    post_ids = [r["id"] for r in db_fetchall("SELECT id FROM posts WHERE publisher_id = ?", (user_id,))]
+    for pid in post_ids:
+        db_execute("DELETE FROM liking_users WHERE post_id = ?", (pid,))
+        db_execute("DELETE FROM comments WHERE post_id = ?", (pid,))
+        db_execute("DELETE FROM post_media WHERE post_id = ?", (pid,))
+        db_execute("DELETE FROM read_posts WHERE post_id = ?", (pid,))
+        db_execute("DELETE FROM bookmarks WHERE post_id = ?", (pid,))
+        db_execute("DELETE FROM post_hashtags WHERE post_id = ?", (pid,))
+        db_execute("DELETE FROM notifications WHERE post_id = ?", (pid,))
+    db_execute("DELETE FROM posts WHERE publisher_id = ?", (user_id,))
+    # 转移或解散拥有的群组
+    owned = db_fetchall("SELECT id FROM groups WHERE owner_id = ?", (user_id,))
+    for g in owned:
+        db_execute("DELETE FROM group_messages WHERE group_id = ?", (g["id"],))
+        db_execute("DELETE FROM user_in_group WHERE group_id = ?", (g["id"],))
+        db_execute("DELETE FROM groups WHERE id = ?", (g["id"],))
+    db_execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P2: 屏蔽系统 — 拉黑用户
+# POST /block
+# =============================================================================
+class Block_Req(BaseModel):
+    cookie: str
+    user_id: int
+
+@app.post("/block")
+def block_user(body: Block_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    blocker_id = row["user_id"]
+    if blocker_id == body.user_id:
+        return {"error": "Cannot block yourself."}
+    target = db_fetchone("SELECT id FROM users WHERE id = ?", (body.user_id,))
+    if not target:
+        return {"error": "User not exist."}
+    db_execute("INSERT OR IGNORE INTO blocks (blocker_id, blocked_id) VALUES (?, ?)",
+            (blocker_id, body.user_id))
+    # 自动取消双方关注
+    db_execute("DELETE FROM following WHERE (follower = ? AND followee = ?) OR (follower = ? AND followee = ?)",
+            (blocker_id, body.user_id, body.user_id, blocker_id))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P2: 屏蔽系统 — 取消拉黑
+# POST /unblock
+# =============================================================================
+@app.post("/unblock")
+def unblock_user(body: Block_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    blocker_id = row["user_id"]
+    db_execute("DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?",
+            (blocker_id, body.user_id))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P2: 屏蔽系统 — 获取已拉黑用户列表
+# POST /get-blocked-users
+# =============================================================================
+class Get_Blocked_Req(BaseModel):
+    cookie: str
+
+@app.post("/get-blocked-users")
+def get_blocked_users(body: Get_Blocked_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    blocked = db_fetchall("""
+            SELECT u.id, u.username, u.nickname, u.avatar, b.created_at
+            FROM blocks b
+            JOIN users u ON u.id = b.blocked_id
+            WHERE b.blocker_id = ?
+            ORDER BY b.created_at DESC
+    """, (user_id,))
+    return {"blocked_users": [dict(u) for u in blocked]}
+
+# =============================================================================
+# P2: 群组管理 — 踢出成员（仅群主可用）
+# POST /kick-group-member
+# =============================================================================
+class Kick_Member_Req(BaseModel):
+    cookie: str
+    group_id: int
+    user_id: int
+
+@app.post("/kick-group-member")
+def kick_group_member(body: Kick_Member_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    operator_id = row["user_id"]
+    group = db_fetchone("SELECT owner_id FROM groups WHERE id = ?", (body.group_id,))
+    if not group:
+        return {"error": "Group not exist."}
+    if group["owner_id"] != operator_id:
+        return {"error": "Only the group owner can kick members."}
+    if body.user_id == operator_id:
+        return {"error": "Cannot kick yourself. Use disband instead."}
+    db_execute("DELETE FROM user_in_group WHERE group_id = ? AND user_id = ?",
+            (body.group_id, body.user_id))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P2: 群组管理 — 修改群名（仅群主可用）
+# POST /change-group-name
+# =============================================================================
+class Change_Group_Name_Req(BaseModel):
+    cookie: str
+    group_id: int
+    name: str
+
+@app.post("/change-group-name")
+def change_group_name(body: Change_Group_Name_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    operator_id = row["user_id"]
+    if not body.name:
+        return {"error": "Group name cannot be empty."}
+    group = db_fetchone("SELECT owner_id FROM groups WHERE id = ?", (body.group_id,))
+    if not group:
+        return {"error": "Group not exist."}
+    if group["owner_id"] != operator_id:
+        return {"error": "Only the group owner can rename the group."}
+    db_execute("UPDATE groups SET name = ? WHERE id = ?", (body.name, body.group_id))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P2: 群组管理 — 转让群主（仅群主可用，目标必须在群内）
+# POST /transfer-group
+# =============================================================================
+class Transfer_Group_Req(BaseModel):
+    cookie: str
+    group_id: int
+    new_owner_id: int
+
+@app.post("/transfer-group")
+def transfer_group(body: Transfer_Group_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    operator_id = row["user_id"]
+    group = db_fetchone("SELECT owner_id FROM groups WHERE id = ?", (body.group_id,))
+    if not group:
+        return {"error": "Group not exist."}
+    if group["owner_id"] != operator_id:
+        return {"error": "Only the group owner can transfer ownership."}
+    if body.new_owner_id == operator_id:
+        return {"error": "You are already the owner."}
+    member = db_fetchone(
+            "SELECT 1 FROM user_in_group WHERE group_id = ? AND user_id = ?",
+            (body.group_id, body.new_owner_id))
+    if not member:
+        return {"error": "Target user is not in this group."}
+    db_execute("UPDATE groups SET owner_id = ? WHERE id = ?",
+            (body.new_owner_id, body.group_id))
+    db_execute("UPDATE user_in_group SET role = 'owner' WHERE group_id = ? AND user_id = ?",
+            (body.group_id, body.new_owner_id))
+    db_execute("UPDATE user_in_group SET role = 'member' WHERE group_id = ? AND user_id = ?",
+            (body.group_id, operator_id))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P2: 群组管理 — 解散群组（仅群主可用）
+# POST /disband-group
+# =============================================================================
+class Disband_Group_Req(BaseModel):
+    cookie: str
+    group_id: int
+
+@app.post("/disband-group")
+def disband_group(body: Disband_Group_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    operator_id = row["user_id"]
+    group = db_fetchone("SELECT owner_id FROM groups WHERE id = ?", (body.group_id,))
+    if not group:
+        return {"error": "Group not exist."}
+    if group["owner_id"] != operator_id:
+        return {"error": "Only the group owner can disband the group."}
+    db_execute("DELETE FROM group_messages WHERE group_id = ?", (body.group_id,))
+    db_execute("DELETE FROM user_in_group WHERE group_id = ?", (body.group_id,))
+    db_execute("DELETE FROM groups WHERE id = ?", (body.group_id,))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# P2: 举报系统 — 举报用户/帖子/评论
+# POST /report
+# =============================================================================
+class Report_Req(BaseModel):
+    cookie: str
+    target_type: str    # "user" | "post" | "comment"
+    target_id: int
+    reason: str = ""
+
+@app.post("/report")
+def report(body: Report_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    reporter_id = row["user_id"]
+    if body.target_type not in ("user", "post", "comment"):
+        return {"error": "Invalid target_type. Must be user, post, or comment."}
+    # 验证目标存在
+    if body.target_type == "user":
+        target = db_fetchone("SELECT id FROM users WHERE id = ?", (body.target_id,))
+    elif body.target_type == "post":
+        target = db_fetchone("SELECT id FROM posts WHERE id = ?", (body.target_id,))
+    else:
+        target = db_fetchone("SELECT id FROM comments WHERE id = ?", (body.target_id,))
+    if not target:
+        return {"error": f"{body.target_type.capitalize()} not exist."}
+    db_execute(
+            "INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?, ?, ?, ?)",
+            (reporter_id, body.target_type, body.target_id, body.reason))
+    db_commit()
+    return {"status": "success", "report_id": db_lastrowid()}
+
+# =============================================================================
+# P2: 标签系统 — 按标签获取帖子（游标分页）
+# POST /get-hashtag-posts
+# =============================================================================
+class Get_Hashtag_Posts_Req(BaseModel):
+    cookie: str
+    hashtag: str
+    before_id: int = 0
+    count: int = 20
+
+@app.post("/get-hashtag-posts")
+def get_hashtag_posts(body: Get_Hashtag_Posts_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    tag_name = body.hashtag.lstrip('#')
+    ht = db_fetchone("SELECT id FROM hashtags WHERE name = ?", (tag_name,))
+    if not ht:
+        return {"posts": [], "count": 0, "next_cursor": 0}
+    if body.before_id > 0:
+        posts = db_fetchall("""
+                SELECT p.*, u.username, u.nickname
+                FROM post_hashtags ph
+                JOIN posts p ON p.id = ph.post_id
+                JOIN users u ON u.id = p.publisher_id
+                WHERE ph.hashtag_id = ? AND p.id < ?
+                ORDER BY p.id DESC LIMIT ?
+        """, (ht["id"], body.before_id, body.count))
+    else:
+        posts = db_fetchall("""
+                SELECT p.*, u.username, u.nickname
+                FROM post_hashtags ph
+                JOIN posts p ON p.id = ph.post_id
+                JOIN users u ON u.id = p.publisher_id
+                WHERE ph.hashtag_id = ?
+                ORDER BY p.id DESC LIMIT ?
+        """, (ht["id"], body.count))
+    next_cursor = posts[-1]["id"] if posts else 0
+    result = []
+    for p in posts:
+        media = db_fetchall(
+                "SELECT offset, content FROM post_media WHERE post_id = ? ORDER BY offset",
+                (p["id"],))
+        result.append({
+            "id": p["id"],
+            "content": p["content"],
+            "like_num": p["like_num"],
+            "created_at": p["created_at"],
+            "publisher_id": p["publisher_id"],
+            "username": p["username"],
+            "nickname": p["nickname"],
+            "repost_id": p["repost_id"],
+            "media": [dict(m) for m in media]
+        })
+    return {"posts": result, "count": len(result), "next_cursor": next_cursor}
+
+# =============================================================================
+# P2: 标签系统 — 获取热门标签（按使用频次降序）
+# GET /trending-hashtags
+# =============================================================================
+class Trending_Hashtags_Req(BaseModel):
+    count: int = 20
+
+@app.post("/trending-hashtags")
+def trending_hashtags(body: Trending_Hashtags_Req):
+    tags = db_fetchall("""
+            SELECT h.name, COUNT(ph.post_id) as post_count
+            FROM hashtags h
+            JOIN post_hashtags ph ON ph.hashtag_id = h.id
+            GROUP BY h.id
+            ORDER BY post_count DESC
+            LIMIT ?
+    """, (body.count,))
+    return {"hashtags": [{"name": t["name"], "post_count": t["post_count"]} for t in tags]}
 
 if __name__ == "__main__":
     uvicorn.run(app, port = 18999)
