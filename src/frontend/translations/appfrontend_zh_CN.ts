@@ -10,6 +10,117 @@
         <translation>网络错误: %1</translation>
     </message>
     <message>
+        <location filename="../api_client.cpp" line="29"/>
+        <source>登录已过期，请重新登录</source>
+        <translation>登录已过期，请重新登录</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="30"/>
+        <source>无效的用户名</source>
+        <translation>无效的用户名</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="31"/>
+        <source>无效的昵称</source>
+        <translation>无效的昵称</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="32"/>
+        <source>无效的密码</source>
+        <translation>无效的密码</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="33"/>
+        <source>用户名已被占用</source>
+        <translation>用户名已被占用</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="34"/>
+        <source>用户不存在</source>
+        <translation>用户不存在</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="35"/>
+        <source>密码错误</source>
+        <translation>密码错误</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="36"/>
+        <source>内容不能为空</source>
+        <translation>内容不能为空</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="37"/>
+        <source>媒体文件过多</source>
+        <translation>媒体文件过多</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="38"/>
+        <source>媒体文件不能超过 16MiB</source>
+        <translation>媒体文件不能超过 16MiB</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="39"/>
+        <location filename="../api_client.cpp" line="40"/>
+        <source>帖子不存在</source>
+        <translation>帖子不存在</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="41"/>
+        <source>评论不能为空</source>
+        <translation>评论不能为空</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="42"/>
+        <source>不能关注自己</source>
+        <translation>不能关注自己</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="43"/>
+        <source>不能删除他人的帖子</source>
+        <translation>不能删除他人的帖子</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="44"/>
+        <source>不能删除他人的评论</source>
+        <translation>不能删除他人的评论</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="45"/>
+        <source>不能转发自己的帖子</source>
+        <translation>不能转发自己的帖子</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="46"/>
+        <source>群组名称不能为空</source>
+        <translation>群组名称不能为空</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="47"/>
+        <source>群组不存在</source>
+        <translation>群组不存在</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="48"/>
+        <source>你不在该群组中</source>
+        <translation>你不在该群组中</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="49"/>
+        <source>消息不能为空</source>
+        <translation>消息不能为空</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="50"/>
+        <source>你已在该群组中</source>
+        <translation>你已在该群组中</translation>
+    </message>
+    <message>
+        <location filename="../api_client.cpp" line="51"/>
+        <source>无效的收信人</source>
+        <translation>无效的收信人</translation>
+    </message>
+    <message>
         <location filename="../api_client.cpp" line="437"/>
         <location filename="../api_client.cpp" line="826"/>
         <source>网络错误: %1</source>
@@ -469,98 +580,103 @@
         <translation>暂时没有新帖子</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="145"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="172"/>
         <location filename="../build/frontend/SquarePage.qml" line="172"/>
-        <location filename="../SquarePage.qml" line="172"/>
+        <location filename="../SquarePage.qml" line="182"/>
         <source>广场</source>
         <translation>广场</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="439"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="466"/>
         <location filename="../build/frontend/SquarePage.qml" line="466"/>
-        <location filename="../SquarePage.qml" line="466"/>
+        <location filename="../SquarePage.qml" line="478"/>
         <source>写评论...</source>
         <translation>写评论...</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="454"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="481"/>
         <location filename="../build/frontend/SquarePage.qml" line="481"/>
-        <location filename="../SquarePage.qml" line="481"/>
+        <location filename="../SquarePage.qml" line="493"/>
         <source>发送</source>
         <translation>发送</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="608"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="635"/>
         <location filename="../build/frontend/SquarePage.qml" line="635"/>
-        <location filename="../SquarePage.qml" line="635"/>
+        <location filename="../SquarePage.qml" line="647"/>
         <source>发布帖子</source>
         <translation>发布帖子</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="635"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="662"/>
         <location filename="../build/frontend/SquarePage.qml" line="662"/>
-        <location filename="../SquarePage.qml" line="662"/>
+        <location filename="../SquarePage.qml" line="674"/>
         <source>发布</source>
         <translation>发布</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="690"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="717"/>
         <location filename="../build/frontend/SquarePage.qml" line="717"/>
-        <location filename="../SquarePage.qml" line="717"/>
+        <location filename="../SquarePage.qml" line="729"/>
         <source>分享你的想法……</source>
         <translation>分享你的想法……</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="823"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="850"/>
         <location filename="../build/frontend/SquarePage.qml" line="850"/>
-        <location filename="../SquarePage.qml" line="850"/>
+        <location filename="../SquarePage.qml" line="862"/>
         <source>选择媒体文件</source>
         <translation>选择媒体文件</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="898"/>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="976"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="925"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="1003"/>
         <location filename="../build/frontend/SquarePage.qml" line="925"/>
         <location filename="../build/frontend/SquarePage.qml" line="1003"/>
-        <location filename="../SquarePage.qml" line="925"/>
-        <location filename="../SquarePage.qml" line="1003"/>
+        <location filename="../SquarePage.qml" line="937"/>
+        <location filename="../SquarePage.qml" line="1015"/>
         <source>暂时没有新帖子</source>
         <translation>暂时没有新帖子</translation>
     </message>
     <message>
-        <location filename="../build/Debug/frontend/SquarePage.qml" line="974"/>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="1001"/>
         <location filename="../build/frontend/SquarePage.qml" line="1001"/>
-        <location filename="../SquarePage.qml" line="1001"/>
+        <location filename="../SquarePage.qml" line="1013"/>
         <source>刷新了 %1 条帖子</source>
         <translation>刷新了 %1 条帖子</translation>
     </message>
     <message>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="39"/>
         <location filename="../build/frontend/SquarePage.qml" line="39"/>
-        <location filename="../SquarePage.qml" line="39"/>
+        <location filename="../SquarePage.qml" line="49"/>
         <source>刚刚</source>
         <translation>刚刚</translation>
     </message>
     <message>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="41"/>
         <location filename="../build/frontend/SquarePage.qml" line="41"/>
-        <location filename="../SquarePage.qml" line="41"/>
+        <location filename="../SquarePage.qml" line="51"/>
         <source>%1 分钟前</source>
         <translation>%1 分钟前</translation>
     </message>
     <message>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="43"/>
         <location filename="../build/frontend/SquarePage.qml" line="43"/>
-        <location filename="../SquarePage.qml" line="43"/>
+        <location filename="../SquarePage.qml" line="53"/>
         <source>%1 小时前</source>
         <translation>%1 小时前</translation>
     </message>
     <message>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="45"/>
         <location filename="../build/frontend/SquarePage.qml" line="45"/>
-        <location filename="../SquarePage.qml" line="45"/>
+        <location filename="../SquarePage.qml" line="55"/>
         <source>昨天</source>
         <translation>昨天</translation>
     </message>
     <message>
+        <location filename="../build/Debug/frontend/SquarePage.qml" line="46"/>
         <location filename="../build/frontend/SquarePage.qml" line="46"/>
-        <location filename="../SquarePage.qml" line="46"/>
+        <location filename="../SquarePage.qml" line="56"/>
         <source>%1 天前</source>
         <translation>%1 天前</translation>
     </message>

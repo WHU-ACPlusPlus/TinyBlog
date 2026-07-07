@@ -14,6 +14,16 @@ Rectangle {
     property var selectedMedia: []   // 已选媒体文件的 url[]
     property var mediaThumbnails: [] // 对应的缩略图 url[]（视频为抽帧图，图片为原图）
 
+    property int _timeTick: 0
+
+    // ── 定时刷新时间显示 ──
+    Timer {
+        interval: 60000  // 每分钟刷新一次
+        running: visible
+        repeat: true
+        onTriggered: root._timeTick++
+    }
+
     // ── 辅助判断 ──
     function detectMimeFromBase64(b64) {
         if (!b64) return "image/jpeg"
@@ -384,7 +394,9 @@ Rectangle {
                                     spacing: 6
 
                                     Text {
-                                        text: root.formatTime(modelData.created_at)
+                                        text: {
+                root._timeTick;  // bind to tick so it refreshes
+                return root.formatTime(modelData.created_at)}
                                         font.pixelSize: 12
                                         color: window.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
@@ -717,7 +729,7 @@ Rectangle {
                         placeholderText: qsTr("分享你的想法……")
                         placeholderTextColor: window.textSecondary
                         font.pixelSize: 16
-                        color: "#000"
+                        color: window.textPrimary
                         wrapMode: TextEdit.Wrap
                         focus: false
                     }
