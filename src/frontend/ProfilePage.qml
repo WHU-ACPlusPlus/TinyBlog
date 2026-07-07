@@ -5,7 +5,7 @@ import QtQuick.Dialogs
 
 Rectangle {
     id: root
-    color: "#f5f5f5"
+    color: window.bgPage
 
     property var profileData: ({})
     property bool editing: false
@@ -73,7 +73,7 @@ Rectangle {
             Rectangle {
                 anchors.fill: parent
                 radius: 12
-                color: "white"
+                color: window.bgSurface
 
                 Image {
                     id: previewImg
@@ -96,7 +96,7 @@ Rectangle {
                     Text {
                         anchors.centerIn: parent
                         text: "✕"
-                        color: "white"
+                        color: window.bgSurface
                         font.pixelSize: 16
                     }
 
@@ -119,7 +119,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 100
-            color: "white"
+            color: window.bgSurface
             radius: 12
 
             RowLayout {
@@ -135,7 +135,7 @@ Rectangle {
                     Rectangle {
                         id: avatarBg
                         anchors.fill: parent
-                        color: "#e0e0e0"
+                        color: window.textOnDark
                         radius: 32
 
                         // 头像图片（base64 或 默认占位）
@@ -198,7 +198,7 @@ Rectangle {
                                 Text {
                                     anchors.centerIn: parent
                                     text: qsTr("更换")
-                                    color: "white"
+                                    color: window.bgSurface
                                     font.pixelSize: 11
                                 }
                             }
@@ -219,7 +219,7 @@ Rectangle {
                         text: root.editing ? root.newNickname : (root.profileData.nickname || "")
                         font.pixelSize: 20
                         font.bold: true
-                        color: "#222"
+                        color: window.textPrimary
                         readOnly: !root.editing
                         selectByMouse: true
                         background: Rectangle {
@@ -238,7 +238,7 @@ Rectangle {
                     Text {
                         text: "@" + (root.profileData.username || qsTr("用户名"))
                         font.pixelSize: 14
-                        color: "#999"
+                        color: window.textSecondary
                     }
                 }
             }
@@ -248,7 +248,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: signatureField.implicitHeight + 24
-            color: "white"
+            color: window.bgSurface
             radius: 10
 
             TextArea {
@@ -256,7 +256,7 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: 10
                 text: root.editing ? root.newSignature : (root.profileData.signature || qsTr("这个人很懒，什么都没有留下……"))
-                color: root.editing ? "#222" : "#999"
+                color: root.editing ? window.textPrimary : window.textSecondary
                 font.pixelSize: 14
                 readOnly: !root.editing
                 selectByMouse: true
@@ -278,7 +278,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 60
-            color: "white"
+            color: window.bgSurface
             radius: 10
 
             RowLayout {
@@ -289,22 +289,22 @@ Rectangle {
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
-                    Text { text: root.profileData.post_count || "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
-                    Text { text: qsTr("帖子"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: root.profileData.post_count || "---"; font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: qsTr("帖子"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
                 }
                 Item { Layout.fillWidth: true }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
-                    Text { text: root.profileData.follower_count || "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
-                    Text { text: qsTr("粉丝"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: root.profileData.follower_count || "---"; font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: qsTr("粉丝"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
                 }
                 Item { Layout.fillWidth: true }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
-                    Text { text: root.profileData.followee_count || "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
-                    Text { text: qsTr("关注"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: root.profileData.followee_count || "---"; font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: qsTr("关注"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
                 }
                 Item { Layout.fillWidth: true }
             }
@@ -322,7 +322,7 @@ Rectangle {
 
                 contentItem: Text {
                     text: parent.text
-                    color: "white"
+                    color: window.bgSurface
                     font.pixelSize: 16
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
@@ -361,14 +361,14 @@ Rectangle {
 
                 contentItem: Text {
                     text: qsTr("取消")
-                    color: "#666"
+                    color: window.textSecondary
                     font.pixelSize: 16
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
                     radius: 10
-                    color: "#eee"
+                    color: window.divider
                 }
 
                 onClicked: {
@@ -389,7 +389,7 @@ Rectangle {
 
             contentItem: Text {
                 text: qsTr("登出")
-                color: "white"
+                color: window.bgSurface
                 font.pixelSize: 16
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter

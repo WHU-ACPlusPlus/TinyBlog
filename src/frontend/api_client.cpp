@@ -1,4 +1,8 @@
 #include "api_client.h"
+#include <QQmlEngine>
+#include <QTranslator>
+#include <QCoreApplication>
+#include <QDir>
 
 #include <QBuffer>
 #include <QDebug>
@@ -52,7 +56,12 @@ static QString trBackendError(const QString& msg) {
 // ─── 构造与基础设置 ───
 
 ApiClient::ApiClient(QObject* parent)
-    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("http://127.0.0.1:18999") {
+    : QObject(parent)
+    , m_manager(new QNetworkAccessManager(this))
+    , m_baseUrl("http://127.0.0.1:18999")
+    , m_translator(nullptr)
+    , m_engine(nullptr)
+    , m_currentLocale() {
     // 启动时从本地存储加载 cookie
     QSettings settings;
     m_cookie = settings.value("auth/cookie").toString();
@@ -92,6 +101,48 @@ void ApiClient::clearAuth() {
     QSettings settings;
     settings.remove("auth/cookie");
     emit loggedInChanged();
+}
+
+void ApiClient::setQmlEngine(QQmlEngine* engine) {
+    m_engine = engine;
+}
+
+void ApiClient::setLanguage(const QString& locale) {
+    if (locale == m_currentLocale) return;
+    m_currentLocale = locale;
+
+    if (m_translator) {
+        QCoreApplication::removeTranslator(m_translator);
+        delete m_translator;
+        m_translator = nullptr;
+    }
+
+    // Don't install translator for zh_CN (source language)
+    if (locale != "zh_CN") {
+        m_translator = new QTranslator(this);
+        QStringList searchPaths = {
+            QCoreApplication::applicationDirPath() + "/appfrontend_" + locale + ".qm",            // dev: build/
+            QCoreApplication::applicationDirPath() + "/translations/appfrontend_" + locale + ".qm", // installed
+        };
+        bool loaded = false;
+        for (const auto& path : searchPaths) {
+            if (m_translator->load(path)) {
+                loaded = true;
+                break;
+            }
+        }
+        if (!loaded) {
+            delete m_translator;
+            m_translator = nullptr;
+            emit errorOccurred(QStringLiteral("Failed to load translation: %1").arg(locale));
+            return;
+        }
+        QCoreApplication::installTranslator(m_translator);
+    }
+
+    if (m_engine)
+        m_engine->retranslate();
+    emit languageChanged();
 }
 
 QString ApiClient::readFileAsBase64(const QUrl& fileUrl) {

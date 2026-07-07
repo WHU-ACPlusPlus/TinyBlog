@@ -10,6 +10,23 @@ ApplicationWindow {
     visible: true
     title: qsTr("Tiny Chat")
 
+    // ── 深色模式色板 ──
+    property bool darkMode: Qt.styleHints.colorScheme === Qt.Dark
+
+    readonly property color bgPage:    darkMode ? "#1e1e1e" : "#f5f5f5"
+    readonly property color bgSurface: darkMode ? "#2d2d2d" : "white"
+    readonly property color bgSidebar: darkMode ? "#1a1a1a" : "#2c2c2c"
+    readonly property color bgCard:    darkMode ? "#333333" : "white"
+    readonly property color bgInput:   darkMode ? "#3a3a3a" : "white"
+    readonly property color bgLogin:   darkMode ? "#1e1e1e" : "#ededed"
+    readonly property color textPrimary:   darkMode ? "#e0e0e0" : "#333"
+    readonly property color textSecondary: darkMode ? "#888888" : "#999"
+    readonly property color textOnDark:    darkMode ? "#e0e0e0" : "#e0e0e0"
+    readonly property color accent:    darkMode ? "#4db8ff" : "#6cf"
+    readonly property color border:    darkMode ? "#444444" : "#ddd"
+    readonly property color divider:   darkMode ? "#3a3a3a" : "#eee"
+    readonly property color selectedBg: darkMode ? "#3a3a3a" : "#4a4a4a"
+
     // 主页面通过 visible 切换：没登录 → LoginFlow，已登录 → MainPage
     LoginFlow {
         id: loginFlow

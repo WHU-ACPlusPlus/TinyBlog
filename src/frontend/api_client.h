@@ -1,14 +1,18 @@
 #ifndef API_CLIENT_H
 #define API_CLIENT_H
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QObject>
+#include <QQmlEngine>
 #include <QSettings>
 #include <QTimer>
+#include <QTranslator>
 
 #include "api_types.h"
 
@@ -34,7 +38,9 @@ class ApiClient : public QObject {
     Q_INVOKABLE void setCookie(const QString& token);
     QString cookie() const;
     bool isLoggedIn() const;
-    Q_INVOKABLE void clearAuth();                                                                            // 清除 cookie + QSettings
+    Q_INVOKABLE void clearAuth();
+    Q_INVOKABLE void setLanguage(const QString& locale);
+    void setQmlEngine(QQmlEngine* engine);                                                                            // 清除 cookie + QSettings
     Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl);                                               // 读取文件内容为 base64
     Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl& videoUrl);                                           // 用 ffmpeg 抽视频第一帧
     Q_INVOKABLE QString videoThumbnailFromBase64(const QString& b64);                                        // 从 base64 视频数据提取缩略图
@@ -44,6 +50,7 @@ class ApiClient : public QObject {
    signals:
     void loggedInChanged();
     void baseUrlChanged();
+    void languageChanged();
 
    public slots:
 
@@ -168,6 +175,9 @@ class ApiClient : public QObject {
     QNetworkAccessManager* m_manager;
     QString m_baseUrl;
     QString m_cookie;
+    QTranslator* m_translator;
+    QQmlEngine* m_engine;
+    QString m_currentLocale;
 };
 
 #endif  // API_CLIENT_H

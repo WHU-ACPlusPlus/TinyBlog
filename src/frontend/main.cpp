@@ -40,6 +40,7 @@ int main(int argc, char *argv[])
     api.setBaseUrl("http://127.0.0.1:18999");
 
     QQmlApplicationEngine engine;
+    api.setQmlEngine(&engine);
     // 将 api 对象注入 QML 上下文，在 QML 中以 api 名称访问
     engine.rootContext()->setContextProperty("api", &api);
 

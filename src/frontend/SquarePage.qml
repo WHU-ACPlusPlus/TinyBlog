@@ -6,7 +6,7 @@ import QtMultimedia
 
 Rectangle {
     id: root
-    color: "#f5f5f5"
+    color: window.bgPage
 
     // ── 状态：normal / publishing ──
     property bool publishing: false
@@ -99,7 +99,7 @@ Rectangle {
         id: normalView
         anchors.fill: parent
         visible: !publishing
-        color: "#f5f5f5"
+        color: window.bgPage
 
         // ── 辅助刷新函数 ──
         function doRefresh() {
@@ -123,7 +123,7 @@ Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             height: 48
-            color: "white"
+            color: window.bgSurface
             z: 1
 
             Row {
@@ -142,16 +142,16 @@ Rectangle {
 
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: "广场"
+                            text: qsTr("广场")
                             font.pixelSize: 18
                             font.bold: true
-                            color: "#333"
+                            color: window.textPrimary
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: root._refreshHint
                             font.pixelSize: 11
-                            color: "#4a8cf7"
+                            color: window.accent
                             visible: text.length > 0
                         }
 
@@ -213,7 +213,7 @@ Rectangle {
                             width: parent.width
                             height: postColumn.implicitHeight + 20
                             radius: 10
-                            color: "white"
+                            color: window.bgSurface
 
                             Column {
                                 id: postColumn
@@ -231,7 +231,7 @@ Rectangle {
                                         width: 40
                                         height: 40
                                         radius: 20
-                                        color: "#ddd"
+                                        color: window.border
 
                                         Image {
                                             anchors.fill: parent
@@ -246,7 +246,7 @@ Rectangle {
                                             anchors.centerIn: parent
                                             text: modelData.nickname[0]
                                             font.pixelSize: 18
-                                            color: "#888"
+                                            color: window.textSecondary
                                             visible: !modelData.avatar
                                         }
                                     }
@@ -259,12 +259,12 @@ Rectangle {
                                             text: modelData.nickname
                                             font.pixelSize: 16
                                             font.bold: true
-                                            color: "#222"
+                                            color: window.textPrimary
                                         }
                                         Text {
                                             text: "@" + modelData.username
                                             font.pixelSize: 12
-                                            color: "#888"
+                                            color: window.textSecondary
                                         }
                                     }
                                 }
@@ -274,7 +274,7 @@ Rectangle {
                                     width: parent.width
                                     text: modelData.content
                                     font.pixelSize: 15
-                                    color: "#333"
+                                    color: window.textPrimary
                                     wrapMode: Text.Wrap
                                 }
 
@@ -297,7 +297,7 @@ Rectangle {
                                             height: cellSize
                                             radius: 6
                                             clip: true
-                                            color: modelData.source ? "#000" : "#eee"
+                                            color: modelData.source ? "#000" : window.divider
 
                                             Image {
                                                 anchors.fill: parent
@@ -311,7 +311,7 @@ Rectangle {
                                                 anchors.centerIn: parent
                                                 text: "📷"
                                                 font.pixelSize: 18
-                                                color: "#999"
+                                                color: window.textSecondary
                                                 visible: !modelData.source || modelData.source.length === 0
                                             }
 
@@ -331,7 +331,7 @@ Rectangle {
                                                     anchors.leftMargin: 2
                                                     text: "▶"
                                                     font.pixelSize: 11
-                                                    color: "white"
+                                                    color: window.bgSurface
                                                 }
                                             }
 
@@ -359,7 +359,7 @@ Rectangle {
                                     Text {
                                         text: modelData.created_at
                                         font.pixelSize: 12
-                                        color: "#aaa"
+                                        color: window.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
 
@@ -388,7 +388,7 @@ Rectangle {
                                     Text {
                                         text: String(modelData.like_num || 0)
                                         font.pixelSize: 13
-                                        color: "#888"
+                                        color: window.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
@@ -399,7 +399,7 @@ Rectangle {
                                     width: parent.width
                                     height: commentsCol.implicitHeight + 16
                                     radius: 8
-                                    color: "#f7f7f7"
+                                    color: window.bgCard
 
                                     Column {
                                         id: commentsCol
@@ -418,8 +418,8 @@ Rectangle {
                                                 width: parent.width - 40 - 6
                                                 height: 32
                                                 radius: 6
-                                                color: "white"
-                                                border.color: "#e0e0e0"
+                                                color: window.bgSurface
+                                                border.color: window.textOnDark
                                                 border.width: 1
 
                                                 TextInput {
@@ -429,16 +429,16 @@ Rectangle {
                                                     anchors.rightMargin: 8
                                                     verticalAlignment: Text.AlignVCenter
                                                     font.pixelSize: 13
-                                                    color: "#333"
+                                                    color: window.textPrimary
                                                 }
 
                                                 Text {
                                                     anchors.left: parent.left
                                                     anchors.leftMargin: 8
                                                     anchors.verticalCenter: parent.verticalCenter
-                                                    text: "写评论..."
+                                                    text: qsTr("写评论...")
                                                     font.pixelSize: 13
-                                                    color: "#bbb"
+                                                    color: window.textSecondary
                                                     visible: commentInput.text.length === 0
                                                 }
                                             }
@@ -447,13 +447,13 @@ Rectangle {
                                                 width: 40
                                                 height: 32
                                                 radius: 6
-                                                color: "#4a8cf7"
+                                                color: window.accent
 
                                                 Text {
                                                     anchors.centerIn: parent
-                                                    text: "发送"
+                                                    text: qsTr("发送")
                                                     font.pixelSize: 12
-                                                    color: "white"
+                                                    color: window.bgSurface
                                                 }
 
                                                 MouseArea {
@@ -484,7 +484,7 @@ Rectangle {
                                                    ? "🧵 %1 条评论".arg(modelData.comments.length)
                                                    : "💬 加载评论"
                                             font.pixelSize: 12
-                                            color: "#4a8cf7"
+                                            color: window.accent
                                             visible: !modelData._commentsLoading
 
                                             MouseArea {
@@ -517,7 +517,7 @@ Rectangle {
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     text: "<b>" + modelData.nickname + "</b> " + modelData.content
                                                     font.pixelSize: 12
-                                                    color: "#555"
+                                                    color: window.textPrimary
                                                     elide: Text.ElideRight
                                                     width: parent.width
                                                     wrapMode: Text.Wrap
@@ -544,13 +544,13 @@ Rectangle {
             width: 52
             height: 52
             radius: 26
-            color: "#4a8cf7"
+            color: window.accent
             z: 2
 
             Text {
                 anchors.centerIn: parent
                 text: "+"
-                color: "white"
+                color: window.bgSurface
                 font.pixelSize: 30
                 font.bold: true
             }
@@ -575,7 +575,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
-            color: "white"
+            color: window.bgSurface
 
             RowLayout {
                 anchors.fill: parent
@@ -591,7 +591,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: "←"
                         font.pixelSize: 22
-                        color: "#4a8cf7"
+                        color: window.accent
                     }
 
                     MouseArea {
@@ -605,10 +605,10 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     verticalAlignment: Text.AlignVCenter
-                    text: "发布帖子"
+                    text: qsTr("发布帖子")
                     font.pixelSize: 18
                     font.bold: true
-                    color: "#333"
+                    color: window.textPrimary
                 }
 
                 // 错误提示
@@ -628,12 +628,12 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.rightMargin: 12
                     radius: 6
-                    color: "#4a8cf7"
+                    color: window.accent
 
                     Text {
                         anchors.centerIn: parent
-                        text: "发布"
-                        color: "white"
+                        text: qsTr("发布")
+                        color: window.bgSurface
                         font.pixelSize: 14
                         font.bold: true
                     }
@@ -678,17 +678,17 @@ Rectangle {
                     Layout.leftMargin: 12
                     Layout.rightMargin: 12
                     Layout.topMargin: 10
-                    color: "white"
+                    color: window.bgSurface
                     radius: 8
-                    border.color: "#ddd"
+                    border.color: window.border
                     border.width: 1
 
                     TextArea {
                         id: textInput
                         anchors.fill: parent
                         anchors.margins: 12
-                        placeholderText: "分享你的想法……"
-                        placeholderTextColor: "#bbb"
+                        placeholderText: qsTr("分享你的想法……")
+                        placeholderTextColor: window.textSecondary
                         font.pixelSize: 16
                         color: "#000"
                         wrapMode: TextEdit.Wrap
@@ -722,7 +722,7 @@ Rectangle {
                             radius: 8
                             clip: true
                             color: index < selectedMedia.length
-                                   ? "transparent" : "#eee"
+                                   ? "transparent" : window.divider
 
                             // 已选媒体缩略图（图片原图 / 视频抽帧）
                             Image {
@@ -750,7 +750,7 @@ Rectangle {
                                     anchors.leftMargin: 2
                                     text: "▶"
                                     font.pixelSize: 11
-                                    color: "white"
+                                    color: window.bgSurface
                                 }
                             }
 
@@ -770,7 +770,7 @@ Rectangle {
                                     text: "✕"
                                     font.pixelSize: 12
                                     font.bold: true
-                                    color: "white"
+                                    color: window.bgSurface
                                 }
 
                                 MouseArea {
@@ -802,7 +802,7 @@ Rectangle {
                                     text: "+"
                                     font.pixelSize: 28
                                     font.bold: true
-                                    color: "#999"
+                                    color: window.textSecondary
                                 }
 
                                 MouseArea {
@@ -820,7 +820,7 @@ Rectangle {
     // ── 文件选择器 ──
     FileDialog {
         id: mediaPicker
-        title: "选择媒体文件"
+        title: qsTr("选择媒体文件")
         fileMode: FileDialog.OpenFiles
         nameFilters: [
             "图片 / 视频 (*.jpg *.jpeg *.png *.mp4)"
@@ -1151,7 +1151,7 @@ Rectangle {
                 anchors.centerIn: parent
                 text: "✕"
                 font.pixelSize: 20
-                color: "white"
+                color: window.bgSurface
             }
 
             MouseArea {
@@ -1273,7 +1273,7 @@ Rectangle {
                         Layout.preferredHeight: 32
                         Layout.alignment: Qt.AlignVCenter
                         radius: 16
-                        color: "white"
+                        color: window.bgSurface
 
                         Text {
                             anchors.centerIn: parent
@@ -1298,7 +1298,7 @@ Rectangle {
                         Layout.alignment: Qt.AlignVCenter
                         font.pixelSize: 12
                         font.family: "monospace"
-                        color: "white"
+                        color: window.bgSurface
                         text: {
                             var p = Math.floor((videoPlayer.position || 0) / 1000)
                             var d = Math.floor((videoPlayer.duration || 0) / 1000)
@@ -1327,13 +1327,13 @@ Rectangle {
                             width: progressSlider.availableWidth
                             height: 4
                             radius: 2
-                            color: "#666"
+                            color: window.textSecondary
 
                             Rectangle {
                                 width: progressSlider.visualPosition * parent.width
                                 height: parent.height
                                 radius: 2
-                                color: "#4a8cf7"
+                                color: window.accent
                             }
                         }
 
@@ -1343,7 +1343,7 @@ Rectangle {
                             width: 14
                             height: 14
                             radius: 7
-                            color: "white"
+                            color: window.bgSurface
                         }
                     }
 
@@ -1380,13 +1380,13 @@ Rectangle {
                             width: volumeSlider.availableWidth
                             height: 4
                             radius: 2
-                            color: "#666"
+                            color: window.textSecondary
 
                             Rectangle {
                                 width: volumeSlider.visualPosition * parent.width
                                 height: parent.height
                                 radius: 2
-                                color: "white"
+                                color: window.bgSurface
                             }
                         }
 
@@ -1396,7 +1396,7 @@ Rectangle {
                             width: 14
                             height: 14
                             radius: 7
-                            color: "white"
+                            color: window.bgSurface
                         }
                     }
                 }

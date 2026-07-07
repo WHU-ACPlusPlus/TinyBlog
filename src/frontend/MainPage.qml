@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    color: "white"
+    color: window.bgSurface
 
     // ── 当前页面索引 ──
     property int currentIndex: 0
@@ -19,7 +19,7 @@ Rectangle {
         Rectangle {
             Layout.preferredWidth: 60
             Layout.fillHeight: true
-            color: "#2c2c2c"
+            color: window.bgSidebar
 
             ColumnLayout {
                 anchors.fill: parent
@@ -38,7 +38,7 @@ Rectangle {
                         Layout.preferredHeight: 48
                         Layout.alignment: Qt.AlignHCenter
                         color: currentIndex === index
-                                ? "#4a4a4a" : "transparent"
+                                ? window.selectedBg : "transparent"
                         radius: 12
 
                         Text {
@@ -94,7 +94,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 56
-            color: "#2c2c2c"
+            color: window.bgSidebar
 
             RowLayout {
                 anchors.fill: parent
@@ -125,7 +125,7 @@ Rectangle {
                                 text: modelData.label
                                 font.pixelSize: 11
                                 color: currentIndex === index
-                                        ? "#6cf" : "#aaa"
+                                        ? window.accent : window.textSecondary
                             }
                         }
 

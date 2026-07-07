@@ -3,11 +3,20 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 Rectangle {
-    color: "#ededed"
+    color: window.bgLogin
 
     // ── 内部状态 ──
     property int step: 0       // 0=欢迎, 1=注册填表, 2=验证码+邮箱, 3=邮箱验证码, 4=登录填表, 5=登录验证码, 6=登录邮箱
     property string errorText: ""
+
+    // ── 语言 ──
+    property string currentLang: Qt.locale().name.substring(0, 5) === "zh_CN" ? "zh_CN" : "en_US"
+    property string langLabel: currentLang === "zh_CN" ? "English" : "中文"
+
+    Component.onCompleted: {
+        // 初始化语言
+        api.setLanguage(currentLang)
+    }
 
     // 注册流程暂存
     property string regCookie: ""
@@ -24,23 +33,25 @@ Rectangle {
 
     // ── 欢迎页 (step=0) ──
     ColumnLayout {
-        anchors.centerIn: parent
+        anchors.fill: parent
         spacing: 20
         visible: step === 0
+
+        Item { Layout.fillHeight: true }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("Tiny Chat")
             font.pixelSize: 32
             font.bold: true
-            color: "#333"
+            color: window.textPrimary
         }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("服务地址")
             font.pixelSize: 14
-            color: "#666"
+            color: window.textSecondary
         }
 
         TextField {
@@ -71,6 +82,26 @@ Rectangle {
                 step = 4
             }
         }
+
+        Item { Layout.fillHeight: true }
+
+        // ── 语言切换 ──
+        Button {
+            Layout.alignment: Qt.AlignHCenter
+            flat: true
+            text: langLabel
+            Layout.bottomMargin: 20
+            onClicked: {
+                if (currentLang === "zh_CN") {
+                    currentLang = "en_US"
+                    langLabel = "中文"
+                } else {
+                    currentLang = "zh_CN"
+                    langLabel = "English"
+                }
+                api.setLanguage(currentLang)
+            }
+        }
     }
 
     // ── 注册第一步：填写资料 (step=1) ──
@@ -84,7 +115,7 @@ Rectangle {
             text: qsTr("注册")
             font.pixelSize: 24
             font.bold: true
-            color: "#333"
+            color: window.textPrimary
         }
 
         TextField {
@@ -147,7 +178,7 @@ Rectangle {
             text: qsTr("验证身份")
             font.pixelSize: 24
             font.bold: true
-            color: "#333"
+            color: window.textPrimary
         }
 
         Image {
@@ -212,14 +243,14 @@ Rectangle {
             text: qsTr("验证邮箱")
             font.pixelSize: 24
             font.bold: true
-            color: "#333"
+            color: window.textPrimary
         }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("验证码已发送至 %1").arg(regEmail)
             font.pixelSize: 13
-            color: "#888"
+            color: window.textSecondary
         }
 
         TextField {
@@ -266,7 +297,7 @@ Rectangle {
             text: qsTr("登录")
             font.pixelSize: 24
             font.bold: true
-            color: "#333"
+            color: window.textPrimary
         }
 
         TextField {
@@ -317,14 +348,14 @@ Rectangle {
             text: qsTr("安全验证")
             font.pixelSize: 24
             font.bold: true
-            color: "#333"
+            color: window.textPrimary
         }
 
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("登录尝试过于频繁，请输入验证码")
             font.pixelSize: 13
-            color: "#888"
+            color: window.textSecondary
         }
 
         Image {
@@ -375,7 +406,7 @@ Rectangle {
             text: qsTr("邮箱验证")
             font.pixelSize: 24
             font.bold: true
-            color: "#333"
+            color: window.textPrimary
         }
 
         Text {
@@ -384,7 +415,7 @@ Rectangle {
                   ? qsTr("验证码已发送至 %1").arg(loginEmail)
                   : qsTr("验证码将发送至 %1").arg(loginEmail)
             font.pixelSize: 13
-            color: "#888"
+            color: window.textSecondary
             visible: loginEmail !== ""
         }
 
