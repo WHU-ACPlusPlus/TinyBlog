@@ -348,7 +348,7 @@ def get_follow_list(body: Get_Follower):
     user_id = log["user_id"]
     followers = [dict(row) for row in db_fetchall(
             """
-            SELECT u.id, u.username, u.nickname
+            SELECT u.id, u.username, u.nickname, u.avatar, u.signature
             FROM following f
             JOIN users u ON u.id == f.follower
             WHERE f.followee == ?
@@ -357,7 +357,7 @@ def get_follow_list(body: Get_Follower):
             )]
     followees = [dict(now) for now in db_fetchall(
             """
-            SELECT u.id, u.username, u.nickname
+            SELECT u.id, u.username, u.nickname, u.avatar, u.signature
             FROM following f
             JOIN users u ON u.id == f.followee
             WHERE f.follower == ?
@@ -631,7 +631,7 @@ def recv_msg(body: Recv_Msg):
             WHERE m.receiver_id = ? AND m.is_read = 0
             ORDER BY m.id DESC
         """, (user_id,))]
-        return {"messages": msgs, "unread_count": len(msgs)}
+        return {"messages": msgs, "count": len(msgs), "next_cursor": 0}
 
 class Pub_Post(BaseModel):
     cookie: str
@@ -949,6 +949,7 @@ def send_group_msg(body: Send_Group_Msg_Req):
 class Recv_Group_Msg_Req(BaseModel):
     cookie: str
     group_id: int
+    before_id: int = 0     # 0=拉取最新消息, >0=拉取此ID之前的消息（游标翻页）
     count: int = 20
 
 @app.post("/recv-group-msg")
@@ -961,26 +962,61 @@ def recv_group_msg(body: Recv_Group_Msg_Req):
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
     membership = db_fetchone(
-            "SELECT last_read_id FROM user_in_group WHERE group_id = ? AND user_id = ?",
+            "SELECT 1 FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
             )
     if not membership:
         return {"error": "You are not in this group."}
-    messages = db_fetchall("""
-            SELECT gm.id, gm.sender_id, u.username, u.nickname, gm.content, gm.sent_at
-            FROM group_messages gm
-            JOIN users u ON u.id = gm.sender_id
-            WHERE gm.group_id = ? AND gm.id > ?
-            ORDER BY gm.id ASC
-            LIMIT ?
-    """, (body.group_id, membership["last_read_id"], body.count))
-    if messages:
+    if body.before_id > 0:
+        messages = db_fetchall("""
+                SELECT gm.id, gm.sender_id, u.username, u.nickname, gm.content, gm.sent_at
+                FROM group_messages gm
+                JOIN users u ON u.id = gm.sender_id
+                WHERE gm.group_id = ? AND gm.id < ?
+                ORDER BY gm.id DESC LIMIT ?
+        """, (body.group_id, body.before_id, body.count))
+    else:
+        messages = db_fetchall("""
+                SELECT gm.id, gm.sender_id, u.username, u.nickname, gm.content, gm.sent_at
+                FROM group_messages gm
+                JOIN users u ON u.id = gm.sender_id
+                WHERE gm.group_id = ?
+                ORDER BY gm.id DESC LIMIT ?
+        """, (body.group_id, body.count))
+    # 反转回 ASC 顺序显示
+    messages = list(reversed([dict(m) for m in messages]))
+    next_cursor = messages[0]["id"] if messages else 0
+    return {"messages": messages, "count": len(messages), "next_cursor": next_cursor}
+
+# =============================================================================
+# P3: 群聊 — 标记群消息已读（由前端在用户滚动到底部时显式调用）
+# POST /mark-group-read
+# =============================================================================
+class Mark_Group_Read_Req(BaseModel):
+    cookie: str
+    group_id: int
+
+@app.post("/mark-group-read")
+def mark_group_read(body: Mark_Group_Read_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    # 取该群最后一条消息ID
+    last_msg = db_fetchone(
+            "SELECT MAX(id) as max_id FROM group_messages WHERE group_id = ?",
+            (body.group_id,)
+            )
+    if last_msg and last_msg["max_id"] is not None:
         db_execute(
                 "UPDATE user_in_group SET last_read_id = ? WHERE group_id = ? AND user_id = ?",
-                (messages[-1]["id"], body.group_id, user_id)
+                (last_msg["max_id"], body.group_id, user_id)
                 )
         db_commit()
-    return {"messages": [dict(m) for m in messages]}
+    return {"status": "success"}
 
 class Get_Group_Members_Req(BaseModel):
     cookie: str
@@ -995,7 +1031,7 @@ def get_group_members(body: Get_Group_Members_Req):
     if not row:
         return {"error": "Bad cookie."}
     members = db_fetchall("""
-            SELECT u.id, u.username, u.nickname, ug.role, ug.joined_at
+            SELECT u.id, u.username, u.nickname, u.avatar, ug.role, ug.joined_at
             FROM user_in_group ug
             JOIN users u ON u.id = ug.user_id
             WHERE ug.group_id = ?
