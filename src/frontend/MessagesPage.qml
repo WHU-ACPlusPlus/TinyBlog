@@ -443,9 +443,6 @@ id: root
         title: qsTr("创建群聊")
         width: 300
         anchors.centerIn: parent
-        text: qsTr("消息")
-        font.pixelSize: 28
-        color: window.textSecondary
     }
 }
 
