@@ -58,7 +58,7 @@ Rectangle {
             id: urlInput
             Layout.preferredWidth: 260
             Layout.alignment: Qt.AlignHCenter
-            placeholderText: qsTr("http://127.0.0.1:18999")
+            placeholderText: qsTr("服务地址")
             Component.onCompleted: text = api.baseUrl
             onTextChanged: api.baseUrl = text
         }
