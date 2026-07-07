@@ -2,6 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QLoggingCategory>
 #include "api_client.h"
 
 int main(int argc, char *argv[])
@@ -15,6 +16,8 @@ int main(int argc, char *argv[])
     app.setOrganizationName("TinyChat");
     app.setApplicationName("TinyChat");
 
+    // 关闭 Qt 调试日志（避免在前端控制台打印 HTTP 请求体和 base64 数据）
+    QLoggingCategory::setFilterRules("*.debug=false");
 
     // 创建 API 客户端，暴露给 QML 侧使用
     ApiClient api;

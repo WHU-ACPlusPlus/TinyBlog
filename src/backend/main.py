@@ -530,7 +530,6 @@ class Post_Fetch(BaseModel):
 
 @app.post("/post-fetch")
 def post_fetch(body: Post_Fetch):
-    print(f"DEBUG post_fetch: cookie={repr(body.cookie)}, count={body.count}", flush=True)
     row = db_fetchone(
         "SELECT user_id FROM cookies WHERE token = ?",
         (body.cookie,)
@@ -837,6 +836,18 @@ def check_cookie(body: Check_Cookie_Req):
             )
     if not user:
         return {"valid": False}
+    post_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM posts WHERE publisher_id = ?",
+            (user["id"],)
+        )
+    follower_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM following WHERE followee = ?",
+            (user["id"],)
+        )
+    followee_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM following WHERE follower = ?",
+            (user["id"],)
+        )
     return {
         "valid": True,
         "user_id": user["id"],
@@ -844,6 +855,9 @@ def check_cookie(body: Check_Cookie_Req):
         "nickname": user["nickname"],
         "avatar": user["avatar"],
         "signature": user["signature"],
+        "post_count": post_count["cnt"] if post_count else 0,
+        "follower_count": follower_count["cnt"] if follower_count else 0,
+        "followee_count": followee_count["cnt"] if followee_count else 0,
     }
 
 class Logout_Req(BaseModel):
@@ -1123,4 +1137,4 @@ def get_avatar(user_id: int = 0):
     return {"user_id": user_id, "avatar": row["avatar"], "signature": row["signature"]}
 
 if __name__ == "__main__":
-    uvicorn.run(app, port = 18999)
+    uvicorn.run(app, port = 18999, access_log = False)
