@@ -808,6 +808,29 @@ def get_my_groups(body: Get_My_Groups_Req):
 # 用户系统：登出
 # POST /logout — 删除当前token使其立即失效
 # =============================================================================
+# =============================================================================
+# 用户系统：检查 Cookie 有效性
+# POST /check-cookie
+# =============================================================================
+class Check_Cookie_Req(BaseModel):
+    cookie: str
+
+@app.post("/check-cookie")
+def check_cookie(body: Check_Cookie_Req):
+    if not body.cookie:
+        return {"error": "Empty cookie."}
+    row = db_fetchone(
+            "SELECT user_id, expires_at FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"valid": False}
+    # 可选：检查过期，但当前所有 cookie expires_at = '2099-12-31'
+    # from datetime import datetime
+    # if row["expires_at"] < datetime.now().strftime("%Y-%m-%d %H:%M:%S"):
+    #     return {"valid": False, "expired": True}
+    return {"valid": True, "user_id": row["user_id"]}
+
 class Logout_Req(BaseModel):
     cookie: str
 
