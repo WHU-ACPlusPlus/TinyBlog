@@ -289,21 +289,21 @@ Rectangle {
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
-                    Text { text: "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: root.profileData.post_count || "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
                     Text { text: qsTr("帖子"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
                 }
                 Item { Layout.fillWidth: true }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
-                    Text { text: "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: root.profileData.follower_count || "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
                     Text { text: qsTr("粉丝"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
                 }
                 Item { Layout.fillWidth: true }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
-                    Text { text: "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: root.profileData.followee_count || "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
                     Text { text: qsTr("关注"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
                 }
                 Item { Layout.fillWidth: true }
