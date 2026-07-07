@@ -28,6 +28,33 @@ Rectangle {
         return "image/jpeg"
     }
 
+    function formatTime(utcStr) {
+        if (!utcStr) return ""
+        // Parse UTC string "2026-07-07 14:30:00" as UTC
+        var d = new Date(utcStr + "Z")
+        if (isNaN(d.getTime())) return utcStr
+        var now = new Date()
+        var diffMs = now.getTime() - d.getTime()
+        var diffSec = Math.floor(diffMs / 1000)
+        if (diffSec < 60) return qsTr("刚刚")
+        var diffMin = Math.floor(diffSec / 60)
+        if (diffMin < 60) return qsTr("%1 分钟前").arg(diffMin)
+        var diffHour = Math.floor(diffMin / 60)
+        if (diffHour < 24) return qsTr("%1 小时前").arg(diffHour)
+        var diffDay = Math.floor(diffHour / 24)
+        if (diffDay < 2) return qsTr("昨天")
+        if (diffDay < 7) return qsTr("%1 天前").arg(diffDay)
+        // Older: show date
+        var month = d.getMonth() + 1
+        var day = d.getDate()
+        var year = d.getFullYear()
+        var curYear = now.getFullYear()
+        if (year === curYear) {
+            return month + "/" + day
+        }
+        return year + "/" + month + "/" + day
+    }
+
     function isVideo(url) {
         var s = url.toString().toLowerCase()
         return s.endsWith(".mp4") || s.endsWith(".mov") || s.endsWith(".avi")
@@ -357,7 +384,7 @@ Rectangle {
                                     spacing: 6
 
                                     Text {
-                                        text: modelData.created_at
+                                        text: root.formatTime(modelData.created_at)
                                         font.pixelSize: 12
                                         color: window.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
