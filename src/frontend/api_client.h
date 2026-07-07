@@ -181,8 +181,6 @@ class ApiClient : public QObject {
     void myGroupsFetched(const QList<GroupInfo>& groups);
 
     void groupMessagesReceived(const QVariantList& messages);  // R4修复: QVariantList使QML可读字段
-    void groupMembersFetched(const QList<UserInfo>& members);
-    void myGroupsFetched(const QList<GroupInfo>& groups);
 
     // ── 消息功能（新增）──
     void conversationsFetched(const QVariantList& conversations);   // QVariantList of QVariantMap (QML-friendly)

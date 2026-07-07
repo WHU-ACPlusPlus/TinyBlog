@@ -563,14 +563,12 @@ Rectangle {
 
         function onLoginSuccess(cookie) {
             // api 已自动保存 cookie，进入主界面
+            errorText = ""
         }
 
         function onErrorOccurred(msg) {
             if (step >= 1 && step <= 6)
                 errorText = msg
-        }
-        function onLoginSuccess(cookie) {
-            errorText = ""
         }
         function onCookieCheckComplete(valid, userId) {
             // 不做任何事，避免干扰登录流程
