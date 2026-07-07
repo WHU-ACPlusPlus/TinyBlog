@@ -352,7 +352,7 @@ id: root
         Rectangle {
             Layout.preferredWidth: 0.5
             Layout.fillHeight: true
-            color: "#e0e0e0"
+            color: window.divider
         }
 
         ChatPanel {

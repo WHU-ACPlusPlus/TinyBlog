@@ -5,8 +5,8 @@ import QtQuick.Layouts
 // ═══════════════════════════════════════════════════════
 // ChatPanel — 聊天区域面板
 // 设计风格：极简主义（style/极简主义.md）
-// 令牌：背景 #f5f5f5, 气泡圆角 12px, 间距 8px/12px
-// 自己气泡 #4a8cf7, 对方气泡 white
+// 令牌：背景 bgPage, 气泡圆角 12px, 间距 8px/12px
+// 自己气泡 accent, 对方气泡 bgSurface
 // ═══════════════════════════════════════════════════════
 
 Rectangle {
@@ -71,7 +71,7 @@ Rectangle {
         }
     }
 
-    color: "#f5f5f5"
+    color: window.bgPage
 
     // ── 日志 ──
     Component.onCompleted: {
@@ -91,7 +91,7 @@ Rectangle {
     // ── 无选中会话时：空状态 ──
     Rectangle {
         anchors.fill: parent
-        color: "#f5f5f5"
+        color: window.bgPage
         visible: !root.currentConversation
 
         ColumnLayout {
@@ -107,13 +107,13 @@ Rectangle {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("选择一个会话开始聊天")
                 font.pixelSize: 17
-                color: "#999"
+                color: window.textSecondary
             }
             Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("从左侧列表选择一个联系人或群组")
                 font.pixelSize: 13
-                color: "#bbb"
+                color: window.textSecondary
             }
         }
     }
@@ -128,7 +128,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 56
-            color: "white"
+            color: window.bgSurface
 
             RowLayout {
                 anchors.fill: parent
@@ -141,14 +141,14 @@ Rectangle {
                     Layout.preferredWidth: 32
                     Layout.preferredHeight: 32
                     radius: 16
-                    color: backBtnHover.hovered ? "#f0f0f0" : "transparent"
+                    color: backBtnHover.hovered ? window.divider : "transparent"
                     visible: typeof root.width !== "undefined" && root.width < 700
 
                     Text {
                         anchors.centerIn: parent
                         text: "←"
                         font.pixelSize: 18
-                        color: "#666"
+                        color: window.textSecondary
                     }
 
                     MouseArea {
@@ -169,7 +169,7 @@ Rectangle {
                     Layout.preferredHeight: 36
                     radius: 18
                     color: root.currentConversation && root.currentConversation.type === "group"
-                           ? "#c4e0e5" : "#e0e0e0"
+                           ? window.accent : window.divider
 
                     Text {
                         anchors.centerIn: parent
@@ -178,7 +178,7 @@ Rectangle {
                                        ? root.currentConversation.target_name.charAt(0) : "?")
                         font.pixelSize: root.currentConversation && root.currentConversation.type === "group"
                                        ? 16 : 14
-                        color: "#666"
+                        color: window.textSecondary
                     }
                 }
 
@@ -188,7 +188,7 @@ Rectangle {
                     text: root.currentConversation ? (root.currentConversation.target_name || qsTr("未知")) : ""
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
-                    color: "#222"
+                    color: window.textPrimary
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -198,14 +198,14 @@ Rectangle {
                     Layout.preferredWidth: 32
                     Layout.preferredHeight: 32
                     radius: 16
-                    color: infoBtnHover.hovered ? "#f0f0f0" : "transparent"
+                    color: infoBtnHover.hovered ? window.divider : "transparent"
 
                     Text {
                         anchors.centerIn: parent
                         text: "⋯"
                         font.pixelSize: 18
                         font.weight: Font.Bold
-                        color: "#666"
+                        color: window.textSecondary
                     }
 
                     MouseArea {
@@ -227,7 +227,7 @@ Rectangle {
                 anchors.bottom: parent.bottom
                 width: parent.width
                 height: 0.5
-                color: "#e8e8e8"
+                color: window.divider
             }
         }
 
@@ -270,7 +270,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: qsTr("↑ 加载更早的消息")
                         font.pixelSize: 12
-                        color: "#4a8cf7"
+                        color: window.accent
 
                         MouseArea {
                             anchors.fill: parent
@@ -319,7 +319,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: inputArea.implicitHeight + 16
-            color: "white"
+            color: window.bgSurface
 
             RowLayout {
                 id: inputArea
@@ -336,12 +336,12 @@ Rectangle {
                     TextArea {
                         id: sendTextArea
                         font.pixelSize: 14
-                        color: "#333"
+                        color: window.textPrimary
                         wrapMode: TextArea.Wrap
                         placeholderText: qsTr("输入消息...")
-                        placeholderTextColor: "#ccc"
+                        placeholderTextColor: window.textSecondary
                         background: Rectangle {
-                            color: "#f5f5f5"
+                            color: window.bgInput
                             radius: 8
                         }
                         padding: 10
@@ -376,14 +376,14 @@ Rectangle {
                     Layout.preferredHeight: 36
                     Layout.alignment: Qt.AlignBottom
                     radius: 8
-                    color: sendBtnHover.hovered ? "#3d7ce8" : "#4a8cf7"
+                    color: sendBtnHover.hovered ? window.accent : window.accent
 
                     Text {
                         anchors.centerIn: parent
                         text: qsTr("发送")
                         font.pixelSize: 13
                         font.weight: Font.DemiBold
-                        color: "white"
+                        color: window.bgSurface
                     }
 
                     MouseArea {
@@ -404,7 +404,7 @@ Rectangle {
                 anchors.top: parent.top
                 width: parent.width
                 height: 0.5
-                color: "#e8e8e8"
+                color: window.divider
             }
         }
     }
@@ -439,7 +439,7 @@ Rectangle {
         }
 
         background: Rectangle {
-            color: "white"
+            color: window.bgSurface
         }
 
         // 面板内容
@@ -451,14 +451,14 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
-                color: "#fafafa"
+                color: window.bgPage
 
                 Text {
                     anchors.centerIn: parent
                     text: qsTr("详情")
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
-                    color: "#333"
+                    color: window.textPrimary
                 }
 
                 // 底部分隔线
@@ -466,7 +466,7 @@ Rectangle {
                     anchors.bottom: parent.bottom
                     width: parent.width
                     height: 0.5
-                    color: "#e8e8e8"
+                    color: window.divider
                 }
             }
 
@@ -483,14 +483,14 @@ Rectangle {
                     Layout.preferredWidth: 80
                     Layout.preferredHeight: 80
                     radius: 40
-                    color: "#e0e0e0"
+                    color: window.divider
 
                     Text {
                         anchors.centerIn: parent
                         text: root.currentConversation && root.currentConversation.target_name
                               ? root.currentConversation.target_name.charAt(0) : "?"
                         font.pixelSize: 32
-                        color: "#999"
+                        color: window.textSecondary
                     }
                 }
 
@@ -499,7 +499,7 @@ Rectangle {
                     text: root.currentConversation ? (root.currentConversation.target_name || "") : ""
                     font.pixelSize: 18
                     font.weight: Font.DemiBold
-                    color: "#222"
+                    color: window.textPrimary
                 }
 
                 // 用户名（从API获取后显示）
@@ -508,7 +508,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignHCenter
                     text: ""
                     font.pixelSize: 13
-                    color: "#999"
+                    color: window.textSecondary
                 }
 
                 // 关注状态
@@ -517,14 +517,14 @@ Rectangle {
                     Layout.preferredWidth: 160
                     Layout.preferredHeight: 36
                     radius: 18
-                    color: privateFollowBtnHover.hovered ? "#e8f0fe" : "#f0f7ff"
+                    color: privateFollowBtnHover.hovered ? window.selectedBg : window.selectedBg
 
                     Text {
                         id: privateFollowText
                         anchors.centerIn: parent
                         text: qsTr("+ 关注")
                         font.pixelSize: 13
-                        color: "#4a8cf7"
+                        color: window.accent
                     }
 
                     MouseArea {
@@ -563,7 +563,7 @@ Rectangle {
                     Layout.preferredHeight: 0.5
                     Layout.leftMargin: 20
                     Layout.rightMargin: 20
-                    color: "#eee"
+                    color: window.divider
                 }
 
                 // "删除会话" 按钮（红色）
@@ -579,7 +579,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: qsTr("删除会话")
                         font.pixelSize: 14
-                        color: "white"
+                        color: window.bgSurface
                     }
 
                     MouseArea {
@@ -612,7 +612,7 @@ Rectangle {
                     Layout.preferredWidth: 80
                     Layout.preferredHeight: 80
                     radius: 40
-                    color: "#c4e0e5"
+                    color: window.accent
 
                     Text {
                         anchors.centerIn: parent
@@ -626,7 +626,7 @@ Rectangle {
                     text: root.currentConversation ? (root.currentConversation.target_name || "") : ""
                     font.pixelSize: 18
                     font.weight: Font.DemiBold
-                    color: "#222"
+                    color: window.textPrimary
                 }
 
                 // 群号
@@ -635,7 +635,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignHCenter
                     text: root.currentConversation ? ("#" + root.currentConversation.target_id) : ""
                     font.pixelSize: 13
-                    color: "#999"
+                    color: window.textSecondary
                 }
 
                 // 分隔线
@@ -644,7 +644,7 @@ Rectangle {
                     Layout.preferredHeight: 0.5
                     Layout.leftMargin: 20
                     Layout.rightMargin: 20
-                    color: "#eee"
+                    color: window.divider
                 }
 
                 // 群成员标签
@@ -653,7 +653,7 @@ Rectangle {
                     text: qsTr("群成员")
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
-                    color: "#555"
+                    color: window.textPrimary
                 }
 
                 // 群成员列表
@@ -681,14 +681,14 @@ Rectangle {
                                 Layout.preferredWidth: 32
                                 Layout.preferredHeight: 32
                                 radius: 16
-                                color: "#e0e0e0"
+                                color: window.divider
 
                                 Text {
                                     anchors.centerIn: parent
                                     // R5 BUG3: ListModel用直接角色名而非modelData
                                     text: nickname ? nickname.charAt(0) : "?"
                                     font.pixelSize: 12
-                                    color: "#888"
+                                    color: window.textSecondary
                                 }
                             }
 
@@ -700,7 +700,7 @@ Rectangle {
                                     // R5 BUG3: ListModel用直接角色名
                                     text: nickname || username || ""
                                     font.pixelSize: 13
-                                    color: "#333"
+                                    color: window.textPrimary
                                 }
 
                                 Text {
@@ -708,7 +708,7 @@ Rectangle {
                                     text: role === "owner" ? qsTr("群主") :
                                           role === "admin" ? qsTr("管理员") : qsTr("成员")
                                     font.pixelSize: 10
-                                    color: "#aaa"
+                                    color: window.textSecondary
                                 }
                             }
                         }
@@ -733,7 +733,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: qsTr("退出群聊")
                         font.pixelSize: 14
-                        color: "white"
+                        color: window.bgSurface
                     }
 
                     MouseArea {

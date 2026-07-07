@@ -5,7 +5,7 @@ import QtQuick.Layouts
 // ═══════════════════════════════════════════════════════
 // ConversationItem — 会话列表中的单个会话项
 // 设计风格：极简主义（style/极简主义.md）
-// 令牌：背景 white, 圆角 8px, 间距 8px/12px
+// 令牌：背景 bgSurface, 圆角 8px, 间距 8px/12px
 // ═══════════════════════════════════════════════════════
 
 Item {
@@ -36,7 +36,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         anchors.margins: 4
-        color: root.isSelected ? "#e8f0fe" : "white"
+        color: root.isSelected ? window.selectedBg : window.bgSurface
         radius: 8
 
         Behavior on color {
@@ -54,7 +54,7 @@ Item {
                 Layout.preferredWidth: 40
                 Layout.preferredHeight: 40
                 radius: 20
-                color: root.convType === "group" ? "#c4e0e5" : "#e0e0e0"
+                color: root.convType === "group" ? window.accent : window.divider
 
                 // 群聊图标 / 用户头像文字
                 Text {
@@ -62,7 +62,7 @@ Item {
                     text: root.convType === "group" ? "👥" :
                           (root.targetName ? root.targetName.charAt(0) : "?")
                     font.pixelSize: root.convType === "group" ? 18 : 16
-                    color: "#666"
+                    color: window.textSecondary
                 }
             }
 
@@ -77,7 +77,7 @@ Item {
                     text: root.targetName || qsTr("未知")
                     font.pixelSize: 14
                     font.weight: root.unreadCount > 0 ? Font.DemiBold : Font.Normal
-                    color: "#222"
+                    color: window.textPrimary
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -87,7 +87,7 @@ Item {
                     Layout.fillWidth: true
                     text: root.lastMessage || qsTr("暂无消息")
                     font.pixelSize: 12
-                    color: root.unreadCount > 0 ? "#555" : "#999"
+                    color: root.unreadCount > 0 ? window.textPrimary : window.textSecondary
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -103,7 +103,7 @@ Item {
                     Layout.alignment: Qt.AlignRight
                     text: root.lastMessageTime ? formatTime(root.lastMessageTime) : ""
                     font.pixelSize: 11
-                    color: "#aaa"
+                    color: window.textSecondary
                 }
 
                 // 未读红点
@@ -119,7 +119,7 @@ Item {
                         anchors.centerIn: parent
                         text: root.unreadCount > 99 ? "99+" : String(root.unreadCount)
                         font.pixelSize: 10
-                        color: "white"
+                        color: window.bgSurface
                     }
                 }
             }
@@ -132,7 +132,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width - 20
         height: 0.5
-        color: "#eee"
+        color: window.divider
     }
 
     // ── 时间格式化辅助函数 ──

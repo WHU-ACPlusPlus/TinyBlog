@@ -5,7 +5,7 @@ import QtQuick.Layouts
 // ═══════════════════════════════════════════════════════
 // ConversationListPanel — 会话列表面板
 // 设计风格：极简主义（style/极简主义.md）
-// 令牌：背景 #f5f5f5, 白色卡片, 圆角 8px, 间距 12px
+// 令牌：背景 bgPage, bgSurface 卡片, 圆角 8px, 间距 12px
 // ═══════════════════════════════════════════════════════
 
 Rectangle {
@@ -21,7 +21,7 @@ Rectangle {
     signal menuAction(int index)
     signal searchRequested(string keyword)
 
-    color: "#fafafa"
+    color: window.bgPage
     implicitWidth: 280
 
     // ── 日志 ──
@@ -41,7 +41,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 56
-            color: "white"
+            color: window.bgSurface
 
             RowLayout {
                 anchors.fill: parent
@@ -52,7 +52,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
-                    color: "#f0f0f0"
+                    color: window.bgInput
                     radius: 8
 
                     RowLayout {
@@ -70,14 +70,14 @@ Rectangle {
                             id: searchInput
                             Layout.fillWidth: true
                             font.pixelSize: 13
-                            color: "#333"
+                            color: window.textPrimary
                             clip: true
 
                             Text {
                                 anchors.fill: parent
                                 text: qsTr("搜索")
                                 font.pixelSize: 13
-                                color: "#bbb"
+                                color: window.textSecondary
                                 visible: searchInput.text === "" && !searchInput.activeFocus
                             }
 
@@ -116,14 +116,14 @@ Rectangle {
                     Layout.preferredWidth: 36
                     Layout.preferredHeight: 36
                     radius: 8
-                    color: addBtnHover.hovered ? "#e8e8e8" : "#f0f0f0"
+                    color: addBtnHover.hovered ? window.divider : window.bgInput
 
                     Text {
                         anchors.centerIn: parent
                         text: "+"
                         font.pixelSize: 20
                         font.weight: Font.Light
-                        color: "#666"
+                        color: window.textSecondary
                     }
 
                     MouseArea {
@@ -154,7 +154,7 @@ Rectangle {
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             background: Rectangle {
-                color: "white"
+                color: window.bgSurface
                 radius: 8
                 layer.enabled: true
                 layer.effect: null  // QtQuick.Controls.Basic uses no shadow
@@ -174,7 +174,7 @@ Rectangle {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 36
-                        color: menuItemHover.hovered ? "#f5f5f5" : "transparent"
+                        color: menuItemHover.hovered ? window.divider : "transparent"
                         radius: 4
 
                         RowLayout {
@@ -189,7 +189,7 @@ Rectangle {
                             Text {
                                 text: modelData.text
                                 font.pixelSize: 13
-                                color: "#333"
+                                color: window.textPrimary
                             }
                         }
 
@@ -241,13 +241,13 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         text: qsTr("暂无消息")
                         font.pixelSize: 15
-                        color: "#bbb"
+                        color: window.textSecondary
                     }
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: qsTr("关注好友或加入群聊开始聊天")
                         font.pixelSize: 12
-                        color: "#ccc"
+                        color: window.textSecondary
                     }
                 }
             }
