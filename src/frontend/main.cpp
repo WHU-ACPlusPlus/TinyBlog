@@ -2,6 +2,9 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QTranslator>
+#include <QLocale>
+#include <QDir>
 #include "api_client.h"
 
 int main(int argc, char *argv[])
@@ -14,6 +17,19 @@ int main(int argc, char *argv[])
     // 设组织名和应用名，让 QSettings 存到可预期的路径
     app.setOrganizationName("TinyChat");
     app.setApplicationName("TinyChat");
+
+    // ── 加载翻译 ──
+    // 当前系统语言，zh_CN 表示不需要翻译（源码即中文）
+    // 如需添加新语言：生成 .ts 文件 → 填写翻译 → lrelease → .qm 放 translations/ 下
+    QTranslator translator;
+    QString lang = QLocale::system().name();  // e.g. "en_US", "zh_CN"
+    if (lang != "zh_CN" && lang != "zh") {
+        QString qmPath = QCoreApplication::applicationDirPath()
+            + "/translations/appfrontend_" + lang + ".qm";
+        if (translator.load(qmPath)) {
+            app.installTranslator(&translator);
+        }
+    }
 
 
     // 创建 API 客户端，暴露给 QML 侧使用

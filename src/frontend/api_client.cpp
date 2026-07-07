@@ -1,30 +1,57 @@
 #include "api_client.h"
 
+#include <QBuffer>
 #include <QDebug>
 #include <QFile>
-#include <QProcess>
-#include <QStandardPaths>
-#include <QUuid>
-#include <QNetworkRequest>
+#include <QHash>
+#include <QImage>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
+#include <QMediaPlayer>
+#include <QNetworkRequest>
+#include <QProcess>
+#include <QStandardPaths>
 #include <QUrl>
 #include <QUrlQuery>
-#include <QMediaPlayer>
-#include <QVideoSink>
+#include <QUuid>
 #include <QVideoFrame>
 #include <QVideoFrameFormat>
-#include <QImage>
-#include <QBuffer>
+#include <QVideoSink>
+
+// ─── 后端英文错误 → 中文翻译 ───
+static QString trBackendError(const QString& msg) {
+    static const QHash<QString, QString> map = {
+        {QStringLiteral("Bad username."),          QStringLiteral("无效的用户名")},
+        {QStringLiteral("Bad nickname."),          QStringLiteral("无效的昵称")},
+        {QStringLiteral("Bad password."),          QStringLiteral("无效的密码")},
+        {QStringLiteral("Username occupied."),     QStringLiteral("用户名已被占用")},
+        {QStringLiteral("User not exist."),        QStringLiteral("用户不存在")},
+        {QStringLiteral("Incorrect password."),    QStringLiteral("密码错误")},
+        {QStringLiteral("Empty post not allowed."),   QStringLiteral("内容不能为空")},
+        {QStringLiteral("Too many media."),        QStringLiteral("媒体文件过多")},
+        {QStringLiteral("Media cannot be larger than 16MiB."), QStringLiteral("媒体文件不能超过 16MiB")},
+        {QStringLiteral("Post not exist."),        QStringLiteral("帖子不存在")},
+        {QStringLiteral("Post not found."),        QStringLiteral("帖子不存在")},
+        {QStringLiteral("Empty comment not allowed."), QStringLiteral("评论不能为空")},
+        {QStringLiteral("Cannot follow yourself."),    QStringLiteral("不能关注自己")},
+        {QStringLiteral("Not your post."),         QStringLiteral("不能删除他人的帖子")},
+        {QStringLiteral("Not your comment."),      QStringLiteral("不能删除他人的评论")},
+        {QStringLiteral("Cannot repost your own post."), QStringLiteral("不能转发自己的帖子")},
+        {QStringLiteral("Group name cannot be empty."),  QStringLiteral("群组名称不能为空")},
+        {QStringLiteral("Group not exist."),       QStringLiteral("群组不存在")},
+        {QStringLiteral("You are not in this group."),   QStringLiteral("你不在该群组中")},
+        {QStringLiteral("Empty message not allowed."),   QStringLiteral("消息不能为空")},
+        {QStringLiteral("You are already in this group."), QStringLiteral("你已在该群组中")},
+        {QStringLiteral("Bad `to_whom_id`"),       QStringLiteral("无效的收信人")},
+    };
+    return map.value(msg, msg);
+}
 
 // ─── 构造与基础设置 ───
 
-ApiClient::ApiClient(QObject *parent)
-    : QObject(parent)
-    , m_manager(new QNetworkAccessManager(this))
-    , m_baseUrl("http://127.0.0.1:18999")
-{
+ApiClient::ApiClient(QObject* parent)
+    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("http://127.0.0.1:18999") {
     // 启动时从本地存储加载 cookie
     QSettings settings;
     m_cookie = settings.value("auth/cookie").toString();
@@ -37,8 +64,7 @@ ApiClient::ApiClient(QObject *parent)
         QTimer::singleShot(0, this, &ApiClient::checkCookie);
 }
 
-void ApiClient::setBaseUrl(const QString &url)
-{
+void ApiClient::setBaseUrl(const QString& url) {
     m_baseUrl = url;
     while (m_baseUrl.endsWith('/'))
         m_baseUrl.chop(1);
@@ -49,8 +75,7 @@ void ApiClient::setBaseUrl(const QString &url)
 
 QString ApiClient::baseUrl() const { return m_baseUrl; }
 
-void ApiClient::setCookie(const QString &token)
-{
+void ApiClient::setCookie(const QString& token) {
     m_cookie = token;
     QSettings settings;
     settings.setValue("auth/cookie", token);
@@ -61,16 +86,14 @@ QString ApiClient::cookie() const { return m_cookie; }
 
 bool ApiClient::isLoggedIn() const { return !m_cookie.isEmpty(); }
 
-void ApiClient::clearAuth()
-{
+void ApiClient::clearAuth() {
     m_cookie.clear();
     QSettings settings;
     settings.remove("auth/cookie");
     emit loggedInChanged();
 }
 
-QString ApiClient::readFileAsBase64(const QUrl &fileUrl)
-{
+QString ApiClient::readFileAsBase64(const QUrl& fileUrl) {
     QString localPath;
 
 #ifdef Q_OS_ANDROID
@@ -92,22 +115,17 @@ QString ApiClient::readFileAsBase64(const QUrl &fileUrl)
     return QString::fromLatin1(data.toBase64());
 }
 
-QUrl ApiClient::generateVideoThumbnail(const QUrl &videoUrl)
-{
+QUrl ApiClient::generateVideoThumbnail(const QUrl& videoUrl) {
     QString localPath = videoUrl.toLocalFile();
 
-    QString thumbPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-                        + "/chat_thumb_" + QUuid::createUuid().toString(QUuid::Id128)
-                        + ".png";
+    QString thumbPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_thumb_" + QUuid::createUuid().toString(QUuid::Id128) + ".png";
 
     QProcess ffmpeg;
-    ffmpeg.start("ffmpeg", {
-        "-y",
-        "-i", localPath,
-        "-vframes", "1",
-        "-q:v", "2",
-        thumbPath
-    });
+    ffmpeg.start("ffmpeg", {"-y",
+                            "-i", localPath,
+                            "-vframes", "1",
+                            "-q:v", "2",
+                            thumbPath});
     ffmpeg.waitForFinished(10000);
 
     if (ffmpeg.exitCode() != 0 || !QFile::exists(thumbPath))
@@ -116,13 +134,10 @@ QUrl ApiClient::generateVideoThumbnail(const QUrl &videoUrl)
     return QUrl::fromLocalFile(thumbPath);
 }
 
-QString ApiClient::videoThumbnailFromBase64(const QString &b64)
-{
+QString ApiClient::videoThumbnailFromBase64(const QString& b64) {
     // 将 base64 视频数据写入临时文件
     QByteArray data = QByteArray::fromBase64(b64.toLatin1());
-    QString inputPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-                        + "/chat_vid_" + QUuid::createUuid().toString(QUuid::Id128)
-                        + ".mp4";
+    QString inputPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_vid_" + QUuid::createUuid().toString(QUuid::Id128) + ".mp4";
     QFile inputFile(inputPath);
     if (!inputFile.open(QIODevice::WriteOnly)) {
         qWarning() << "Failed to write temp video file";
@@ -131,18 +146,14 @@ QString ApiClient::videoThumbnailFromBase64(const QString &b64)
     inputFile.write(data);
     inputFile.close();
 
-    QString thumbPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-                        + "/chat_thumb_" + QUuid::createUuid().toString(QUuid::Id128)
-                        + ".png";
+    QString thumbPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_thumb_" + QUuid::createUuid().toString(QUuid::Id128) + ".png";
 
     QProcess ffmpeg;
-    ffmpeg.start("ffmpeg", {
-        "-y",
-        "-i", inputPath,
-        "-vframes", "1",
-        "-q:v", "2",
-        thumbPath
-    });
+    ffmpeg.start("ffmpeg", {"-y",
+                            "-i", inputPath,
+                            "-vframes", "1",
+                            "-q:v", "2",
+                            thumbPath});
     ffmpeg.waitForFinished(15000);
 
     // 清理输入临时文件
@@ -166,8 +177,7 @@ QString ApiClient::videoThumbnailFromBase64(const QString &b64)
     return QString::fromLatin1(thumbData.toBase64());
 }
 
-QString ApiClient::saveBase64ToTempFile(const QString &b64, const QString &ext)
-{
+QString ApiClient::saveBase64ToTempFile(const QString& b64, const QString& ext) {
     if (b64.isEmpty())
         return {};
 
@@ -175,9 +185,7 @@ QString ApiClient::saveBase64ToTempFile(const QString &b64, const QString &ext)
     if (data.isEmpty())
         return {};
 
-    QString path = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-                   + "/chat_media_" + QUuid::createUuid().toString(QUuid::Id128)
-                   + "." + ext;
+    QString path = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_media_" + QUuid::createUuid().toString(QUuid::Id128) + "." + ext;
 
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly)) {
@@ -190,8 +198,7 @@ QString ApiClient::saveBase64ToTempFile(const QString &b64, const QString &ext)
     return QUrl::fromLocalFile(path).toString();
 }
 
-void ApiClient::extractVideoThumbnailAsync(const QString &postId, int mediaIndex, const QString &b64)
-{
+void ApiClient::extractVideoThumbnailAsync(const QString& postId, int mediaIndex, const QString& b64) {
     if (b64.isEmpty()) {
         emit videoThumbnailExtracted(postId, mediaIndex, {});
         return;
@@ -204,9 +211,7 @@ void ApiClient::extractVideoThumbnailAsync(const QString &postId, int mediaIndex
         return;
     }
 
-    QString inputPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-                        + "/chat_vid_" + QUuid::createUuid().toString(QUuid::Id128)
-                        + ".mp4";
+    QString inputPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_vid_" + QUuid::createUuid().toString(QUuid::Id128) + ".mp4";
     QFile inputFile(inputPath);
     if (!inputFile.open(QIODevice::WriteOnly)) {
         qWarning() << "Failed to write temp video file" << inputPath;
@@ -217,8 +222,8 @@ void ApiClient::extractVideoThumbnailAsync(const QString &postId, int mediaIndex
     inputFile.close();
 
     // ── 用 Qt Multimedia 抽第一帧 ──
-    QMediaPlayer *player = new QMediaPlayer(this);
-    QVideoSink *sink = new QVideoSink(player);
+    QMediaPlayer* player = new QMediaPlayer(this);
+    QVideoSink* sink = new QVideoSink(player);
     player->setVideoOutput(sink);
 
     player->setProperty("inputPath", inputPath);
@@ -227,7 +232,7 @@ void ApiClient::extractVideoThumbnailAsync(const QString &postId, int mediaIndex
     player->setProperty("captured", false);
 
     // 5 秒超时
-    QTimer *timeout = new QTimer(this);
+    QTimer* timeout = new QTimer(this);
     timeout->setSingleShot(true);
     connect(timeout, &QTimer::timeout, this, [this, player, timeout, inputPath, postId, mediaIndex]() {
         if (!player->property("captured").toBool()) {
@@ -244,7 +249,7 @@ void ApiClient::extractVideoThumbnailAsync(const QString &postId, int mediaIndex
 
     // 帧转 QImage（带 map fallback）
     struct {
-        QImage operator()(const QVideoFrame &frame) const {
+        QImage operator()(const QVideoFrame& frame) const {
             QImage img = frame.toImage();
             if (!img.isNull()) return img;
             QVideoFrame mapped = frame;
@@ -252,56 +257,58 @@ void ApiClient::extractVideoThumbnailAsync(const QString &postId, int mediaIndex
             QImage::Format fmt = QVideoFrameFormat::imageFormatFromPixelFormat(mapped.pixelFormat());
             if (fmt != QImage::Format_Invalid)
                 img = QImage(mapped.bits(0), mapped.width(), mapped.height(),
-                             mapped.bytesPerLine(0), fmt).copy();
+                             mapped.bytesPerLine(0), fmt)
+                          .copy();
             else
                 img = QImage(mapped.bits(0), mapped.width(), mapped.height(),
-                             mapped.bytesPerLine(0), QImage::Format_RGB32).copy();
+                             mapped.bytesPerLine(0), QImage::Format_RGB32)
+                          .copy();
             mapped.unmap();
             return img;
         }
     } frameToImage;
 
     connect(sink, &QVideoSink::videoFrameChanged, this,
-        [this, player, timeout, frameToImage](const QVideoFrame &frame) {
-            // 忽略无效帧和已捕获
-            if (player->property("captured").toBool()) return;
-            if (frame.width() <= 0 || frame.height() <= 0) return;
+            [this, player, timeout, frameToImage](const QVideoFrame& frame) {
+                // 忽略无效帧和已捕获
+                if (player->property("captured").toBool()) return;
+                if (frame.width() <= 0 || frame.height() <= 0) return;
 
-            QString inputPath = player->property("inputPath").toString();
-            QString postId = player->property("postId").toString();
-            int mediaIndex = player->property("mediaIndex").toInt();
+                QString inputPath = player->property("inputPath").toString();
+                QString postId = player->property("postId").toString();
+                int mediaIndex = player->property("mediaIndex").toInt();
 
-            QImage image = frameToImage(frame);
-            if (image.isNull()) {
-                qWarning() << "Failed to convert video frame for post" << postId;
+                QImage image = frameToImage(frame);
+                if (image.isNull()) {
+                    qWarning() << "Failed to convert video frame for post" << postId;
+                    player->setProperty("captured", true);
+                    QFile::remove(inputPath);
+                    player->stop();
+                    player->deleteLater();
+                    timeout->deleteLater();
+                    emit videoThumbnailExtracted(postId, mediaIndex, {});
+                    return;
+                }
+
+                // 缩略图缩放到合理大小（最大 320px）
+                if (image.width() > 320 || image.height() > 320)
+                    image = image.scaled(320, 320, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+                QByteArray pngData;
+                QBuffer buf(&pngData);
+                buf.open(QIODevice::WriteOnly);
+                image.save(&buf, "PNG");
+                buf.close();
+                QString thumbB64 = QString::fromLatin1(pngData.toBase64());
+
                 player->setProperty("captured", true);
                 QFile::remove(inputPath);
                 player->stop();
                 player->deleteLater();
                 timeout->deleteLater();
-                emit videoThumbnailExtracted(postId, mediaIndex, {});
-                return;
-            }
 
-            // 缩略图缩放到合理大小（最大 320px）
-            if (image.width() > 320 || image.height() > 320)
-                image = image.scaled(320, 320, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-            QByteArray pngData;
-            QBuffer buf(&pngData);
-            buf.open(QIODevice::WriteOnly);
-            image.save(&buf, "PNG");
-            buf.close();
-            QString thumbB64 = QString::fromLatin1(pngData.toBase64());
-
-            player->setProperty("captured", true);
-            QFile::remove(inputPath);
-            player->stop();
-            player->deleteLater();
-            timeout->deleteLater();
-
-            emit videoThumbnailExtracted(postId, mediaIndex, thumbB64);
-        });
+                emit videoThumbnailExtracted(postId, mediaIndex, thumbB64);
+            });
 
     player->setSource(QUrl::fromLocalFile(inputPath));
     player->play();
@@ -309,32 +316,28 @@ void ApiClient::extractVideoThumbnailAsync(const QString &postId, int mediaIndex
 
 // ─── 私有工具方法 ───
 
-QJsonObject ApiClient::withCookie() const
-{
+QJsonObject ApiClient::withCookie() const {
     return {{"cookie", m_cookie}};
 }
 
-QJsonObject ApiClient::withCookie(const QJsonObject &extra) const
-{
+QJsonObject ApiClient::withCookie(const QJsonObject& extra) const {
     QJsonObject obj = extra;
     obj["cookie"] = m_cookie;
     return obj;
 }
 
-QNetworkReply *ApiClient::postJson(const QString &endpoint,
-                                   const QJsonObject &body)
-{
+QNetworkReply* ApiClient::postJson(const QString& endpoint,
+                                   const QJsonObject& body) {
     QNetworkRequest req(QUrl(m_baseUrl + endpoint));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    req.setTransferTimeout(15000); // 15s 超时
+    req.setTransferTimeout(15000);  // 15s 超时
 
     QJsonDocument doc(body);
     QByteArray json = doc.toJson(QJsonDocument::Compact);
     return m_manager->post(req, json);
 }
 
-bool ApiClient::checkReply(QNetworkReply *reply, QJsonObject &out)
-{
+bool ApiClient::checkReply(QNetworkReply* reply, QJsonObject& out) {
     if (reply->error() != QNetworkReply::NoError) {
         emit errorOccurred(
             QStringLiteral("网络错误: %1").arg(reply->errorString()));
@@ -357,7 +360,7 @@ bool ApiClient::checkReply(QNetworkReply *reply, QJsonObject &out)
 
     // 检查服务端返回的错误
     if (out.contains("error")) {
-        emit errorOccurred(out["error"].toString());
+        emit errorOccurred(trBackendError(out["error"].toString()));
         return false;
     }
 
@@ -366,16 +369,15 @@ bool ApiClient::checkReply(QNetworkReply *reply, QJsonObject &out)
 
 // ─── 认证 ───
 
-void ApiClient::checkCookie()
-{
+void ApiClient::checkCookie() {
     if (m_cookie.isEmpty())
         return;
 
     QJsonObject body{{"cookie", m_cookie}};
-    QNetworkReply *reply = postJson("/check-cookie", body);
+    QNetworkReply* reply = postJson("/check-cookie", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            emit errorOccurred(QStringLiteral("网络错误: %1").arg(reply->errorString()));
+            emit errorOccurred(tr("网络错误: %1").arg(reply->errorString()));
             reply->deleteLater();
             return;
         }
@@ -385,7 +387,7 @@ void ApiClient::checkCookie()
         QJsonParseError parseErr;
         QJsonDocument doc = QJsonDocument::fromJson(data, &parseErr);
         if (parseErr.error != QJsonParseError::NoError) {
-            emit errorOccurred(QStringLiteral("JSON 解析失败: %1").arg(parseErr.errorString()));
+            emit errorOccurred(tr("JSON 解析失败: %1").arg(parseErr.errorString()));
             return;
         }
 
@@ -409,14 +411,13 @@ void ApiClient::checkCookie()
     });
 }
 
-void ApiClient::registerUser(const QString &username, const QString &password,
-                             const QString &nickname)
-{
+void ApiClient::registerUser(const QString& username, const QString& password,
+                             const QString& nickname) {
     QJsonObject body{{"username", username},
                      {"password", password},
                      {"nickname", nickname}};
 
-    QNetworkReply *reply = postJson("/register-request", body);
+    QNetworkReply* reply = postJson("/register-request", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -426,11 +427,10 @@ void ApiClient::registerUser(const QString &username, const QString &password,
     });
 }
 
-void ApiClient::login(const QString &username, const QString &password)
-{
+void ApiClient::login(const QString& username, const QString& password) {
     QJsonObject body{{"username", username}, {"password", password}};
 
-    QNetworkReply *reply = postJson("/login-request", body);
+    QNetworkReply* reply = postJson("/login-request", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -442,10 +442,9 @@ void ApiClient::login(const QString &username, const QString &password)
 
 // ─── 社交 ───
 
-void ApiClient::follow(int followee_id)
-{
+void ApiClient::follow(int followee_id) {
     QJsonObject body = withCookie({{"followee_id", followee_id}});
-    QNetworkReply *reply = postJson("/follow", body);
+    QNetworkReply* reply = postJson("/follow", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -454,10 +453,9 @@ void ApiClient::follow(int followee_id)
     });
 }
 
-void ApiClient::unfollow(int followee_id)
-{
+void ApiClient::unfollow(int followee_id) {
     QJsonObject body = withCookie({{"followee_id", followee_id}});
-    QNetworkReply *reply = postJson("/unfollow", body);
+    QNetworkReply* reply = postJson("/unfollow", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         (void)obj;
@@ -467,10 +465,9 @@ void ApiClient::unfollow(int followee_id)
     });
 }
 
-void ApiClient::fetchFollowList()
-{
+void ApiClient::fetchFollowList() {
     QJsonObject body = withCookie();
-    QNetworkReply *reply = postJson("/get-follow-list", body);
+    QNetworkReply* reply = postJson("/get-follow-list", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -478,9 +475,9 @@ void ApiClient::fetchFollowList()
 
         QList<UserInfo> followers;
         QList<UserInfo> followees;
-        for (const auto &v : obj["followers"].toArray())
+        for (const auto& v : obj["followers"].toArray())
             followers.append(userFromJson(v.toObject()));
-        for (const auto &v : obj["followees"].toArray())
+        for (const auto& v : obj["followees"].toArray())
             followees.append(userFromJson(v.toObject()));
 
         emit followListFetched(followers, followees);
@@ -489,13 +486,12 @@ void ApiClient::fetchFollowList()
 
 // ─── 帖子 ───
 
-void ApiClient::publishPost(const QString &text, const QStringList &media)
-{
+void ApiClient::publishPost(const QString& text, const QStringList& media) {
     QJsonArray arr;
-    for (const auto &m : media)
+    for (const auto& m : media)
         arr.append(m);
     QJsonObject body = withCookie({{"text", text}, {"media", arr}});
-    QNetworkReply *reply = postJson("/pub-post", body);
+    QNetworkReply* reply = postJson("/pub-post", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -504,26 +500,24 @@ void ApiClient::publishPost(const QString &text, const QStringList &media)
     });
 }
 
-void ApiClient::fetchTimeline(int count)
-{
+void ApiClient::fetchTimeline(int count) {
     QJsonObject body = withCookie({{"count", count}});
-    QNetworkReply *reply = postJson("/post-fetch", body);
+    QNetworkReply* reply = postJson("/post-fetch", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
 
         QList<int> ids;
-        for (const auto &v : obj["posts"].toArray())
+        for (const auto& v : obj["posts"].toArray())
             ids.append(v.toInt());
         emit timelineFetched(ids, obj["count"].toInt());
     });
 }
 
-void ApiClient::getPost(int post_id)
-{
+void ApiClient::getPost(int post_id) {
     QJsonObject body = withCookie({{"post_id", post_id}});
-    QNetworkReply *reply = postJson("/get-post", body);
+    QNetworkReply* reply = postJson("/get-post", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -534,10 +528,9 @@ void ApiClient::getPost(int post_id)
 
 // ─── 互动 ───
 
-void ApiClient::likePost(int post_id)
-{
+void ApiClient::likePost(int post_id) {
     QJsonObject body = withCookie({{"post_id", post_id}});
-    QNetworkReply *reply = postJson("/like", body);
+    QNetworkReply* reply = postJson("/like", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -546,10 +539,9 @@ void ApiClient::likePost(int post_id)
     });
 }
 
-void ApiClient::unlikePost(int post_id)
-{
+void ApiClient::unlikePost(int post_id) {
     QJsonObject body = withCookie({{"post_id", post_id}});
-    QNetworkReply *reply = postJson("/unlike", body);
+    QNetworkReply* reply = postJson("/unlike", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -558,10 +550,9 @@ void ApiClient::unlikePost(int post_id)
     });
 }
 
-void ApiClient::comment(int post_id, const QString &content)
-{
+void ApiClient::comment(int post_id, const QString& content) {
     QJsonObject body = withCookie({{"post_id", post_id}, {"content", content}});
-    QNetworkReply *reply = postJson("/comment", body);
+    QNetworkReply* reply = postJson("/comment", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -570,17 +561,16 @@ void ApiClient::comment(int post_id, const QString &content)
     });
 }
 
-void ApiClient::fetchComments(int post_id)
-{
+void ApiClient::fetchComments(int post_id) {
     QJsonObject body = withCookie({{"post_id", post_id}});
-    QNetworkReply *reply = postJson("/get-comments", body);
+    QNetworkReply* reply = postJson("/get-comments", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
 
         QVariantList comments;
-        for (const auto &v : obj["comments"].toArray())
+        for (const auto& v : obj["comments"].toArray())
             comments.append(v.toObject().toVariantMap());
         emit commentsFetched(comments);
     });
@@ -588,11 +578,10 @@ void ApiClient::fetchComments(int post_id)
 
 // ─── 私信 ───
 
-void ApiClient::sendMessage(int to_whom_id, const QString &content)
-{
+void ApiClient::sendMessage(int to_whom_id, const QString& content) {
     QJsonObject body =
         withCookie({{"to_whom_id", to_whom_id}, {"content", content}});
-    QNetworkReply *reply = postJson("/send-msg", body);
+    QNetworkReply* reply = postJson("/send-msg", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -601,32 +590,80 @@ void ApiClient::sendMessage(int to_whom_id, const QString &content)
     });
 }
 
-void ApiClient::receiveMessages()
-{
+void ApiClient::receiveMessages() {
     QJsonObject body = withCookie();
-    QNetworkReply *reply = postJson("/recv-msg", body);
+    QNetworkReply* reply = postJson("/recv-msg", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
 
         QList<MessageInfo> msgs;
-        for (const auto &v : obj["msgs"].toArray())
+        for (const auto& v : obj["msgs"].toArray())
             msgs.append(msgFromJson(v.toObject()));
         emit messagesReceived(msgs);
     });
 }
 
-// ─── 头像/签名 ───
+// ─── 头像/签名/个人资料 ───
 
-void ApiClient::patchAvatar(const QString &avatar, const QString &signature)
-{
+void ApiClient::fetchProfile() {
+    QJsonObject body = withCookie();
+    QNetworkReply* reply = postJson("/check-cookie", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit profileFetched(obj.toVariantMap());
+    });
+}
+
+void ApiClient::updateProfile(const QString& nickname,
+                              const QString& avatar,
+                              const QString& signature) {
+    auto pending = std::make_shared<int>(0);
+
+    // 更新昵称
+    if (!nickname.isEmpty()) {
+        (*pending)++;
+        QJsonObject body = withCookie({{"nickname", nickname}});
+        QNetworkReply* reply = postJson("/edit-profile", body);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pending]() {
+            reply->deleteLater();
+            (*pending)--;
+            if (*pending == 0) {
+                emit profileUpdated();
+            }
+        });
+    }
+    // 更新头像和签名
+    if (!avatar.isEmpty() || !signature.isEmpty()) {
+        (*pending)++;
+        QJsonObject body = withCookie();
+        if (!avatar.isEmpty()) body["avatar"] = avatar;
+        if (!signature.isEmpty()) body["signature"] = signature;
+        QNetworkReply* reply = postJson("/avatar", body);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pending]() {
+            reply->deleteLater();
+            (*pending)--;
+            if (*pending == 0) {
+                emit profileUpdated();
+            }
+        });
+    }
+    // 没有要更新的内容
+    if (*pending == 0) {
+        emit profileUpdated();
+    }
+}
+
+void ApiClient::patchAvatar(const QString& avatar, const QString& signature) {
     QJsonObject body = withCookie();
     if (!avatar.isEmpty())
         body["avatar"] = avatar;
     if (!signature.isEmpty())
         body["signature"] = signature;
-    QNetworkReply *reply = postJson("/avatar", body);
+    QNetworkReply* reply = postJson("/avatar", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -635,8 +672,7 @@ void ApiClient::patchAvatar(const QString &avatar, const QString &signature)
     });
 }
 
-void ApiClient::fetchAvatar(int user_id)
-{
+void ApiClient::fetchAvatar(int user_id) {
     QUrl url(m_baseUrl + "/avatar");
     QUrlQuery query;
     query.addQueryItem("user_id", QString::number(user_id));
@@ -645,10 +681,10 @@ void ApiClient::fetchAvatar(int user_id)
     QNetworkRequest req(url);
     req.setTransferTimeout(15000);
 
-    QNetworkReply *reply = m_manager->get(req);
+    QNetworkReply* reply = m_manager->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            emit errorOccurred(QStringLiteral("网络错误: %1").arg(reply->errorString()));
+            emit errorOccurred(tr("网络错误: %1").arg(reply->errorString()));
             reply->deleteLater();
             return;
         }
@@ -658,7 +694,7 @@ void ApiClient::fetchAvatar(int user_id)
         QJsonParseError err;
         QJsonDocument doc = QJsonDocument::fromJson(data, &err);
         if (err.error != QJsonParseError::NoError) {
-            emit errorOccurred(QStringLiteral("JSON 解析失败: %1").arg(err.errorString()));
+            emit errorOccurred(tr("JSON 解析失败: %1").arg(err.errorString()));
             return;
         }
         QJsonObject obj = doc.object();
@@ -674,10 +710,9 @@ void ApiClient::fetchAvatar(int user_id)
 
 // ─── 群聊 ───
 
-void ApiClient::createGroup(const QString &name)
-{
+void ApiClient::createGroup(const QString& name) {
     QJsonObject body = withCookie({{"name", name}});
-    QNetworkReply *reply = postJson("/create-group", body);
+    QNetworkReply* reply = postJson("/create-group", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -686,10 +721,9 @@ void ApiClient::createGroup(const QString &name)
     });
 }
 
-void ApiClient::joinGroup(int group_id)
-{
+void ApiClient::joinGroup(int group_id) {
     QJsonObject body = withCookie({{"group_id", group_id}});
-    QNetworkReply *reply = postJson("/join-group", body);
+    QNetworkReply* reply = postJson("/join-group", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -698,10 +732,9 @@ void ApiClient::joinGroup(int group_id)
     });
 }
 
-void ApiClient::leaveGroup(int group_id)
-{
+void ApiClient::leaveGroup(int group_id) {
     QJsonObject body = withCookie({{"group_id", group_id}});
-    QNetworkReply *reply = postJson("/leave-group", body);
+    QNetworkReply* reply = postJson("/leave-group", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -710,11 +743,10 @@ void ApiClient::leaveGroup(int group_id)
     });
 }
 
-void ApiClient::sendGroupMessage(int group_id, const QString &content)
-{
+void ApiClient::sendGroupMessage(int group_id, const QString& content) {
     QJsonObject body =
         withCookie({{"group_id", group_id}, {"content", content}});
-    QNetworkReply *reply = postJson("/send-group-msg", body);
+    QNetworkReply* reply = postJson("/send-group-msg", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -723,49 +755,46 @@ void ApiClient::sendGroupMessage(int group_id, const QString &content)
     });
 }
 
-void ApiClient::receiveGroupMessages(int group_id, int count)
-{
+void ApiClient::receiveGroupMessages(int group_id, int count) {
     QJsonObject body = withCookie({{"group_id", group_id}, {"count", count}});
-    QNetworkReply *reply = postJson("/recv-group-msg", body);
+    QNetworkReply* reply = postJson("/recv-group-msg", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
 
         QList<GroupMessageInfo> msgs;
-        for (const auto &v : obj["messages"].toArray())
+        for (const auto& v : obj["messages"].toArray())
             msgs.append(groupMsgFromJson(v.toObject()));
         emit groupMessagesReceived(msgs);
     });
 }
 
-void ApiClient::fetchGroupMembers(int group_id)
-{
+void ApiClient::fetchGroupMembers(int group_id) {
     QJsonObject body = withCookie({{"group_id", group_id}});
-    QNetworkReply *reply = postJson("/get-group-members", body);
+    QNetworkReply* reply = postJson("/get-group-members", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
 
         QList<UserInfo> members;
-        for (const auto &v : obj["members"].toArray())
+        for (const auto& v : obj["members"].toArray())
             members.append(userFromJson(v.toObject()));
         emit groupMembersFetched(members);
     });
 }
 
-void ApiClient::fetchMyGroups()
-{
+void ApiClient::fetchMyGroups() {
     QJsonObject body = withCookie();
-    QNetworkReply *reply = postJson("/get-my-groups", body);
+    QNetworkReply* reply = postJson("/get-my-groups", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
 
         QList<GroupInfo> groups;
-        for (const auto &v : obj["groups"].toArray())
+        for (const auto& v : obj["groups"].toArray())
             groups.append(groupFromJson(v.toObject()));
         emit myGroupsFetched(groups);
     });
