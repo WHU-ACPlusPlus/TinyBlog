@@ -764,6 +764,102 @@ def get_my_groups(body: Get_My_Groups_Req):
     """, (user_id,)).fetchall()
     return {"groups": [dict(g) for g in groups]}
 
+class Logout_Req(BaseModel):
+    cookie: str
+
+@app.post("/logout")
+def logout(body: Logout_Req):
+    cursor.execute(
+            "DELETE FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    conn.commit()
+    return {"status": "success"}
+
+class Del_Post_Req(BaseModel):
+    cookie: str
+    post_id: int
+
+@app.post("/delete-post")
+def delete_post(body: Del_Post_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    post = cursor.execute(
+            "SELECT publisher_id FROM posts WHERE id = ?",
+            (body.post_id,)
+            ).fetchone()
+    if not post:
+        return {"error": "Post not exist."}
+    if post["publisher_id"] != user_id:
+        return {"error": "Not your post."}
+    cursor.execute("DELETE FROM liking_users WHERE post_id = ?", (body.post_id,))
+    cursor.execute("DELETE FROM comments WHERE post_id = ?", (body.post_id,))
+    cursor.execute("DELETE FROM post_media WHERE post_id = ?", (body.post_id,))
+    cursor.execute("DELETE FROM read_posts WHERE post_id = ?", (body.post_id,))
+    cursor.execute("DELETE FROM posts WHERE id = ?", (body.post_id,))
+    conn.commit()
+    return {"status": "success"}
+
+class Del_Comment_Req(BaseModel):
+    cookie: str
+    comment_id: int
+
+@app.post("/delete-comment")
+def delete_comment(body: Del_Comment_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    comment = cursor.execute(
+            "SELECT commenter_id FROM comments WHERE id = ?",
+            (body.comment_id,)
+            ).fetchone()
+    if not comment:
+        return {"error": "Comment not exist."}
+    if comment["commenter_id"] != user_id:
+        return {"error": "Not your comment."}
+    cursor.execute(
+            "DELETE FROM comments WHERE id = ?",
+            (body.comment_id,)
+            )
+    conn.commit()
+    return {"status": "success"}
+
+class Edit_Profile_Req(BaseModel):
+    cookie: str
+    nickname: str = ""
+    email_address: str = ""
+
+@app.post("/edit-profile")
+def edit_profile(body: Edit_Profile_Req):
+    row = cursor.execute(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            ).fetchone()
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if body.nickname:
+        cursor.execute(
+                "UPDATE users SET nickname = ? WHERE id = ?",
+                (body.nickname, user_id)
+                )
+    if body.email_address:
+        cursor.execute(
+                "UPDATE users SET email_address = ? WHERE id = ?",
+                (body.email_address, user_id)
+                )
+    conn.commit()
+    return {"status": "success"}
+
 if __name__ == "__main__":
     uvicorn.run(app, port = 18999)
     uvicorn.run(app, port = 18999)
