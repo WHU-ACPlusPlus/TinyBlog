@@ -4,14 +4,48 @@
 
 # Databases
 
-import sqlite3, bcrypt, secrets
+import sqlite3, bcrypt, secrets, threading
 
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
-cursor = conn.cursor()
+conn.execute("PRAGMA journal_mode=WAL")
+
+# 线程锁：保护所有数据库操作，防止并发读同一连接导致段错误
+db_lock = threading.Lock()
+
+# 用 conn.execute() 替代全局 cursor，每次获取新游标，线程安全
+_last_cursor = None
+
+def db_execute(sql, params=()):
+    global _last_cursor
+    with db_lock:
+        _last_cursor = conn.execute(sql, params)
+        return _last_cursor
+
+def db_fetchone(sql, params=()):
+    with db_lock:
+        return conn.execute(sql, params).fetchone()
+
+def db_fetchall(sql, params=()):
+    with db_lock:
+        return conn.execute(sql, params).fetchall()
+
+def db_commit():
+    with db_lock:
+        conn.commit()
+
+def db_lastrowid():
+    with db_lock:
+        return _last_cursor.lastrowid if _last_cursor is not None else -1
+
+def db_rowcount():
+    with db_lock:
+        if _last_cursor is not None:
+            return _last_cursor.rowcount
+        return 0
 
 if __name__ == "__main__":
-    cursor.execute("""
+    db_execute("""
                    CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
@@ -20,7 +54,7 @@ if __name__ == "__main__":
                     email_address TEXT NOT NULL DEFAULT ''
                    )
                    """)
-    cursor.execute("""
+    db_execute("""
                    CREATE TABLE IF NOT EXISTS cookies (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -29,7 +63,7 @@ if __name__ == "__main__":
                     FOREIGN KEY (user_id) REFERENCES users(id)
                    )
                    """)
-    cursor.execute("""
+    db_execute("""
                    CREATE TABLE IF NOT EXISTS following (
                     follower INTEGER NOT NULL,
                     followee INTEGER NOT NULL,
@@ -39,7 +73,7 @@ if __name__ == "__main__":
                     FOREIGN KEY (followee) REFERENCES users(id)
                    )
                    """)
-    cursor.execute("""
+    db_execute("""
                    CREATE TABLE IF NOT EXISTS posts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     publisher_id INTEGER NOT NULL,
@@ -49,7 +83,7 @@ if __name__ == "__main__":
                     FOREIGN KEY (publisher_id) REFERENCES users(id)
                    )
                    """)
-    cursor.execute("""
+    db_execute("""
                    CREATE TABLE IF NOT EXISTS liking_users (
                     post_id INTEGER NOT NULL,
                     liker_id INTEGER NOT NULL,
@@ -58,7 +92,7 @@ if __name__ == "__main__":
                     FOREIGN KEY (post_id) REFERENCES posts(id)
                    )
                    """)
-    cursor.execute("""
+    db_execute("""
                    CREATE TABLE IF NOT EXISTS comments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     post_id INTEGER NOT NULL,
@@ -69,7 +103,7 @@ if __name__ == "__main__":
                     FOREIGN KEY (commenter_id) REFERENCES users(id)
                    )
                    """)
-    cursor.execute("""
+    db_execute("""
                    CREATE TABLE IF NOT EXISTS offline_messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sender_id INTEGER NOT NULL,
@@ -80,7 +114,7 @@ if __name__ == "__main__":
                     FOREIGN KEY (receiver_id) REFERENCES users(id)
                    )
                    """)
-    cursor.execute("""
+    db_execute("""
                    CREATE TABLE IF NOT EXISTS post_media (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     post_id INTEGER NOT NULL,
@@ -89,7 +123,7 @@ if __name__ == "__main__":
                     FOREIGN KEY (post_id) REFERENCES posts(id)
                    )
                    """)
-    cursor.execute(
+    db_execute(
 """
     CREATE TABLE IF NOT EXISTS read_posts (
         user_id INTEGER NOT NULL,
@@ -101,7 +135,7 @@ if __name__ == "__main__":
     );
 """
             )
-    cursor.execute("""
+    db_execute("""
         CREATE TABLE IF NOT EXISTS groups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -110,7 +144,7 @@ if __name__ == "__main__":
             FOREIGN KEY (owner_id) REFERENCES users(id)
         )
     """)
-    cursor.execute("""
+    db_execute("""
         CREATE TABLE IF NOT EXISTS user_in_group (
             group_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
@@ -122,7 +156,7 @@ if __name__ == "__main__":
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
-    cursor.execute("""
+    db_execute("""
         CREATE TABLE IF NOT EXISTS group_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             group_id INTEGER NOT NULL,
@@ -133,7 +167,13 @@ if __name__ == "__main__":
             FOREIGN KEY (sender_id) REFERENCES users(id)
         )
     """)
-    conn.commit()
+    # 向后兼容：新增字段（已有数据库不会自动加列）
+    for col in ["avatar", "signature"]:
+        try:
+            db_execute(f"ALTER TABLE users ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
+    db_commit()
 
 # Server Functions
 
@@ -160,26 +200,25 @@ def reg_req(body: Reg_Req):
         return {"error": "Bad nickname."}
     if not body.password:
         return {"error": "Bad password."}
-    existing = cursor.execute(
+    existing = db_fetchone(
             "SELECT id FROM users WHERE username = ?",
             (body.username,)
-            ).fetchone()
+            )
     if existing:
         return {"error": "Username occupied."}
     password_hash = bcrypt.hashpw(
             body.password.encode(), bcrypt.gensalt()
             ).decode()
-    cursor.execute(
-            "INSERT INTO users (username, nickname, password_hash) VALUES (?, ?, ?)",
+    db_execute("INSERT INTO users (username, nickname, password_hash) VALUES (?, ?, ?)",
             (body.username, body.nickname, password_hash)
             )
-    user_id = cursor.lastrowid
+    user_id = db_lastrowid()
     cookie = secrets.token_hex(32)
-    cursor.execute(
+    db_execute(
             "INSERT INTO cookies (user_id, token, expires_at) VALUES (?, ?, ?)",
             (user_id, cookie, "2099-12-31 13:59:59")
             )
-    conn.commit()
+    db_commit()
     return {"cookie": cookie}
 
 class Log_Req(BaseModel):
@@ -192,10 +231,10 @@ def log_req(body: Log_Req):
         return {"error": "Bad username."}
     if not body.password:
         return {"error": "Bad password."}
-    log = cursor.execute(
+    log = db_fetchone(
             "SELECT * FROM users WHERE username = ?",
             (body.username,)
-            ).fetchone()
+            )
     if not log:
         return {"error": "User not exist."}
     if not bcrypt.checkpw(
@@ -203,11 +242,10 @@ def log_req(body: Log_Req):
             ):
         return {"error": "Incorrect password."}
     cookie = secrets.token_hex(32)
-    cursor.execute(
-            "INSERT INTO cookies (user_id, token, expires_at) VALUES (?, ?, ?)",
+    db_execute("INSERT INTO cookies (user_id, token, expires_at) VALUES (?, ?, ?)",
             (log["id"], cookie, "2099-12-31 13:59:59")
             )
-    conn.commit()
+    db_commit()
     return {"cookie": cookie}
 
 class Get_Follower(BaseModel):
@@ -215,14 +253,14 @@ class Get_Follower(BaseModel):
 
 @app.post("/get-follow-list")
 def get_follow_list(body: Get_Follower):
-    log = cursor.execute(
+    log = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not log:
         return {"error": "Bad cookie."}
     user_id = log["user_id"]
-    cursor.execute(
+    followers = [dict(row) for row in db_fetchall(
             """
             SELECT u.id, u.username, u.nickname
             FROM following f
@@ -230,9 +268,8 @@ def get_follow_list(body: Get_Follower):
             WHERE f.followee == ?
             """,
             (user_id,)
-            )
-    followers = [dict(row) for row in cursor.fetchall()]
-    cursor.execute(
+            )]
+    followees = [dict(now) for now in db_fetchall(
             """
             SELECT u.id, u.username, u.nickname
             FROM following f
@@ -240,8 +277,7 @@ def get_follow_list(body: Get_Follower):
             WHERE f.follower == ?
             """,
             (user_id,)
-            )
-    followees = [dict(now) for now in cursor.fetchall()]
+            )]
     return {
             "followers": followers,
             "followees": followees
@@ -253,42 +289,40 @@ class Follow_Req(BaseModel):
 
 @app.post("/follow")
 def follow(body: Follow_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
     if user_id == body.followee_id:
         return {"error": "Cannot follow yourself."}
-    target = cursor.execute(
+    target = db_fetchone(
             "SELECT id FROM users WHERE id = ?",
             (body.followee_id,)
-            ).fetchone()
+            )
     if not target:
         return {"error": "User not exist."}
-    cursor.execute(
-            "INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
+    db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
             (user_id, body.followee_id)
             )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 @app.post("/unfollow")
 def unfollow(body: Follow_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
-    cursor.execute(
-            "DELETE FROM following WHERE follower = ? AND followee = ?",
+    db_execute("DELETE FROM following WHERE follower = ? AND followee = ?",
             (user_id, body.followee_id)
             )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 class Like_Req(BaseModel):
@@ -297,50 +331,48 @@ class Like_Req(BaseModel):
 
 @app.post("/like")
 def like(body: Like_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
-    post = cursor.execute(
+    post = db_fetchone(
             "SELECT id FROM posts WHERE id = ?",
             (body.post_id,)
-            ).fetchone()
+            )
     if not post:
         return {"error": "Post not exist."}
-    cursor.execute(
-            "INSERT OR IGNORE INTO liking_users (post_id, liker_id) VALUES (?, ?)",
+    db_execute("INSERT OR IGNORE INTO liking_users (post_id, liker_id) VALUES (?, ?)",
             (body.post_id, user_id)
             )
-    if cursor.rowcount > 0:
-        cursor.execute(
+    if db_rowcount() > 0:
+        db_execute(
                 "UPDATE posts SET like_num = like_num + 1 WHERE id = ?",
                 (body.post_id,)
                 )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 @app.post("/unlike")
 def unlike(body: Like_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
-    cursor.execute(
-            "DELETE FROM liking_users WHERE post_id = ? AND liker_id = ?",
+    db_execute("DELETE FROM liking_users WHERE post_id = ? AND liker_id = ?",
             (body.post_id, user_id)
             )
-    if cursor.rowcount > 0:
-        cursor.execute(
+    if db_rowcount() > 0:
+        db_execute(
                 "UPDATE posts SET like_num = like_num - 1 WHERE id = ?",
                 (body.post_id,)
                 )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 class Comment_Req(BaseModel):
@@ -350,26 +382,25 @@ class Comment_Req(BaseModel):
 
 @app.post("/comment")
 def comment(body: Comment_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
     if not body.content:
         return {"error": "Empty comment not allowed."}
-    post = cursor.execute(
+    post = db_fetchone(
             "SELECT id FROM posts WHERE id = ?",
             (body.post_id,)
-            ).fetchone()
+            )
     if not post:
         return {"error": "Post not exist."}
-    cursor.execute(
-            "INSERT INTO comments (post_id, commenter_id, content) VALUES (?, ?, ?)",
+    db_execute("INSERT INTO comments (post_id, commenter_id, content) VALUES (?, ?, ?)",
             (body.post_id, user_id, body.content)
             )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 class Get_Comments_Req(BaseModel):
@@ -378,13 +409,13 @@ class Get_Comments_Req(BaseModel):
 
 @app.post("/get-comments")
 def get_comments(body: Get_Comments_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
-    cursor.execute(
+    return {"comments": [dict(r) for r in db_fetchall(
             """
             SELECT c.id, u.username, u.nickname, c.content, c.commented_at
             FROM comments c
@@ -393,8 +424,7 @@ def get_comments(body: Get_Comments_Req):
             ORDER BY c.commented_at ASC
             """,
             (body.post_id,)
-            )
-    return {"comments": [dict(r) for r in cursor.fetchall()]}
+            )]}
 
 class Send_Msg(BaseModel):
     cookie: str
@@ -403,24 +433,23 @@ class Send_Msg(BaseModel):
 
 @app.post("/send-msg")
 def send_msg(body: Send_Msg):
-    user_id = cursor.execute(
+    user_id = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not user_id:
         return {"error": "Bad cookie."}
     user_id = user_id["user_id"]
-    existence = cursor.execute(
+    existence = db_fetchone(
             "SELECT id FROM users WHERE id = ?",
             (body.to_whom_id,)
-            ).fetchone()
+            )
     if not existence:
         return {"error": "Bad `to_whom_id`"}
-    cursor.execute(
-            "INSERT INTO offline_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
+    db_execute("INSERT INTO offline_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
             (user_id, body.to_whom_id, body.content,)
             )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 class Recv_Msg(BaseModel):
@@ -428,23 +457,22 @@ class Recv_Msg(BaseModel):
 
 @app.post("/recv-msg")
 def recv_msg(body: Recv_Msg):
-    user_id = cursor.execute(
+    user_id = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not user_id:
         return {"error": "Bad cookie."}
     user_id = user_id["user_id"]
-    cursor.execute(
+    msgs = [dict(row) for row in db_fetchall(
             "SELECT sender_id, sent_at, content FROM offline_messages WHERE receiver_id = ?",
             (user_id,)
-            )
-    msgs = [dict(row) for row in cursor.fetchall()]
-    cursor.execute(
+            )]
+    db_execute(
             "DELETE FROM offline_messages WHERE receiver_id = ?",
             (user_id,)
             )
-    conn.commit()
+    db_commit()
     return {"msgs": msgs}
 
 class Pub_Post(BaseModel):
@@ -454,10 +482,10 @@ class Pub_Post(BaseModel):
 
 @app.post("/pub-post")
 def pub_post(body: Pub_Post):
-    user_id = cursor.execute(
+    user_id = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not user_id:
         return {"error": "Bad cookie."}
     user_id = user_id["user_id"]
@@ -468,18 +496,17 @@ def pub_post(body: Pub_Post):
     for medium in body.media:
         if len(medium) > (1 << 24):
             return {"error": "Media cannot be larger than 16MiB."}
-    cursor.execute(
-            "INSERT INTO posts (publisher_id, content) VALUES (?, ?)",
+    db_execute("INSERT INTO posts (publisher_id, content) VALUES (?, ?)",
             (user_id, body.text)
             )
-    conn.commit()
-    post_id = cursor.lastrowid
+    db_commit()
+    post_id = db_lastrowid()
     for i in range(len(body.media)):
-        cursor.execute(
+        db_execute(
                 "INSERT INTO post_media (post_id, offset, content) VALUES (?, ?, ?)",
                 (post_id, i, body.media[i],)
                 )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 class Post_Fetch(BaseModel):
@@ -488,44 +515,45 @@ class Post_Fetch(BaseModel):
 
 @app.post("/post-fetch")
 def post_fetch(body: Post_Fetch):
-    row = cursor.execute(
+    print(f"DEBUG post_fetch: cookie={repr(body.cookie)}, count={body.count}", flush=True)
+    row = db_fetchone(
         "SELECT user_id FROM cookies WHERE token = ?",
         (body.cookie,)
-    ).fetchone()
+    )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
 
     # 1. 关注的人发的帖子
-    followed = cursor.execute("""
+    followed = db_fetchall("""
         SELECT p.*, u.username, u.nickname
         FROM posts p
         JOIN users u ON u.id = p.publisher_id
         WHERE p.publisher_id IN (
             SELECT followee FROM following WHERE follower = ?
         )
-    """, (user_id,)).fetchall()
+    """, (user_id,))
 
     # 2. 最火的帖子
-    hot = cursor.execute("""
+    hot = db_fetchall("""
         SELECT p.*, u.username, u.nickname
         FROM posts p
         JOIN users u ON u.id = p.publisher_id
         WHERE p.like_num > 0
         ORDER BY p.like_num DESC LIMIT 50
-    """).fetchall()
+    """)
 
     # 3. 最新的帖子
-    recent = cursor.execute("""
+    recent = db_fetchall("""
         SELECT p.*, u.username, u.nickname
         FROM posts p
         JOIN users u ON u.id = p.publisher_id
         ORDER BY p.created_at DESC LIMIT 50
-    """).fetchall()
+    """)
 
     # 排除已读
     seen = set()
-    for r in cursor.execute(
+    for r in db_fetchall(
         "SELECT post_id FROM read_posts WHERE user_id = ?", (user_id,)
     ):
         seen.add(r["post_id"])
@@ -541,11 +569,11 @@ def post_fetch(body: Post_Fetch):
     # 截断到 count 条（计为最大数，不足则全返），返回 ID 列表
     result = combined[:body.count]
     for post in result:
-        cursor.execute(
+        db_execute(
             "INSERT OR IGNORE INTO read_posts (user_id, post_id) VALUES (?, ?)",
             (user_id, post["id"])
         )
-    conn.commit()
+    db_commit()
     return {"posts": [p["id"] for p in result], "count": len(result)}
 
 class Get_Post(BaseModel):
@@ -554,24 +582,24 @@ class Get_Post(BaseModel):
 
 @app.post("/get-post")
 def get_post(body: Get_Post):
-    row = cursor.execute(
+    row = db_fetchone(
         "SELECT user_id FROM cookies WHERE token = ?",
         (body.cookie,)
-    ).fetchone()
+    )
     if not row:
         return {"error": "Bad cookie."}
 
-    post = cursor.execute(
+    post = db_fetchone(
         "SELECT p.*, u.username, u.nickname FROM posts p JOIN users u ON u.id = p.publisher_id WHERE p.id = ?",
         (body.post_id,)
-    ).fetchone()
+    )
     if not post:
         return {"error": "Post not found."}
 
-    media = cursor.execute(
+    media = db_fetchall(
         "SELECT offset, content FROM post_media WHERE post_id = ? ORDER BY offset",
         (body.post_id,)
-    ).fetchall()
+    )
 
     return {
         "id": post["id"],
@@ -590,25 +618,24 @@ class Create_Group_Req(BaseModel):
 
 @app.post("/create-group")
 def create_group(body: Create_Group_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     if not body.name:
         return {"error": "Group name cannot be empty."}
     user_id = row["user_id"]
-    cursor.execute(
-            "INSERT INTO groups (name, owner_id) VALUES (?, ?)",
+    db_execute("INSERT INTO groups (name, owner_id) VALUES (?, ?)",
             (body.name, user_id)
             )
-    group_id = cursor.lastrowid
-    cursor.execute(
+    group_id = db_lastrowid()
+    db_execute(
             "INSERT INTO user_in_group (group_id, user_id, role) VALUES (?, ?, ?)",
             (group_id, user_id, "owner")
             )
-    conn.commit()
+    db_commit()
     return {"group_id": group_id}
 
 class Join_Group_Req(BaseModel):
@@ -617,24 +644,23 @@ class Join_Group_Req(BaseModel):
 
 @app.post("/join-group")
 def join_group(body: Join_Group_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
-    group = cursor.execute(
+    group = db_fetchone(
             "SELECT id FROM groups WHERE id = ?",
             (body.group_id,)
-            ).fetchone()
+            )
     if not group:
         return {"error": "Group not exist."}
-    cursor.execute(
-            "INSERT OR IGNORE INTO user_in_group (group_id, user_id) VALUES (?, ?)",
+    db_execute("INSERT OR IGNORE INTO user_in_group (group_id, user_id) VALUES (?, ?)",
             (body.group_id, user_id)
             )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 class Leave_Group_Req(BaseModel):
@@ -643,18 +669,17 @@ class Leave_Group_Req(BaseModel):
 
 @app.post("/leave-group")
 def leave_group(body: Leave_Group_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
-    cursor.execute(
-            "DELETE FROM user_in_group WHERE group_id = ? AND user_id = ?",
+    db_execute("DELETE FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
             )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 class Send_Group_Msg_Req(BaseModel):
@@ -664,26 +689,25 @@ class Send_Group_Msg_Req(BaseModel):
 
 @app.post("/send-group-msg")
 def send_group_msg(body: Send_Group_Msg_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
-    in_group = cursor.execute(
+    in_group = db_fetchone(
             "SELECT role FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
-            ).fetchone()
+            )
     if not in_group:
         return {"error": "You are not in this group."}
     if not body.content:
         return {"error": "Empty message not allowed."}
-    cursor.execute(
-            "INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)",
+    db_execute("INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)",
             (body.group_id, user_id, body.content)
             )
-    conn.commit()
+    db_commit()
     return {"status": "success"}
 
 class Recv_Group_Msg_Req(BaseModel):
@@ -693,33 +717,33 @@ class Recv_Group_Msg_Req(BaseModel):
 
 @app.post("/recv-group-msg")
 def recv_group_msg(body: Recv_Group_Msg_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
-    membership = cursor.execute(
+    membership = db_fetchone(
             "SELECT last_read_id FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
-            ).fetchone()
+            )
     if not membership:
         return {"error": "You are not in this group."}
-    messages = cursor.execute("""
+    messages = db_fetchall("""
             SELECT gm.id, gm.sender_id, u.username, u.nickname, gm.content, gm.sent_at
             FROM group_messages gm
             JOIN users u ON u.id = gm.sender_id
             WHERE gm.group_id = ? AND gm.id > ?
             ORDER BY gm.id ASC
             LIMIT ?
-    """, (body.group_id, membership["last_read_id"], body.count)).fetchall()
+    """, (body.group_id, membership["last_read_id"], body.count))
     if messages:
-        cursor.execute(
+        db_execute(
                 "UPDATE user_in_group SET last_read_id = ? WHERE group_id = ? AND user_id = ?",
                 (messages[-1]["id"], body.group_id, user_id)
                 )
-        conn.commit()
+        db_commit()
     return {"messages": [dict(m) for m in messages]}
 
 class Get_Group_Members_Req(BaseModel):
@@ -728,19 +752,19 @@ class Get_Group_Members_Req(BaseModel):
 
 @app.post("/get-group-members")
 def get_group_members(body: Get_Group_Members_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
-    members = cursor.execute("""
+    members = db_fetchall("""
             SELECT u.id, u.username, u.nickname, ug.role, ug.joined_at
             FROM user_in_group ug
             JOIN users u ON u.id = ug.user_id
             WHERE ug.group_id = ?
             ORDER BY ug.joined_at ASC
-    """, (body.group_id,)).fetchall()
+    """, (body.group_id,))
     return {"members": [dict(m) for m in members]}
 
 class Get_My_Groups_Req(BaseModel):
@@ -748,22 +772,59 @@ class Get_My_Groups_Req(BaseModel):
 
 @app.post("/get-my-groups")
 def get_my_groups(body: Get_My_Groups_Req):
-    row = cursor.execute(
+    row = db_fetchone(
             "SELECT user_id FROM cookies WHERE token = ?",
             (body.cookie,)
-            ).fetchone()
+            )
     if not row:
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
-    groups = cursor.execute("""
+    groups = db_fetchall("""
             SELECT g.id, g.name, g.owner_id, ug.role, ug.joined_at
             FROM user_in_group ug
             JOIN groups g ON g.id = ug.group_id
             WHERE ug.user_id = ?
             ORDER BY ug.joined_at DESC
-    """, (user_id,)).fetchall()
+    """, (user_id,))
     return {"groups": [dict(g) for g in groups]}
 
+class Patch_Avatar_Req(BaseModel):
+    cookie: str
+    avatar: str = ""
+    signature: str = ""
+
+@app.patch("/avatar")
+def patch_avatar(body: Patch_Avatar_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if body.avatar:
+        db_execute("UPDATE users SET avatar = ? WHERE id = ?",
+                (body.avatar, user_id)
+                )
+    if body.signature:
+        db_execute(
+                "UPDATE users SET signature = ? WHERE id = ?",
+                (body.signature, user_id)
+                )
+    db_commit()
+    return {"status": "success"}
+
+@app.get("/avatar")
+def get_avatar(user_id: int = 0):
+    if not user_id:
+        return {"error": "Missing user_id."}
+    row = db_fetchone(
+            "SELECT avatar, signature FROM users WHERE id = ?",
+            (user_id,)
+            )
+    if not row:
+        return {"error": "User not found."}
+    return {"user_id": user_id, "avatar": row["avatar"], "signature": row["signature"]}
+
 if __name__ == "__main__":
-    uvicorn.run(app, port = 18999)
     uvicorn.run(app, port = 18999)
