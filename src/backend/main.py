@@ -1470,6 +1470,110 @@ def get_post_likers(body: Get_Post_Likers_Req):
             }
 
 # =============================================================================
+# 用户系统：查找我的博文
+# POST /get-my-posts — 通过cookie识别当前用户，返回自己发布的所有帖子（游标分页）
+# =============================================================================
+class Get_My_Posts_Req(BaseModel):
+    cookie: str
+    before_id: int = 0
+    count: int = 20
+
+@app.post("/get-my-posts")
+def get_my_posts(body: Get_My_Posts_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if body.before_id > 0:
+        posts = db_fetchall("""
+                SELECT p.*, u.username, u.nickname
+                FROM posts p
+                JOIN users u ON u.id = p.publisher_id
+                WHERE p.publisher_id = ? AND p.id < ?
+                ORDER BY p.id DESC LIMIT ?
+        """, (user_id, body.before_id, body.count))
+    else:
+        posts = db_fetchall("""
+                SELECT p.*, u.username, u.nickname
+                FROM posts p
+                JOIN users u ON u.id = p.publisher_id
+                WHERE p.publisher_id = ?
+                ORDER BY p.id DESC LIMIT ?
+        """, (user_id, body.count))
+    next_cursor = posts[-1]["id"] if posts else 0
+    result = []
+    for p in posts:
+        media = db_fetchall(
+                "SELECT offset, content FROM post_media WHERE post_id = ? ORDER BY offset",
+                (p["id"],)
+                )
+        result.append({
+            "id": p["id"],
+            "content": p["content"],
+            "like_num": p["like_num"],
+            "created_at": p["created_at"],
+            "repost_id": p["repost_id"],
+            "media": [dict(m) for m in media]
+        })
+    return {
+            "posts": result,
+            "count": len(result),
+            "next_cursor": next_cursor
+            }
+
+# =============================================================================
+# 互动系统：查找我的评论
+# POST /get-my-comments — 返回当前用户发表的所有评论，含所在博文信息和评论ID
+# =============================================================================
+class Get_My_Comments_Req(BaseModel):
+    cookie: str
+    before_id: int = 0
+    count: int = 20
+
+@app.post("/get-my-comments")
+def get_my_comments(body: Get_My_Comments_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if body.before_id > 0:
+        comments = db_fetchall("""
+                SELECT c.id AS comment_id, c.content AS comment_content,
+                       c.commented_at,
+                       p.id AS post_id, p.content AS post_content,
+                       u.username AS post_username, u.nickname AS post_nickname
+                FROM comments c
+                JOIN posts p ON p.id = c.post_id
+                JOIN users u ON u.id = p.publisher_id
+                WHERE c.commenter_id = ? AND c.id < ?
+                ORDER BY c.id DESC LIMIT ?
+        """, (user_id, body.before_id, body.count))
+    else:
+        comments = db_fetchall("""
+                SELECT c.id AS comment_id, c.content AS comment_content,
+                       c.commented_at,
+                       p.id AS post_id, p.content AS post_content,
+                       u.username AS post_username, u.nickname AS post_nickname
+                FROM comments c
+                JOIN posts p ON p.id = c.post_id
+                JOIN users u ON u.id = p.publisher_id
+                WHERE c.commenter_id = ?
+                ORDER BY c.id DESC LIMIT ?
+        """, (user_id, body.count))
+    next_cursor = comments[-1]["comment_id"] if comments else 0
+    return {
+            "comments": [dict(c) for c in comments],
+            "count": len(comments),
+            "next_cursor": next_cursor
+            }
+
+# =============================================================================
 # P1: 文件上传 — multipart/form-data 上传，返回 Base64
 # POST /upload-media
 # =============================================================================
