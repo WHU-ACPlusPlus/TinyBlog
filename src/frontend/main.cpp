@@ -2,6 +2,10 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QLoggingCategory>
+#include <QTranslator>
+#include <QLocale>
+#include <QDir>
 #include "api_client.h"
 
 int main(int argc, char *argv[])
@@ -14,6 +18,20 @@ int main(int argc, char *argv[])
     // 设组织名和应用名，让 QSettings 存到可预期的路径
     app.setOrganizationName("TinyChat");
     app.setApplicationName("TinyChat");
+
+    // 关闭 Qt 调试日志（避免在前端控制台打印 HTTP 请求体和 base64 数据）
+    QLoggingCategory::setFilterRules("*.debug=false");
+
+    // ── 加载翻译 ──
+    QTranslator translator;
+    QString lang = QLocale::system().name();  // e.g. "en_US", "zh_CN"
+    if (lang != "zh_CN" && lang != "zh") {
+        QString qmPath = QCoreApplication::applicationDirPath()
+            + "/translations/appfrontend_" + lang + ".qm";
+        if (translator.load(qmPath)) {
+            app.installTranslator(&translator);
+        }
+    }
 
     // 创建 API 客户端，暴露给 QML 侧使用
     ApiClient api;

@@ -1,7 +1,7 @@
 ---
 description: "Use when: designing or implementing QML UI, creating Qt/C++ frontend components, styling the social app interface, making layout decisions, applying design systems (玻璃态/极光玻璃/极简主义/Fluent 2/Soft UI), working on .qml or Qt .h/.cpp frontend files, or any visual/interaction design task for TinyBlog."
 name: "Frontend Qt Designer"
-tools: [read, edit, search, execute, web]
+tools: [vscode, execute, read, agent, vscode.mermaid-markdown-features, ms-python.python, ms-vscode.cpp-devtools, ms-vscode.cpptools, edit, search, web, browser, 'pylance-mcp-server/*', todo]
 model: "Claude Sonnet 4.5 (copilot)"
 argument-hint: "Describe the UI feature, layout change, or styling task..."
 ---

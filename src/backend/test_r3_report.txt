@@ -1,0 +1,28 @@
+R3 /follow 创建占位会话 测试报告
+时间: 2026-07-07 22:09:20.174280
+总计: 24/24 通过
+
+  [PASS] /get-conversations - 关注前会话空: convs=0
+  [PASS] /follow - A关注B成功: 
+  [PASS] /get-conversations - B出现在A的会话列表: convs=1 hasB=True
+  [PASS] /follow - B回关A成功: 
+  [PASS] /get-conversations - A出现在B的会话列表: convs=1 hasA=True
+  [PASS] /follow - A关注C成功: 
+  [PASS] /get-conversations - C出现在A的会话列表: convs=2 hasB=True hasC=True
+  [PASS] /create-group - 创建群成功: gid=10
+  [PASS] /get-conversations - 群聊出现在A的会话列表: hasGroup=True
+  [PASS] /join-group - B加入群成功: 
+  [PASS] /get-conversations - 群聊出现在B的会话列表: hasGroup=True
+  [PASS] /send-msg - A给B发消息: 
+  [PASS] /get-conversations - 发送消息后last_message更新: last_message=Hello B!
+  [PASS] /follow - 重复关注不增加会话数: before=3 after=3
+  [PASS] /follow - 自关注被拒绝: Cannot follow yourself.
+  [PASS] /follow - 关注不存在用户被拒绝: User not exist.
+  [PASS] /follow - 空cookie被拒绝: Bad cookie.
+  [PASS] /create-group - 空群名被拒绝: Group name cannot be empty.
+  [PASS] /join-group - 加入不存在群被拒绝: Group not exist.
+  [PASS] /create-group - 超长群名(1000字符): accepted
+  [PASS] /get-follow-list - 关注列表包含B: followees=2
+  [PASS] CONSISTENCY - 关注的用户都有会话: followees=2 convs=2
+  [PASS] CONSISTENCY - C未关注A所以没有A的会话: hasA=False
+  [PASS] CONSISTENCY - unfollow后conversation仍保留: still_hasC=True (会话不随取消关注删除)

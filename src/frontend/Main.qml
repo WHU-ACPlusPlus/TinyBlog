@@ -3,9 +3,9 @@ import QtQuick.Controls.Basic
 
 ApplicationWindow {
     id: window
-    width: 420
-    height: 720
-    minimumWidth: 360
+    width: 1100
+    height: 750
+    minimumWidth: 700
     minimumHeight: 500
     visible: true
     title: qsTr("Tiny Chat")
