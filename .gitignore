@@ -1,32 +1,42 @@
-# ── 库副本 / 本地暂存 ──
+# Python
+src/backend/.venv
+
+# Database
+*.db*
+
+# Library
 lib/
 
-# ── SQLite 数据库（运行时数据，不提交） ──
-*.db
-*.db-shm
-*.db-wal
-*.db-journal
+# Build output directories
+build/
+*/build/
 
-# ── Python ──
-__pycache__/
-*.pyc
-.venv/
-.uv/
+# Compiled binaries and object files
+*.exe
+*.exe.manifest
+*.dll
+*.lib
+*.a
+*.so
+*.obj
+*.o
 
-# ── Qt/C++ 前端构建产物 ──
-src/frontend/build/
-src/frontend/.qmlls.ini
+# Debug and log files
+*.log
 
-# ── 编辑器/IDE ──
-.idea/
-.vscode/
-.qtcreator/
-*.swp
-*.swo
-*~
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
 
-# ── macOS ──
-.DS_Store
-
-# ── 环境变量 / 密钥 ──
-.env
+# Qt/IDE generated files
+.qt/
+.rcc/
+moc_*
+*qmltypes
+qmldir
+*.qrc
+meta_types/
+appfrontend_autogen/

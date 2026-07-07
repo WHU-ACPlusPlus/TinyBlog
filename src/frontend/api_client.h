@@ -1,12 +1,12 @@
 #ifndef API_CLIENT_H
 #define API_CLIENT_H
 
-#include <QObject>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QObject>
 #include <QSettings>
 #include <QTimer>
 
@@ -19,38 +19,37 @@
  * 所有请求为异步，通过信号返回结果。
  * 登录/注册成功后自动保存 cookie，后续请求自动附带。
  */
-class ApiClient : public QObject
-{
+class ApiClient : public QObject {
     Q_OBJECT
-public:
-    explicit ApiClient(QObject *parent = nullptr);
+   public:
+    explicit ApiClient(QObject* parent = nullptr);
 
     // ── 基础设置 ──
     // ── QML 可绑定的属性 ──
     Q_PROPERTY(bool isLoggedIn READ isLoggedIn NOTIFY loggedInChanged)
     Q_PROPERTY(QString baseUrl READ baseUrl WRITE setBaseUrl NOTIFY baseUrlChanged)
 
-    void setBaseUrl(const QString &url);  // e.g. "http://becharmkon.cn:18999"
+    void setBaseUrl(const QString& url);  // e.g. "http://becharmkon.cn:18999"
     QString baseUrl() const;
-    Q_INVOKABLE void setCookie(const QString &token);
+    Q_INVOKABLE void setCookie(const QString& token);
     QString cookie() const;
     bool isLoggedIn() const;
-    Q_INVOKABLE void clearAuth();         // 清除 cookie + QSettings
-    Q_INVOKABLE QString readFileAsBase64(const QUrl &fileUrl);  // 读取文件内容为 base64
-    Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl &videoUrl);  // 用 ffmpeg 抽视频第一帧
+    Q_INVOKABLE void clearAuth();                                   // 清除 cookie + QSettings
+    Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl);      // 读取文件内容为 base64
+    Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl& videoUrl);  // 用 ffmpeg 抽视频第一帧
 
-signals:
+   signals:
     void loggedInChanged();
     void baseUrlChanged();
 
-public slots:
+   public slots:
 
     // ── 请求方法（异步，结果通过信号返回）──
 
     // 用户
-    void registerUser(const QString &username, const QString &password,
-                      const QString &nickname);
-    void login(const QString &username, const QString &password);
+    void registerUser(const QString& username, const QString& password,
+                      const QString& nickname);
+    void login(const QString& username, const QString& password);
 
     // 认证
     void checkCookie();
@@ -61,87 +60,93 @@ public slots:
     void fetchFollowList();
 
     // 帖子
-    void publishPost(const QString &text, const QStringList &media = {});
+    void publishPost(const QString& text, const QStringList& media = {});
     void fetchTimeline(int count = 20);
     void getPost(int post_id);
 
     // 互动
     void likePost(int post_id);
     void unlikePost(int post_id);
-    void comment(int post_id, const QString &content);
+    void comment(int post_id, const QString& content);
     void fetchComments(int post_id);
 
     // 私信
-    void sendMessage(int to_whom_id, const QString &content);
+    void sendMessage(int to_whom_id, const QString& content);
     void receiveMessages();
 
-    // 头像/签名
-    void patchAvatar(const QString &avatar = {}, const QString &signature = {});
+    // 头像/签名/个人资料
+    void fetchProfile();
+    void updateProfile(const QString& nickname = {},
+                       const QString& avatar = {},
+                       const QString& signature = {});
+    void patchAvatar(const QString& avatar = {}, const QString& signature = {});
     void fetchAvatar(int user_id);
 
     // 群聊
-    void createGroup(const QString &name);
+    void createGroup(const QString& name);
     void joinGroup(int group_id);
     void leaveGroup(int group_id);
-    void sendGroupMessage(int group_id, const QString &content);
+    void sendGroupMessage(int group_id, const QString& content);
     void receiveGroupMessages(int group_id, int count = 20);
     void fetchGroupMembers(int group_id);
     void fetchMyGroups();
 
-signals:
+   signals:
     // ── 通用信号 ──
-    void errorOccurred(const QString &message);
+    void errorOccurred(const QString& message);
 
     // ── 认证 ──
-    void registerSuccess(const QString &cookie);
-    void loginSuccess(const QString &cookie);
+    void registerSuccess(const QString& cookie);
+    void loginSuccess(const QString& cookie);
     void cookieCheckComplete(bool valid, int userId);
 
     // ── 社交 ──
-    void followListFetched(const QList<UserInfo> &followers,
-                           const QList<UserInfo> &followees);
+    void followListFetched(const QList<UserInfo>& followers,
+                           const QList<UserInfo>& followees);
 
     // ── 帖子 ──
     void postPublished();
-    void timelineFetched(const QList<int> &postIds, int count);
-    void postFetched(const QVariantMap &post);  // QML 友好：帖子完整数据
+    void timelineFetched(const QList<int>& postIds, int count);
+    void postFetched(const QVariantMap& post);  // QML 友好：帖子完整数据
 
     // ── 互动 ──
     void postLiked();
     void postUnliked();
     void commentPosted();
-    void commentsFetched(const QList<CommentInfo> &comments);
+    void commentsFetched(const QList<CommentInfo>& comments);
 
     // ── 私信 ──
     void messageSent();
-    void messagesReceived(const QList<MessageInfo> &messages);
+    void messagesReceived(const QList<MessageInfo>& messages);
 
-    // ── 头像/签名 ──
+    // 头像/签名/个人资料
+    void profileFetched(const QVariantMap& profile);
+    void profileUpdated();
     void avatarPatched();
-    void avatarFetched(int user_id, const QString &avatar, const QString &signature);
+    void avatarFetched(int user_id, const QString& avatar, const QString& signature);
 
     // ── 群聊 ──
     void groupCreated(int group_id);
     void groupJoined();
     void groupLeft();
     void groupMessageSent();
-    void groupMessagesReceived(const QList<GroupMessageInfo> &messages);
-    void groupMembersFetched(const QList<UserInfo> &members);
-    void myGroupsFetched(const QList<GroupInfo> &groups);
+    void groupMessagesReceived(const QList<GroupMessageInfo>& messages);
+    void groupMembersFetched(const QList<UserInfo>& members);
+    void myGroupsFetched(const QList<GroupInfo>& groups);
 
-private:
+   private:
     // 底层工具方法
-    QNetworkReply *postJson(const QString &endpoint, const QJsonObject &body);
-    bool checkReply(QNetworkReply *reply, QJsonObject &out);
-    QString errorFromReply(QNetworkReply *reply) const;
+    QNetworkReply* postJson(const QString& endpoint, const QJsonObject& body);
+    bool checkReply(QNetworkReply* reply, QJsonObject& out);
+    QString errorFromReply(QNetworkReply* reply) const;
 
     // 辅助：构建带 cookie 的 JSON body
     QJsonObject withCookie() const;
-    QJsonObject withCookie(const QJsonObject &extra) const;
+    QJsonObject withCookie(const QJsonObject& extra) const;
 
-    QNetworkAccessManager *m_manager;
+    QNetworkAccessManager* m_manager;
     QString m_baseUrl;
     QString m_cookie;
 };
 
-#endif // API_CLIENT_H
+#endif  // API_CLIENT_H
