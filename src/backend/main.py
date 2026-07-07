@@ -173,6 +173,21 @@ if __name__ == "__main__":
             db_execute(f"ALTER TABLE users ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         except sqlite3.OperationalError:
             pass  # 列已存在
+    # 为旧数据库补加 repost_id 列
+    try:
+        db_execute("ALTER TABLE posts ADD COLUMN repost_id INTEGER DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS bookmarks (
+            user_id INTEGER NOT NULL,
+            post_id INTEGER NOT NULL,
+            bookmarked_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (user_id, post_id),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (post_id) REFERENCES posts(id)
+        )
+    """)
     db_commit()
 
 # Server Functions
@@ -609,6 +624,7 @@ def get_post(body: Get_Post):
         "content": post["content"],
         "like_num": post["like_num"],
         "created_at": post["created_at"],
+        "repost_id": post["repost_id"],
         "media": [dict(m) for m in media]
     }
 
@@ -787,6 +803,248 @@ def get_my_groups(body: Get_My_Groups_Req):
             ORDER BY ug.joined_at DESC
     """, (user_id,))
     return {"groups": [dict(g) for g in groups]}
+
+# =============================================================================
+# 用户系统：登出
+# POST /logout — 删除当前token使其立即失效
+# =============================================================================
+class Logout_Req(BaseModel):
+    cookie: str
+
+@app.post("/logout")
+def logout(body: Logout_Req):
+    db_execute(
+            "DELETE FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 帖子系统：删除帖子
+# POST /delete-post
+# 仅发布者本人可删，级联清理 liking_users/comments/post_media/read_posts
+# =============================================================================
+class Del_Post_Req(BaseModel):
+    cookie: str
+    post_id: int
+
+@app.post("/delete-post")
+def delete_post(body: Del_Post_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    post = db_fetchone(
+            "SELECT publisher_id FROM posts WHERE id = ?",
+            (body.post_id,)
+            )
+    if not post:
+        return {"error": "Post not exist."}
+    if post["publisher_id"] != user_id:
+        return {"error": "Not your post."}
+    # 级联清理所有关联数据
+    db_execute("DELETE FROM liking_users WHERE post_id = ?", (body.post_id,))
+    db_execute("DELETE FROM comments WHERE post_id = ?", (body.post_id,))
+    db_execute("DELETE FROM post_media WHERE post_id = ?", (body.post_id,))
+    db_execute("DELETE FROM read_posts WHERE post_id = ?", (body.post_id,))
+    db_execute("DELETE FROM posts WHERE id = ?", (body.post_id,))
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 互动系统：删除评论
+# POST /delete-comment — 仅评论者本人可删
+# =============================================================================
+class Del_Comment_Req(BaseModel):
+    cookie: str
+    comment_id: int
+
+@app.post("/delete-comment")
+def delete_comment(body: Del_Comment_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    comment = db_fetchone(
+            "SELECT commenter_id FROM comments WHERE id = ?",
+            (body.comment_id,)
+            )
+    if not comment:
+        return {"error": "Comment not exist."}
+    if comment["commenter_id"] != user_id:
+        return {"error": "Not your comment."}
+    db_execute(
+            "DELETE FROM comments WHERE id = ?",
+            (body.comment_id,)
+            )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 用户系统：编辑个人资料
+# POST /edit-profile — nickname和email_address均为可选，只更新非空字段
+# =============================================================================
+class Edit_Profile_Req(BaseModel):
+    cookie: str
+    nickname: str = ""
+    email_address: str = ""
+
+@app.post("/edit-profile")
+def edit_profile(body: Edit_Profile_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    if body.nickname:
+        db_execute(
+                "UPDATE users SET nickname = ? WHERE id = ?",
+                (body.nickname, user_id)
+                )
+    if body.email_address:
+        db_execute(
+                "UPDATE users SET email_address = ? WHERE id = ?",
+                (body.email_address, user_id)
+                )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 收藏系统：收藏帖子
+# POST /bookmark — 使用 INSERT OR IGNORE 保证幂等
+# =============================================================================
+class Bookmark_Req(BaseModel):
+    cookie: str
+    post_id: int
+
+@app.post("/bookmark")
+def bookmark(body: Bookmark_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    post = db_fetchone(
+            "SELECT id FROM posts WHERE id = ?",
+            (body.post_id,)
+            )
+    if not post:
+        return {"error": "Post not exist."}
+    db_execute(
+            "INSERT OR IGNORE INTO bookmarks (user_id, post_id) VALUES (?, ?)",
+            (user_id, body.post_id)
+            )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 收藏系统：取消收藏
+# POST /unbookmark — 直接删除，不存在也不报错
+# =============================================================================
+@app.post("/unbookmark")
+def unbookmark(body: Bookmark_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    db_execute(
+            "DELETE FROM bookmarks WHERE user_id = ? AND post_id = ?",
+            (user_id, body.post_id)
+            )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 收藏系统：获取收藏列表
+# POST /get-bookmarks — 返回完整帖子信息（含发布者和媒体），按收藏时间倒序
+# =============================================================================
+class Get_Bookmarks_Req(BaseModel):
+    cookie: str
+
+@app.post("/get-bookmarks")
+def get_bookmarks(body: Get_Bookmarks_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    posts = db_fetchall("""
+            SELECT p.*, u.username, u.nickname, b.bookmarked_at
+            FROM bookmarks b
+            JOIN posts p ON p.id = b.post_id
+            JOIN users u ON u.id = p.publisher_id
+            WHERE b.user_id = ?
+            ORDER BY b.bookmarked_at DESC
+    """, (user_id,))
+    result = []
+    for p in posts:
+        media = db_fetchall(
+                "SELECT offset, content FROM post_media WHERE post_id = ? ORDER BY offset",
+                (p["id"],)
+                )
+        result.append({
+            "id": p["id"],
+            "publisher_id": p["publisher_id"],
+            "username": p["username"],
+            "nickname": p["nickname"],
+            "content": p["content"],
+            "like_num": p["like_num"],
+            "created_at": p["created_at"],
+            "bookmarked_at": p["bookmarked_at"],
+            "repost_id": p["repost_id"],
+            "media": [dict(m) for m in media]
+        })
+    return {"posts": result}
+
+# =============================================================================
+# 帖子系统：转发
+# POST /repost — 用自己的账户将原帖重新发布，可选附加文字
+# 原帖信息通过 repost_id 字段记录在 posts 表中
+# =============================================================================
+class Repost_Req(BaseModel):
+    cookie: str
+    post_id: int          # 要转发的原帖ID
+    text: str = ""         # 转发时附加的文字（可选）
+
+@app.post("/repost")
+def repost(body: Repost_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    original = db_fetchone(
+            "SELECT id, publisher_id FROM posts WHERE id = ?",
+            (body.post_id,)
+            )
+    if not original:
+        return {"error": "Post not exist."}
+    if original["publisher_id"] == user_id:
+        return {"error": "Cannot repost your own post."}
+    db_execute(
+            "INSERT INTO posts (publisher_id, content, repost_id) VALUES (?, ?, ?)",
+            (user_id, body.text, body.post_id)
+            )
+    db_commit()
+    return {"status": "success", "new_post_id": db_lastrowid()}
 
 class Patch_Avatar_Req(BaseModel):
     cookie: str
