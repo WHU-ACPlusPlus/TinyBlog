@@ -448,17 +448,8 @@ def generate_avatar(nickname):
     ty = (size - th) / 2 - bbox[1]
     draw.text((tx, ty), char, fill=text_color, font=font)
 
-    # 圆形裁剪：画圆遮罩后叠加
-    mask = Image.new("L", (size, size), 0)
-    mask_draw = ImageDraw.Draw(mask)
-    mask_draw.ellipse([4, 4, size - 4, size - 4], fill=255)
-    del mask_draw
-
-    # 在背景上画正圆
-    circle = Image.new("RGB", (size, size), (0, 0, 0))
-    circle_draw = ImageDraw.Draw(circle)
-    circle_draw.ellipse([4, 4, size - 4, size - 4], fill=bg)
-    img = Image.composite(img, circle, mask)
+    # 背景色铺满整张图片（不做圆形裁切，前端显示时无圆角裁剪）
+    # 直接返回全幅方块头像
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
