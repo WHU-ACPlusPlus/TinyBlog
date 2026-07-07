@@ -1,16 +1,22 @@
 #include "api_client.h"
 
+#include <QBuffer>
 #include <QDebug>
 #include <QFile>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMediaPlayer>
 #include <QNetworkRequest>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QUuid>
+#include <QVideoFrame>
+#include <QVideoFrameFormat>
+#include <QVideoSink>
 
 // ─── 构造与基础设置 ───
 
@@ -98,6 +104,186 @@ QUrl ApiClient::generateVideoThumbnail(const QUrl& videoUrl) {
     return QUrl::fromLocalFile(thumbPath);
 }
 
+QString ApiClient::videoThumbnailFromBase64(const QString& b64) {
+    // 将 base64 视频数据写入临时文件
+    QByteArray data = QByteArray::fromBase64(b64.toLatin1());
+    QString inputPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_vid_" + QUuid::createUuid().toString(QUuid::Id128) + ".mp4";
+    QFile inputFile(inputPath);
+    if (!inputFile.open(QIODevice::WriteOnly)) {
+        qWarning() << "Failed to write temp video file";
+        return {};
+    }
+    inputFile.write(data);
+    inputFile.close();
+
+    QString thumbPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_thumb_" + QUuid::createUuid().toString(QUuid::Id128) + ".png";
+
+    QProcess ffmpeg;
+    ffmpeg.start("ffmpeg", {"-y",
+                            "-i", inputPath,
+                            "-vframes", "1",
+                            "-q:v", "2",
+                            thumbPath});
+    ffmpeg.waitForFinished(15000);
+
+    // 清理输入临时文件
+    QFile::remove(inputPath);
+
+    if (ffmpeg.exitCode() != 0 || !QFile::exists(thumbPath)) {
+        qWarning() << "ffmpeg thumbnail extraction failed";
+        return {};
+    }
+
+    QFile thumbFile(thumbPath);
+    if (!thumbFile.open(QIODevice::ReadOnly)) {
+        qWarning() << "Failed to read thumbnail file";
+        QFile::remove(thumbPath);
+        return {};
+    }
+    QByteArray thumbData = thumbFile.readAll();
+    thumbFile.close();
+    QFile::remove(thumbPath);
+
+    return QString::fromLatin1(thumbData.toBase64());
+}
+
+QString ApiClient::saveBase64ToTempFile(const QString& b64, const QString& ext) {
+    if (b64.isEmpty())
+        return {};
+
+    QByteArray data = QByteArray::fromBase64(b64.toLatin1());
+    if (data.isEmpty())
+        return {};
+
+    QString path = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_media_" + QUuid::createUuid().toString(QUuid::Id128) + "." + ext;
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning() << "Failed to write temp media file" << path;
+        return {};
+    }
+    file.write(data);
+    file.close();
+
+    return QUrl::fromLocalFile(path).toString();
+}
+
+void ApiClient::extractVideoThumbnailAsync(const QString& postId, int mediaIndex, const QString& b64) {
+    if (b64.isEmpty()) {
+        emit videoThumbnailExtracted(postId, mediaIndex, {});
+        return;
+    }
+
+    // 将 base64 视频数据写入临时文件
+    QByteArray data = QByteArray::fromBase64(b64.toLatin1());
+    if (data.isEmpty()) {
+        emit videoThumbnailExtracted(postId, mediaIndex, {});
+        return;
+    }
+
+    QString inputPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/chat_vid_" + QUuid::createUuid().toString(QUuid::Id128) + ".mp4";
+    QFile inputFile(inputPath);
+    if (!inputFile.open(QIODevice::WriteOnly)) {
+        qWarning() << "Failed to write temp video file" << inputPath;
+        emit videoThumbnailExtracted(postId, mediaIndex, {});
+        return;
+    }
+    inputFile.write(data);
+    inputFile.close();
+
+    // ── 用 Qt Multimedia 抽第一帧 ──
+    QMediaPlayer* player = new QMediaPlayer(this);
+    QVideoSink* sink = new QVideoSink(player);
+    player->setVideoOutput(sink);
+
+    player->setProperty("inputPath", inputPath);
+    player->setProperty("postId", postId);
+    player->setProperty("mediaIndex", mediaIndex);
+    player->setProperty("captured", false);
+
+    // 5 秒超时
+    QTimer* timeout = new QTimer(this);
+    timeout->setSingleShot(true);
+    connect(timeout, &QTimer::timeout, this, [this, player, timeout, inputPath, postId, mediaIndex]() {
+        if (!player->property("captured").toBool()) {
+            qWarning() << "Thumbnail timeout for post" << postId;
+            player->setProperty("captured", true);
+            QFile::remove(inputPath);
+            player->stop();
+            player->deleteLater();
+            timeout->deleteLater();
+            emit videoThumbnailExtracted(postId, mediaIndex, {});
+        }
+    });
+    timeout->start(5000);
+
+    // 帧转 QImage（带 map fallback）
+    struct {
+        QImage operator()(const QVideoFrame& frame) const {
+            QImage img = frame.toImage();
+            if (!img.isNull()) return img;
+            QVideoFrame mapped = frame;
+            if (!mapped.map(QVideoFrame::ReadOnly)) return {};
+            QImage::Format fmt = QVideoFrameFormat::imageFormatFromPixelFormat(mapped.pixelFormat());
+            if (fmt != QImage::Format_Invalid)
+                img = QImage(mapped.bits(0), mapped.width(), mapped.height(),
+                             mapped.bytesPerLine(0), fmt)
+                          .copy();
+            else
+                img = QImage(mapped.bits(0), mapped.width(), mapped.height(),
+                             mapped.bytesPerLine(0), QImage::Format_RGB32)
+                          .copy();
+            mapped.unmap();
+            return img;
+        }
+    } frameToImage;
+
+    connect(sink, &QVideoSink::videoFrameChanged, this,
+            [this, player, timeout, frameToImage](const QVideoFrame& frame) {
+                // 忽略无效帧和已捕获
+                if (player->property("captured").toBool()) return;
+                if (frame.width() <= 0 || frame.height() <= 0) return;
+
+                QString inputPath = player->property("inputPath").toString();
+                QString postId = player->property("postId").toString();
+                int mediaIndex = player->property("mediaIndex").toInt();
+
+                QImage image = frameToImage(frame);
+                if (image.isNull()) {
+                    qWarning() << "Failed to convert video frame for post" << postId;
+                    player->setProperty("captured", true);
+                    QFile::remove(inputPath);
+                    player->stop();
+                    player->deleteLater();
+                    timeout->deleteLater();
+                    emit videoThumbnailExtracted(postId, mediaIndex, {});
+                    return;
+                }
+
+                // 缩略图缩放到合理大小（最大 320px）
+                if (image.width() > 320 || image.height() > 320)
+                    image = image.scaled(320, 320, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+                QByteArray pngData;
+                QBuffer buf(&pngData);
+                buf.open(QIODevice::WriteOnly);
+                image.save(&buf, "PNG");
+                buf.close();
+                QString thumbB64 = QString::fromLatin1(pngData.toBase64());
+
+                player->setProperty("captured", true);
+                QFile::remove(inputPath);
+                player->stop();
+                player->deleteLater();
+                timeout->deleteLater();
+
+                emit videoThumbnailExtracted(postId, mediaIndex, thumbB64);
+            });
+
+    player->setSource(QUrl::fromLocalFile(inputPath));
+    player->play();
+}
+
 // ─── 私有工具方法 ───
 
 QJsonObject ApiClient::withCookie() const {
@@ -118,7 +304,6 @@ QNetworkReply* ApiClient::postJson(const QString& endpoint,
 
     QJsonDocument doc(body);
     QByteArray json = doc.toJson(QJsonDocument::Compact);
-    qDebug() << "POST" << endpoint << json;
     return m_manager->post(req, json);
 }
 
@@ -354,9 +539,9 @@ void ApiClient::fetchComments(int post_id) {
         if (!checkReply(reply, obj))
             return;
 
-        QList<CommentInfo> comments;
+        QVariantList comments;
         for (const auto& v : obj["comments"].toArray())
-            comments.append(commentFromJson(v.toObject()));
+            comments.append(v.toObject().toVariantMap());
         emit commentsFetched(comments);
     });
 }

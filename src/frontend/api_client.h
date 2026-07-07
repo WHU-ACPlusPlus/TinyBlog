@@ -34,9 +34,12 @@ class ApiClient : public QObject {
     Q_INVOKABLE void setCookie(const QString& token);
     QString cookie() const;
     bool isLoggedIn() const;
-    Q_INVOKABLE void clearAuth();                                   // 清除 cookie + QSettings
-    Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl);      // 读取文件内容为 base64
-    Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl& videoUrl);  // 用 ffmpeg 抽视频第一帧
+    Q_INVOKABLE void clearAuth();                                                                            // 清除 cookie + QSettings
+    Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl);                                               // 读取文件内容为 base64
+    Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl& videoUrl);                                           // 用 ffmpeg 抽视频第一帧
+    Q_INVOKABLE QString videoThumbnailFromBase64(const QString& b64);                                        // 从 base64 视频数据提取缩略图
+    Q_INVOKABLE QString saveBase64ToTempFile(const QString& b64, const QString& ext);                        // base64 → 临时文件 → file:// URL
+    Q_INVOKABLE void extractVideoThumbnailAsync(const QString& postId, int mediaIndex, const QString& b64);  // 异步抽视频第一帧
 
    signals:
     void loggedInChanged();
@@ -113,7 +116,10 @@ class ApiClient : public QObject {
     void postLiked();
     void postUnliked();
     void commentPosted();
-    void commentsFetched(const QList<CommentInfo>& comments);
+    void commentsFetched(const QVariantList& comments);
+
+    // ── 媒体 ──
+    void videoThumbnailExtracted(const QString& postId, int mediaIndex, const QString& thumbnailB64);
 
     // ── 私信 ──
     void messageSent();
