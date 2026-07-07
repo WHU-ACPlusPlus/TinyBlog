@@ -227,16 +227,27 @@ Rectangle {
                                     spacing: 10
 
                                     Rectangle {
+                                        id: avatarBox
                                         width: 40
                                         height: 40
                                         radius: 20
                                         color: "#ddd"
+
+                                        Image {
+                                            anchors.fill: parent
+                                            fillMode: Image.PreserveAspectCrop
+                                            source: modelData.avatar
+                                                     ? "data:image/jpeg;base64," + modelData.avatar
+                                                     : ""
+                                            visible: status === Image.Ready
+                                        }
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: modelData.nickname[0]
                                             font.pixelSize: 18
                                             color: "#888"
+                                            visible: !modelData.avatar
                                         }
                                     }
 
@@ -884,7 +895,7 @@ Rectangle {
             for (var i = 0; i < newIds.length; i++)
                 api.getPost(newIds[i])
             if (pendingPostCount === 0) {
-                root._refreshHint = "暂时没有新帖子"
+                root._refreshHint = qsTr("暂时没有新帖子")
                 refreshHintTimer.restart()
                 isFetching = false
             }
@@ -907,16 +918,31 @@ Rectangle {
                 created_at: post.created_at || "",
                 media: root.prepareMediaWithSource(post.media),
                 liked: post.liked === true,
+                avatar: "",
                 comments: [],
                 _commentsLoading: false,
                 _pendingCommentRefresh: false
             }
             // 暂存到映射中，等待全部获取完毕后按序合并到列表顶部
+            // 拉取发帖人头像
+            api.fetchAvatar(post.publisher_id)
             _newPostsMap[post.id] = entry
             if (pendingPostCount > 0)
                 pendingPostCount--
             if (pendingPostCount <= 0) {
                 finishRefresh()
+            }
+        }
+
+        function onAvatarFetched(userId, avatar, signature) {
+            // 遍历所有帖子，更新该用户的头像
+            for (var i = 0; i < posts.length; i++) {
+                if (posts[i].publisher_id === userId && posts[i].avatar !== avatar) {
+                    var updated = Object.assign({}, posts[i], {avatar: avatar})
+                    var newPosts = posts.slice()
+                    newPosts[i] = updated
+                    posts = newPosts
+                }
             }
         }
 
@@ -945,9 +971,9 @@ Rectangle {
             }
 
             if (ordered.length > 0)
-                root._refreshHint = "刷新了 " + ordered.length + " 条帖子"
+                root._refreshHint = qsTr("刷新了 %1 条帖子").arg(ordered.length)
             else
-                root._refreshHint = "暂时没有新帖子"
+                root._refreshHint = qsTr("暂时没有新帖子")
             refreshHintTimer.restart()
 
             isFetching = false

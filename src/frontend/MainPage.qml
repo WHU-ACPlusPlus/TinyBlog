@@ -28,9 +28,9 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { icon: "🗂", tip: "广场" },
-                        { icon: "💬", tip: "消息" },
-                        { icon: "👤", tip: "我的" }
+                        { icon: "🗂", tip: qsTr("广场") },
+                        { icon: "💬", tip: qsTr("消息") },
+                        { icon: "👤", tip: qsTr("我的") }
                     ]
 
                     Rectangle {
@@ -102,9 +102,9 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { icon: "🗂", label: "广场" },
-                        { icon: "💬", label: "消息" },
-                        { icon: "👤", label: "我的" }
+                        { icon: "🗂", label: qsTr("广场") },
+                        { icon: "💬", label: qsTr("消息") },
+                        { icon: "👤", label: qsTr("我的") }
                     ]
 
                     Item {

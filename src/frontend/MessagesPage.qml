@@ -6,7 +6,7 @@ Rectangle {
 
     Text {
         anchors.centerIn: parent
-        text: "消息"
+        text: qsTr("消息")
         font.pixelSize: 28
         color: "#999"
     }

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(QT_QML_GENERATE_QMLLS_INI ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia LinguistTools)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -30,8 +30,19 @@ qt_add_qml_module(appfrontend
         ProfilePage.qml
 )
 
+# ── 国际化 / 翻译 ──
+set(TS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/translations)
+file(MAKE_DIRECTORY ${TS_DIR})
+
+qt_add_translations(appfrontend
+    TS_FILES
+        ${TS_DIR}/appfrontend_zh_CN.ts
+        ${TS_DIR}/appfrontend_en_US.ts
+    QM_FILES_OUTPUT_VARIABLE appfrontend_qm_files
+)
+
 target_link_libraries(appfrontend
-    PRIVATE Qt6::Quick Qt6::Network Qt6::QuickDialogs2 Qt6::Multimedia
+    PRIVATE Qt6::Quick Qt6::Network Qt6::QuickDialogs2 Qt6::Multimedia Qt6::Core
 )
 
 set_target_properties(appfrontend PROPERTIES

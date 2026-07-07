@@ -17,7 +17,7 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "Tiny Chat"
+            text: qsTr("Tiny Chat")
             font.pixelSize: 32
             font.bold: true
             color: "#333"
@@ -25,7 +25,7 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "服务地址"
+            text: qsTr("服务地址")
             font.pixelSize: 14
             color: "#666"
         }
@@ -34,7 +34,7 @@ Rectangle {
             id: urlInput
             Layout.preferredWidth: 260
             Layout.alignment: Qt.AlignHCenter
-            placeholderText: "http://127.0.0.1:18999"
+            placeholderText: qsTr("http://127.0.0.1:18999")
             Component.onCompleted: text = api.baseUrl
             onTextChanged: api.baseUrl = text
         }
@@ -42,7 +42,7 @@ Rectangle {
         Button {
             Layout.preferredWidth: 240
             Layout.alignment: Qt.AlignHCenter
-            text: "注册"
+            text: qsTr("注册")
             onClicked: {
                 errorText = ""
                 step = 1
@@ -52,7 +52,7 @@ Rectangle {
         Button {
             Layout.preferredWidth: 240
             Layout.alignment: Qt.AlignHCenter
-            text: "登录"
+            text: qsTr("登录")
             onClicked: {
                 errorText = ""
                 step = 2
@@ -68,7 +68,7 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "注册"
+            text: qsTr("注册")
             font.pixelSize: 24
             font.bold: true
             color: "#333"
@@ -78,19 +78,19 @@ Rectangle {
             id: regUsername
             Layout.preferredWidth: 260
             Layout.alignment: Qt.AlignHCenter
-            placeholderText: "用户名"
+            placeholderText: qsTr("用户名")
         }
         TextField {
             id: regNickname
             Layout.preferredWidth: 260
             Layout.alignment: Qt.AlignHCenter
-            placeholderText: "昵称"
+            placeholderText: qsTr("昵称")
         }
         TextField {
             id: regPassword
             Layout.preferredWidth: 260
             Layout.alignment: Qt.AlignHCenter
-            placeholderText: "密码"
+            placeholderText: qsTr("密码")
             echoMode: TextInput.Password
         }
 
@@ -108,14 +108,14 @@ Rectangle {
             spacing: 16
 
             Button {
-                text: "取消"
+                text: qsTr("取消")
                 onClicked: step = 0
             }
             Button {
-                text: "确认"
+                text: qsTr("确认")
                 onClicked: {
                     if (!regUsername.text || !regNickname.text || !regPassword.text) {
-                        errorText = "请填写所有字段"
+                        errorText = qsTr("请填写所有字段")
                         return
                     }
                     errorText = ""
@@ -133,7 +133,7 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: "登录"
+            text: qsTr("登录")
             font.pixelSize: 24
             font.bold: true
             color: "#333"
@@ -143,13 +143,13 @@ Rectangle {
             id: logUsername
             Layout.preferredWidth: 260
             Layout.alignment: Qt.AlignHCenter
-            placeholderText: "用户名"
+            placeholderText: qsTr("用户名")
         }
         TextField {
             id: logPassword
             Layout.preferredWidth: 260
             Layout.alignment: Qt.AlignHCenter
-            placeholderText: "密码"
+            placeholderText: qsTr("密码")
             echoMode: TextInput.Password
             onAccepted: {
                 // 回车快速登录
@@ -172,11 +172,11 @@ Rectangle {
             spacing: 16
 
             Button {
-                text: "取消"
+                text: qsTr("取消")
                 onClicked: step = 0
             }
             Button {
-                text: "确认"
+                text: qsTr("确认")
                 onClicked: doLogin()
             }
         }
@@ -185,7 +185,7 @@ Rectangle {
     // ── 登录逻辑 ──
     function doLogin() {
         if (!logUsername.text || !logPassword.text) {
-            errorText = "请填写所有字段"
+            errorText = qsTr("请填写所有字段")
             return
         }
         errorText = ""
