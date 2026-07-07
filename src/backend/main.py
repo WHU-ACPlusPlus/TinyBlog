@@ -616,6 +616,11 @@ def get_post(body: Get_Post):
         (body.post_id,)
     )
 
+    liked = db_fetchone(
+        "SELECT 1 FROM liking_users WHERE post_id = ? AND liker_id = ?",
+        (body.post_id, row["user_id"])
+    )
+
     return {
         "id": post["id"],
         "publisher_id": post["publisher_id"],
@@ -623,6 +628,7 @@ def get_post(body: Get_Post):
         "nickname": post["nickname"],
         "content": post["content"],
         "like_num": post["like_num"],
+        "liked": liked is not None,
         "created_at": post["created_at"],
         "repost_id": post["repost_id"],
         "media": [dict(m) for m in media]

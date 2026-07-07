@@ -110,6 +110,56 @@ QUrl ApiClient::generateVideoThumbnail(const QUrl &videoUrl)
     return QUrl::fromLocalFile(thumbPath);
 }
 
+QString ApiClient::videoThumbnailFromBase64(const QString &b64)
+{
+    // 将 base64 视频数据写入临时文件
+    QByteArray data = QByteArray::fromBase64(b64.toLatin1());
+    QString inputPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                        + "/chat_vid_" + QUuid::createUuid().toString(QUuid::Id128)
+                        + ".mp4";
+    QFile inputFile(inputPath);
+    if (!inputFile.open(QIODevice::WriteOnly)) {
+        qWarning() << "Failed to write temp video file";
+        return {};
+    }
+    inputFile.write(data);
+    inputFile.close();
+
+    QString thumbPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                        + "/chat_thumb_" + QUuid::createUuid().toString(QUuid::Id128)
+                        + ".png";
+
+    QProcess ffmpeg;
+    ffmpeg.start("ffmpeg", {
+        "-y",
+        "-i", inputPath,
+        "-vframes", "1",
+        "-q:v", "2",
+        thumbPath
+    });
+    ffmpeg.waitForFinished(15000);
+
+    // 清理输入临时文件
+    QFile::remove(inputPath);
+
+    if (ffmpeg.exitCode() != 0 || !QFile::exists(thumbPath)) {
+        qWarning() << "ffmpeg thumbnail extraction failed";
+        return {};
+    }
+
+    QFile thumbFile(thumbPath);
+    if (!thumbFile.open(QIODevice::ReadOnly)) {
+        qWarning() << "Failed to read thumbnail file";
+        QFile::remove(thumbPath);
+        return {};
+    }
+    QByteArray thumbData = thumbFile.readAll();
+    thumbFile.close();
+    QFile::remove(thumbPath);
+
+    return QString::fromLatin1(thumbData.toBase64());
+}
+
 // ─── 私有工具方法 ───
 
 QJsonObject ApiClient::withCookie() const
@@ -383,9 +433,9 @@ void ApiClient::fetchComments(int post_id)
         if (!checkReply(reply, obj))
             return;
 
-        QList<CommentInfo> comments;
+        QVariantList comments;
         for (const auto &v : obj["comments"].toArray())
-            comments.append(commentFromJson(v.toObject()));
+            comments.append(v.toObject().toVariantMap());
         emit commentsFetched(comments);
     });
 }

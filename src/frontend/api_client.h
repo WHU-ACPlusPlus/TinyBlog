@@ -38,6 +38,7 @@ public:
     Q_INVOKABLE void clearAuth();         // 清除 cookie + QSettings
     Q_INVOKABLE QString readFileAsBase64(const QUrl &fileUrl);  // 读取文件内容为 base64
     Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl &videoUrl);  // 用 ffmpeg 抽视频第一帧
+    Q_INVOKABLE QString videoThumbnailFromBase64(const QString &b64); // 从 base64 视频数据提取缩略图
 
 signals:
     void loggedInChanged();
@@ -110,7 +111,7 @@ signals:
     void postLiked();
     void postUnliked();
     void commentPosted();
-    void commentsFetched(const QList<CommentInfo> &comments);
+    void commentsFetched(const QVariantList &comments);
 
     // ── 私信 ──
     void messageSent();
