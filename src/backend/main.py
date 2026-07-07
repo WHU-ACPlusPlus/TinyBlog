@@ -184,6 +184,11 @@ if __name__ == "__main__":
         db_execute("ALTER TABLE posts ADD COLUMN repost_id INTEGER DEFAULT NULL")
     except sqlite3.OperationalError:
         pass
+    # 为旧数据库补加 offline_messages.is_read 列（持久化私信）
+    try:
+        db_execute("ALTER TABLE offline_messages ADD COLUMN is_read INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     db_execute("""
         CREATE TABLE IF NOT EXISTS bookmarks (
             user_id INTEGER NOT NULL,
@@ -545,12 +550,23 @@ def send_msg(body: Send_Msg):
     if not user_id:
         return {"error": "Bad cookie."}
     user_id = user_id["user_id"]
+    if user_id == body.to_whom_id:
+        return {"error": "Cannot send message to yourself."}
     existence = db_fetchone(
             "SELECT id FROM users WHERE id = ?",
             (body.to_whom_id,)
             )
     if not existence:
         return {"error": "Bad `to_whom_id`"}
+    # 检查屏蔽关系
+    blocked = db_fetchone(
+            "SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)",
+            (user_id, body.to_whom_id, body.to_whom_id, user_id)
+            )
+    if blocked:
+        return {"error": "Cannot send message due to block relationship."}
+    if not body.content:
+        return {"error": "Empty message not allowed."}
     db_execute("INSERT INTO offline_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
             (user_id, body.to_whom_id, body.content,)
             )
@@ -559,10 +575,13 @@ def send_msg(body: Send_Msg):
             (body.to_whom_id, user_id, body.content[:50])
             )
     db_commit()
-    return {"status": "success"}
+    return {"status": "success", "message_id": db_lastrowid()}
 
 class Recv_Msg(BaseModel):
     cookie: str
+    with_user_id: int = 0   # 0=获取所有未读消息摘要, >0=与该用户的聊天记录
+    before_id: int = 0       # 游标分页
+    count: int = 20
 
 @app.post("/recv-msg")
 def recv_msg(body: Recv_Msg):
@@ -573,16 +592,46 @@ def recv_msg(body: Recv_Msg):
     if not user_id:
         return {"error": "Bad cookie."}
     user_id = user_id["user_id"]
-    msgs = [dict(row) for row in db_fetchall(
-            "SELECT sender_id, sent_at, content FROM offline_messages WHERE receiver_id = ?",
-            (user_id,)
-            )]
-    db_execute(
-            "DELETE FROM offline_messages WHERE receiver_id = ?",
-            (user_id,)
-            )
-    db_commit()
-    return {"msgs": msgs}
+
+    if body.with_user_id > 0:
+        # ── 与特定用户的聊天记录（游标分页，标记已读） ──
+        if body.before_id > 0:
+            msgs = db_fetchall("""
+                SELECT m.id, m.sender_id, u.username, u.nickname, m.content, m.sent_at, m.is_read
+                FROM offline_messages m
+                JOIN users u ON u.id = m.sender_id
+                WHERE ((m.sender_id = ? AND m.receiver_id = ?)
+                    OR (m.sender_id = ? AND m.receiver_id = ?))
+                  AND m.id < ?
+                ORDER BY m.id DESC LIMIT ?
+            """, (user_id, body.with_user_id, body.with_user_id, user_id, body.before_id, body.count))
+        else:
+            msgs = db_fetchall("""
+                SELECT m.id, m.sender_id, u.username, u.nickname, m.content, m.sent_at, m.is_read
+                FROM offline_messages m
+                JOIN users u ON u.id = m.sender_id
+                WHERE (m.sender_id = ? AND m.receiver_id = ?)
+                   OR (m.sender_id = ? AND m.receiver_id = ?)
+                ORDER BY m.id DESC LIMIT ?
+            """, (user_id, body.with_user_id, body.with_user_id, user_id, body.count))
+        # 标记对方发给我的消息为已读
+        db_execute(
+                "UPDATE offline_messages SET is_read = 1 WHERE receiver_id = ? AND sender_id = ? AND is_read = 0",
+                (user_id, body.with_user_id)
+                )
+        db_commit()
+        next_cursor = msgs[-1]["id"] if msgs else 0
+        return {"messages": [dict(m) for m in msgs], "count": len(msgs), "next_cursor": next_cursor}
+    else:
+        # ── 无 with_user_id：拉取所有未读消息（用于通知角标） ──
+        msgs = [dict(row) for row in db_fetchall("""
+            SELECT m.id, m.sender_id, u.username, u.nickname, m.content, m.sent_at
+            FROM offline_messages m
+            JOIN users u ON u.id = m.sender_id
+            WHERE m.receiver_id = ? AND m.is_read = 0
+            ORDER BY m.id DESC
+        """, (user_id,))]
+        return {"messages": msgs, "unread_count": len(msgs)}
 
 class Pub_Post(BaseModel):
     cookie: str
@@ -967,11 +1016,22 @@ def get_my_groups(body: Get_My_Groups_Req):
         return {"error": "Bad cookie."}
     user_id = row["user_id"]
     groups = db_fetchall("""
-            SELECT g.id, g.name, g.owner_id, ug.role, ug.joined_at
+            SELECT g.id, g.name, g.owner_id, ug.role, ug.joined_at,
+                   (SELECT gm.content FROM group_messages gm
+                    WHERE gm.group_id = g.id ORDER BY gm.id DESC LIMIT 1) as last_message,
+                   (SELECT gm.sent_at FROM group_messages gm
+                    WHERE gm.group_id = g.id ORDER BY gm.id DESC LIMIT 1) as last_message_time,
+                   (SELECT COUNT(*) FROM group_messages gm
+                    WHERE gm.group_id = g.id AND gm.id > ug.last_read_id) as unread_count,
+                   (SELECT COUNT(*) FROM user_in_group uig
+                    WHERE uig.group_id = g.id) as member_count
             FROM user_in_group ug
             JOIN groups g ON g.id = ug.group_id
             WHERE ug.user_id = ?
-            ORDER BY ug.joined_at DESC
+            ORDER BY COALESCE(
+                (SELECT gm.sent_at FROM group_messages gm WHERE gm.group_id = g.id ORDER BY gm.id DESC LIMIT 1),
+                ug.joined_at
+            ) DESC
     """, (user_id,))
     return {"groups": [dict(g) for g in groups]}
 
@@ -2124,6 +2184,132 @@ def trending_hashtags(body: Trending_Hashtags_Req):
             LIMIT ?
     """, (body.count,))
     return {"hashtags": [{"name": t["name"], "post_count": t["post_count"]} for t in tags]}
+
+# =============================================================================
+# P3: 私信增强 — 获取会话列表
+# POST /get-conversations — 返回所有聊过天的用户及最后消息预览、未读数
+# =============================================================================
+class Get_Conversations_Req(BaseModel):
+    cookie: str
+
+@app.post("/get-conversations")
+def get_conversations(body: Get_Conversations_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    # 获取所有与我交换过消息的唯一用户（含最后消息ID）
+    conversations = db_fetchall("""
+            SELECT
+                CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END as other_id,
+                u.username, u.nickname, u.avatar,
+                MAX(m.id) as last_msg_id
+            FROM offline_messages m
+            JOIN users u ON u.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
+            WHERE m.sender_id = ? OR m.receiver_id = ?
+            GROUP BY other_id
+            ORDER BY last_msg_id DESC
+    """, (user_id, user_id, user_id, user_id))
+    result = []
+    for c in conversations:
+        last_msg = db_fetchone(
+                "SELECT content, sent_at, sender_id FROM offline_messages WHERE id = ?",
+                (c["last_msg_id"],)
+                )
+        unread = db_fetchone(
+                "SELECT COUNT(*) as cnt FROM offline_messages WHERE sender_id = ? AND receiver_id = ? AND is_read = 0",
+                (c["other_id"], user_id)
+                )
+        result.append({
+            "user_id": c["other_id"],
+            "username": c["username"],
+            "nickname": c["nickname"],
+            "avatar": c["avatar"],
+            "last_message": last_msg["content"] if last_msg else "",
+            "last_time": last_msg["sent_at"] if last_msg else "",
+            "last_is_mine": (last_msg["sender_id"] == user_id) if last_msg else False,
+            "unread_count": unread["cnt"] if unread else 0
+        })
+    return {"conversations": result}
+
+# =============================================================================
+# P3: 群聊增强 — 获取单个群详情
+# POST /get-group-info
+# =============================================================================
+class Get_Group_Info_Req(BaseModel):
+    cookie: str
+    group_id: int
+
+@app.post("/get-group-info")
+def get_group_info(body: Get_Group_Info_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    group = db_fetchone("""
+            SELECT g.id, g.name, g.owner_id, g.created_at,
+                   u.username as owner_username, u.nickname as owner_nickname,
+                   (SELECT COUNT(*) FROM user_in_group WHERE group_id = g.id) as member_count
+            FROM groups g
+            JOIN users u ON u.id = g.owner_id
+            WHERE g.id = ?
+    """, (body.group_id,))
+    if not group:
+        return {"error": "Group not exist."}
+    my_role = db_fetchone(
+            "SELECT role FROM user_in_group WHERE group_id = ? AND user_id = ?",
+            (body.group_id, user_id)
+            )
+    return {
+        "id": group["id"],
+        "name": group["name"],
+        "owner_id": group["owner_id"],
+        "owner_username": group["owner_username"],
+        "owner_nickname": group["owner_nickname"],
+        "created_at": group["created_at"],
+        "member_count": group["member_count"],
+        "my_role": my_role["role"] if my_role else None
+    }
+
+# =============================================================================
+# P3: 群聊增强 — 删除群消息（发送者或群主可删）
+# POST /delete-group-msg
+# =============================================================================
+class Delete_Group_Msg_Req(BaseModel):
+    cookie: str
+    group_id: int
+    message_id: int
+
+@app.post("/delete-group-msg")
+def delete_group_msg(body: Delete_Group_Msg_Req):
+    row = db_fetchone(
+            "SELECT user_id FROM cookies WHERE token = ?",
+            (body.cookie,)
+            )
+    if not row:
+        return {"error": "Bad cookie."}
+    user_id = row["user_id"]
+    msg = db_fetchone(
+            "SELECT sender_id, group_id FROM group_messages WHERE id = ?",
+            (body.message_id,)
+            )
+    if not msg:
+        return {"error": "Message not exist."}
+    if msg["group_id"] != body.group_id:
+        return {"error": "Message not in this group."}
+    # 发送者或群主可删
+    group = db_fetchone("SELECT owner_id FROM groups WHERE id = ?", (body.group_id,))
+    if msg["sender_id"] != user_id and (not group or group["owner_id"] != user_id):
+        return {"error": "Permission denied."}
+    db_execute("DELETE FROM group_messages WHERE id = ?", (body.message_id,))
+    db_commit()
+    return {"status": "success"}
 
 if __name__ == "__main__":
     uvicorn.run(app, port = 18999)
