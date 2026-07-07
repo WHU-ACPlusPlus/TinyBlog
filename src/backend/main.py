@@ -4,7 +4,7 @@
 
 # Databases
 
-import sqlite3, bcrypt, secrets, threading
+import sqlite3, bcrypt, secrets, threading, base64, random
 
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
@@ -43,6 +43,23 @@ def db_rowcount():
         if _last_cursor is not None:
             return _last_cursor.rowcount
         return 0
+
+def get_user_id(cookie):
+    """Check cookie validity and auto-extend (+1 hour), return user_id or None."""
+    if not cookie:
+        return None
+    row = db_fetchone(
+        "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
+        (cookie,)
+    )
+    if not row:
+        return None
+    db_execute(
+        "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
+        (cookie,)
+    )
+    db_commit()
+    return row['user_id']
 
 if __name__ == "__main__":
     db_execute("""
@@ -178,6 +195,15 @@ if __name__ == "__main__":
         db_execute("ALTER TABLE posts ADD COLUMN repost_id INTEGER DEFAULT NULL")
     except sqlite3.OperationalError:
         pass
+    # email 列（可为 NULL，UNIQUE 通过独立索引实现，NULL 不参与唯一性检查）
+    try:
+        db_execute("ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db_execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+    except sqlite3.OperationalError:
+        pass
     db_execute("""
         CREATE TABLE IF NOT EXISTS bookmarks (
             user_id INTEGER NOT NULL,
@@ -188,11 +214,244 @@ if __name__ == "__main__":
             FOREIGN KEY (post_id) REFERENCES posts(id)
         )
     """)
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS reg_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cookie TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            nickname TEXT NOT NULL,
+            captcha_answer TEXT NOT NULL,
+            email TEXT,
+            email_code TEXT,
+            stage TEXT NOT NULL DEFAULT 'captcha',
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    # 登录安全：last_active_at（可为 NULL，已有用户不受影响）
+    try:
+        db_execute("ALTER TABLE users ADD COLUMN last_active_at TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            attempted_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS login_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cookie TEXT UNIQUE NOT NULL,
+            user_id INTEGER NOT NULL,
+            captcha_answer TEXT,
+            captcha_verified INTEGER NOT NULL DEFAULT 0,
+            email_verified INTEGER NOT NULL DEFAULT 0,
+            email_code TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
     db_commit()
+
+# =============================================================================
+# 头像生成：新用户注册时自动生成彩色首字母头像
+# =============================================================================
+import io, math
+from PIL import Image, ImageDraw, ImageFont
+
+_FONT_PATH = "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc"
+
+def _luminance(r, g, b):
+    """计算 sRGB 相对亮度 (WCAG)"""
+    def linearize(c):
+        c = c / 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
+
+def generate_avatar(nickname):
+    """根据昵称首字符生成 128x128 PNG 头像，返回 base64 字符串"""
+    char = nickname[0] if nickname else "?"
+    size = 128
+
+    # 随机色相(0-360)，中等饱和度(55-80%)，中等明度(40-55%)
+    h = random.uniform(0, 360)
+    s = random.uniform(55, 80) / 100.0
+    l = random.uniform(40, 55) / 100.0
+
+    # HSL → RGB
+    c = (1 - abs(2 * l - 1)) * s
+    x = c * (1 - abs((h / 60) % 2 - 1))
+    m = l - c / 2
+    if h < 60:
+        r, g, b = c, x, 0
+    elif h < 120:
+        r, g, b = x, c, 0
+    elif h < 180:
+        r, g, b = 0, c, x
+    elif h < 240:
+        r, g, b = 0, x, c
+    elif h < 300:
+        r, g, b = x, 0, c
+    else:
+        r, g, b = c, 0, x
+    bg = (int((r + m) * 255), int((g + m) * 255), int((b + m) * 255))
+
+    # 根据背景亮度选择黑/白文字
+    text_color = (255, 255, 255) if _luminance(*bg) < 0.5 else (0, 0, 0)
+
+    img = Image.new("RGB", (size, size), bg)
+    draw = ImageDraw.Draw(img)
+
+    # 先画文字（！必须在 compositing 之前，否则 draw 绑定到旧对象）
+    try:
+        font = ImageFont.truetype(_FONT_PATH, 72)
+    except Exception:
+        font = ImageFont.load_default()
+    bbox = draw.textbbox((0, 0), char, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    tx = (size - tw) / 2 - bbox[0]
+    ty = (size - th) / 2 - bbox[1]
+    draw.text((tx, ty), char, fill=text_color, font=font)
+
+    # 圆形裁剪：画圆遮罩后叠加
+    mask = Image.new("L", (size, size), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.ellipse([4, 4, size - 4, size - 4], fill=255)
+    del mask_draw
+
+    # 在背景上画正圆
+    circle = Image.new("RGB", (size, size), (0, 0, 0))
+    circle_draw = ImageDraw.Draw(circle)
+    circle_draw.ellipse([4, 4, size - 4, size - 4], fill=bg)
+    img = Image.composite(img, circle, mask)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+# =============================================================================
+# 图形验证码生成
+# =============================================================================
+
+def generate_captcha(length=4):
+    """
+    生成图形验证码，返回 (text, base64_png)
+    text: 验证码原文（供后续比对）
+    base64_png: 图片的 base64 字符串
+    """
+    # 排除容易混淆的字符：0/O、1/l/I、2/Z、5/S、8/B
+    chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+    code = "".join(random.choices(chars, k=length))
+
+    width = 28 * length + 20
+    height = 48
+    img = Image.new("RGB", (width, height), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    # 加载字体
+    try:
+        font = ImageFont.truetype(_FONT_PATH, 36)
+    except Exception:
+        font = ImageFont.load_default()
+
+    # 逐个写字符，每个带随机偏移和颜色
+    for i, ch in enumerate(code):
+        # 随机颜色（避开白色/太浅的）
+        fg = (random.randint(30, 180), random.randint(30, 180), random.randint(30, 180))
+        x = 10 + i * 28 + random.randint(-3, 3)
+        y = random.randint(2, 10)
+        draw.text((x, y), ch, fill=fg, font=font)
+
+    # 随机干扰线（3~5 条）
+    for _ in range(random.randint(3, 5)):
+        line_color = (random.randint(100, 200), random.randint(100, 200), random.randint(100, 200))
+        x1 = random.randint(0, width // 3)
+        y1 = random.randint(0, height)
+        x2 = random.randint(width * 2 // 3, width)
+        y2 = random.randint(0, height)
+        draw.line([(x1, y1), (x2, y2)], fill=line_color, width=random.randint(1, 2))
+
+    # 随机噪点（约 80~150 个）
+    for _ in range(random.randint(80, 150)):
+        dot_color = (random.randint(0, 150), random.randint(0, 150), random.randint(0, 150))
+        draw.point(
+            (random.randint(0, width - 1), random.randint(0, height - 1)),
+            fill=dot_color,
+        )
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return code, base64.b64encode(buf.getvalue()).decode()
+
+# =============================================================================
+# 邮箱验证码
+# =============================================================================
+import os, smtplib
+from email.mime.text import MIMEText
+from email.utils import formataddr
+
+def build_verification_email(code, to_email):
+    """
+    根据验证码生成 HTML 邮件内容。
+    返回 MIMEText 对象（含 HTML body）。
+    """
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif">
+<table width="100%%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
+<table width="400" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+<tr><td style="padding:32px 24px 24px;text-align:center">
+<div style="font-size:22px;font-weight:700;color:#333;margin-bottom:8px">Tiny Chat</div>
+<div style="font-size:14px;color:#888;margin-bottom:28px">邮箱地址验证</div>
+<div style="font-size:13px;color:#555;margin-bottom:20px">您的验证码为：</div>
+<div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#4a90d9;background:#f0f7ff;border-radius:8px;padding:16px 24px;display:inline-block">{code}</div>
+<div style="font-size:12px;color:#aaa;margin-top:28px;line-height:1.6">验证码有效期为 10 分钟。<br>如非本人操作，请忽略此邮件。</div>
+</td></tr>
+<tr><td style="background:#fafafa;padding:16px 24px;text-align:center;font-size:11px;color:#bbb">Tiny Chat — 自动发送，请勿回复</td></tr>
+</table>
+</td></tr></table>
+</body>
+</html>"""
+
+    # 注意：%% 是 Python format 中转义为单个 % 的方式，
+    # 模板中不用再关心这个细节。
+    msg = MIMEText(html, "html", "utf-8")
+    msg["Subject"] = "Tiny Chat 邮箱验证"
+    msg["To"] = to_email
+    return msg
+
+
+def send_verification_email(to_email, code):
+    """
+    向指定邮箱发送验证码。
+    从环境变量读取 SMTP 配置：
+      SMTP_HOST     — SMTP 服务器地址，默认 smtp.qq.com
+      SMTP_PORT     — SMTP 端口，默认 465 (SSL)
+      SMTP_USER     — 发件邮箱地址
+      SMTP_PASS     — 发件邮箱密码/授权码
+      SMTP_FROM     — 发件人显示名称（可选），默认使用 SMTP_USER
+    """
+    host = os.environ.get("SMTP_HOST", "smtp.qq.com")
+    port = int(os.environ.get("SMTP_PORT", "465"))
+    user = os.environ["SMTP_USER"]
+    password = os.environ["SMTP_PASS"]
+    from_addr = os.environ.get("SMTP_FROM", user)
+
+    msg = build_verification_email(code, to_email)
+    msg["From"] = formataddr(("Tiny Chat", from_addr))
+
+    with smtplib.SMTP_SSL(host, port) as server:
+        server.login(user, password)
+        server.sendmail(from_addr, [to_email], msg.as_string())
+
 
 # Server Functions
 
-import fastapi, uvicorn, random
+import fastapi, uvicorn
 
 app = fastapi.FastAPI(title = "Tiny Blog")
 
@@ -224,17 +483,107 @@ def reg_req(body: Reg_Req):
     password_hash = bcrypt.hashpw(
             body.password.encode(), bcrypt.gensalt()
             ).decode()
-    db_execute("INSERT INTO users (username, nickname, password_hash) VALUES (?, ?, ?)",
-            (body.username, body.nickname, password_hash)
-            )
-    user_id = db_lastrowid()
     cookie = secrets.token_hex(32)
+    captcha_text, captcha_b64 = generate_captcha()
     db_execute(
-            "INSERT INTO cookies (user_id, token, expires_at) VALUES (?, ?, ?)",
-            (user_id, cookie, "2099-12-31 13:59:59")
-            )
+        """INSERT INTO reg_sessions (cookie, username, password_hash, nickname, captcha_answer)
+           VALUES (?, ?, ?, ?, ?)""",
+        (cookie, body.username, password_hash, body.nickname, captcha_text)
+    )
     db_commit()
-    return {"cookie": cookie}
+    return {"cookie": cookie, "captcha": captcha_b64}
+
+# =============================================================================
+# 注册第二步：校验图形验证码 + 邮箱，发送邮箱验证码
+# POST /register-verify
+# 输入: cookie, captcha, email
+# =============================================================================
+class Reg_Verify_Req(BaseModel):
+    cookie: str
+    captcha: str
+    email: str
+
+@app.post("/register-verify")
+def reg_verify(body: Reg_Verify_Req):
+    session = db_fetchone(
+        "SELECT * FROM reg_sessions WHERE cookie = ? AND stage = 'captcha'",
+        (body.cookie,)
+    )
+    if not session:
+        return {"error": "Bad cookie."}
+    if not body.captcha:
+        return {"error": "Captcha required."}
+    if session["captcha_answer"] != body.captcha:
+        return {"error": "Captcha incorrect."}
+    if not body.email:
+        return {"error": "Email required."}
+    # 检查邮箱是否已被占用
+    existing = db_fetchone(
+        "SELECT id FROM users WHERE email = ?",
+        (body.email,)
+    )
+    if existing:
+        return {"error": "Email occupied."}
+    # 生成并发送邮箱验证码
+    email_code = "".join(random.choices("0123456789", k=6))
+    try:
+        send_verification_email(body.email, email_code)
+    except Exception as e:
+        return {"error": f"Failed to send email: {e}"}
+    db_execute(
+        "UPDATE reg_sessions SET email = ?, email_code = ?, stage = 'email' WHERE cookie = ?",
+        (body.email, email_code, body.cookie)
+    )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 注册第三步：校验邮箱验证码，创建用户
+# POST /register-finish
+# 输入: cookie, email_code
+# =============================================================================
+class Reg_Finish_Req(BaseModel):
+    cookie: str
+    email_code: str
+
+@app.post("/register-finish")
+def reg_finish(body: Reg_Finish_Req):
+    session = db_fetchone(
+        "SELECT * FROM reg_sessions WHERE cookie = ? AND stage = 'email'",
+        (body.cookie,)
+    )
+    if not session:
+        return {"error": "Bad cookie."}
+    if not body.email_code:
+        return {"error": "Email code required."}
+    if session["email_code"] != body.email_code:
+        return {"error": "Email code incorrect."}
+    if not session["email"]:
+        return {"error": "No email in session."}
+    # 再次检查邮箱是否被占用（防止并发注册）
+    existing = db_fetchone(
+        "SELECT id FROM users WHERE email = ?",
+        (session["email"],)
+    )
+    if existing:
+        return {"error": "Email occupied."}
+    # 创建用户
+    avatar_b64 = generate_avatar(session["nickname"])
+    db_execute(
+        "INSERT INTO users (username, nickname, password_hash, avatar, email) VALUES (?, ?, ?, ?, ?)",
+        (session["username"], session["nickname"],
+         session["password_hash"], avatar_b64, session["email"])
+    )
+    user_id = db_lastrowid()
+    auth_cookie = secrets.token_hex(32)
+    db_execute(
+        "INSERT INTO cookies (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+1 hour'))",
+        (user_id, auth_cookie)
+    )
+    # 清理注册会话
+    db_execute("DELETE FROM reg_sessions WHERE id = ?", (session["id"],))
+    db_commit()
+    return {"cookie": auth_cookie}
 
 class Log_Req(BaseModel):
     username: str
@@ -255,26 +604,181 @@ def log_req(body: Log_Req):
     if not bcrypt.checkpw(
             body.password.encode(), log["password_hash"].encode()
             ):
+        # 记录失败尝试
+        db_execute("INSERT INTO login_attempts (user_id) VALUES (?)", (log["id"],))
+        db_commit()
         return {"error": "Incorrect password."}
-    cookie = secrets.token_hex(32)
-    db_execute("INSERT INTO cookies (user_id, token, expires_at) VALUES (?, ?, ?)",
-            (log["id"], cookie, "2099-12-31 13:59:59")
-            )
+
+    # 记录登录尝试（成功也算一次，防止高频重登）
+    db_execute("INSERT INTO login_attempts (user_id) VALUES (?)", (log["id"],))
     db_commit()
-    return {"cookie": cookie}
+
+    # 检查：半小时内失败次数 > 3 → 需要图形验证码
+    recent_fails = db_fetchone(
+        """SELECT COUNT(*) as cnt FROM login_attempts
+           WHERE user_id = ? AND attempted_at > datetime('now', '-30 minutes')""",
+        (log["id"],)
+    )
+    need_captcha = (recent_fails["cnt"] if recent_fails else 0) > 3
+
+    # 检查：距上次活跃 > 72 小时 → 需要邮箱验证码
+    need_email = False
+    if log["last_active_at"]:
+        inactive = db_fetchone(
+            "SELECT (julianday('now') - julianday(?)) * 24 > 72 as expired",
+            (log["last_active_at"],)
+        )
+        if inactive and inactive["expired"]:
+            need_email = True
+
+    # 创建登录会话
+    cookie = secrets.token_hex(32)
+    captcha_text, captcha_b64 = generate_captcha() if need_captcha else (None, None)
+    db_execute(
+        "INSERT INTO login_sessions (cookie, user_id, captcha_answer, captcha_verified, email_verified) VALUES (?, ?, ?, ?, ?)",
+        (cookie, log["id"], captcha_text, 1 if not need_captcha else 0, 1 if not need_email else 0)
+    )
+    db_commit()
+
+    result = {"cookie": cookie, "need_captcha": need_captcha, "need_email": need_email}
+    if need_captcha:
+        result["captcha"] = captcha_b64
+    if need_email:
+        result["email"] = log["email"] or ""
+    return result
+
+# =============================================================================
+# 登录验证：图形验证码
+# POST /login-verify-captcha
+# =============================================================================
+class Login_Verify_Captcha_Req(BaseModel):
+    cookie: str
+    captcha: str
+
+@app.post("/login-verify-captcha")
+def login_verify_captcha(body: Login_Verify_Captcha_Req):
+    session = db_fetchone(
+        "SELECT * FROM login_sessions WHERE cookie = ?",
+        (body.cookie,)
+    )
+    if not session:
+        return {"error": "Bad cookie."}
+    if not session["captcha_answer"]:
+        return {"error": "No captcha required."}
+    if session["captcha_answer"] != body.captcha:
+        return {"error": "Captcha incorrect."}
+    db_execute(
+        "UPDATE login_sessions SET captcha_verified = 1 WHERE cookie = ?",
+        (body.cookie,)
+    )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 登录验证：发送邮箱验证码
+# POST /login-send-email-code
+# =============================================================================
+class Login_Send_Email_Req(BaseModel):
+    cookie: str
+
+@app.post("/login-send-email-code")
+def login_send_email_code(body: Login_Send_Email_Req):
+    session = db_fetchone(
+        "SELECT * FROM login_sessions WHERE cookie = ?",
+        (body.cookie,)
+    )
+    if not session:
+        return {"error": "Bad cookie."}
+
+    user = db_fetchone("SELECT email FROM users WHERE id = ?", (session["user_id"],))
+    if not user or not user["email"]:
+        return {"error": "No email on file."}
+
+    email_code = "".join(random.choices("0123456789", k=6))
+    try:
+        send_verification_email(user["email"], email_code)
+    except Exception as e:
+        return {"error": f"Failed to send email: {e}"}
+
+    db_execute(
+        "UPDATE login_sessions SET email_code = ? WHERE cookie = ?",
+        (email_code, body.cookie)
+    )
+    db_commit()
+    return {"status": "sent", "email": user["email"]}
+
+# =============================================================================
+# 登录验证：校验邮箱验证码
+# POST /login-verify-email
+# =============================================================================
+class Login_Verify_Email_Req(BaseModel):
+    cookie: str
+    email_code: str
+
+@app.post("/login-verify-email")
+def login_verify_email(body: Login_Verify_Email_Req):
+    session = db_fetchone(
+        "SELECT * FROM login_sessions WHERE cookie = ?",
+        (body.cookie,)
+    )
+    if not session:
+        return {"error": "Bad cookie."}
+    if not session["email_code"]:
+        return {"error": "No email code sent."}
+    if session["email_code"] != body.email_code:
+        return {"error": "Email code incorrect."}
+
+    db_execute(
+        "UPDATE login_sessions SET email_verified = 1 WHERE cookie = ?",
+        (body.cookie,)
+    )
+    db_commit()
+    return {"status": "success"}
+
+# =============================================================================
+# 登录完成：获得真正的 auth cookie
+# POST /login-finish
+# =============================================================================
+class Login_Finish_Req(BaseModel):
+    cookie: str
+
+@app.post("/login-finish")
+def login_finish(body: Login_Finish_Req):
+    session = db_fetchone(
+        "SELECT * FROM login_sessions WHERE cookie = ?",
+        (body.cookie,)
+    )
+    if not session:
+        return {"error": "Bad cookie."}
+    if not session["captcha_verified"]:
+        return {"error": "Captcha not verified."}
+    if not session["email_verified"]:
+        return {"error": "Email not verified."}
+
+    # 创建 auth cookie
+    auth_cookie = secrets.token_hex(32)
+    db_execute(
+        "INSERT INTO cookies (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+1 hour'))",
+        (session["user_id"], auth_cookie)
+    )
+    # 更新最后活跃时间
+    db_execute(
+        "UPDATE users SET last_active_at = datetime('now') WHERE id = ?",
+        (session["user_id"],)
+    )
+    # 清理登录会话
+    db_execute("DELETE FROM login_sessions WHERE id = ?", (session["id"],))
+    db_commit()
+    return {"cookie": auth_cookie}
 
 class Get_Follower(BaseModel):
     cookie: str
 
 @app.post("/get-follow-list")
 def get_follow_list(body: Get_Follower):
-    log = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not log:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = log["user_id"]
     followers = [dict(row) for row in db_fetchall(
             """
             SELECT u.id, u.username, u.nickname
@@ -304,13 +808,9 @@ class Follow_Req(BaseModel):
 
 @app.post("/follow")
 def follow(body: Follow_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     if user_id == body.followee_id:
         return {"error": "Cannot follow yourself."}
     target = db_fetchone(
@@ -327,13 +827,9 @@ def follow(body: Follow_Req):
 
 @app.post("/unfollow")
 def unfollow(body: Follow_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     db_execute("DELETE FROM following WHERE follower = ? AND followee = ?",
             (user_id, body.followee_id)
             )
@@ -346,13 +842,9 @@ class Like_Req(BaseModel):
 
 @app.post("/like")
 def like(body: Like_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     post = db_fetchone(
             "SELECT id FROM posts WHERE id = ?",
             (body.post_id,)
@@ -372,13 +864,9 @@ def like(body: Like_Req):
 
 @app.post("/unlike")
 def unlike(body: Like_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     db_execute("DELETE FROM liking_users WHERE post_id = ? AND liker_id = ?",
             (body.post_id, user_id)
             )
@@ -397,13 +885,9 @@ class Comment_Req(BaseModel):
 
 @app.post("/comment")
 def comment(body: Comment_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     if not body.content:
         return {"error": "Empty comment not allowed."}
     post = db_fetchone(
@@ -424,11 +908,8 @@ class Get_Comments_Req(BaseModel):
 
 @app.post("/get-comments")
 def get_comments(body: Get_Comments_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
     return {"comments": [dict(r) for r in db_fetchall(
             """
@@ -448,13 +929,9 @@ class Send_Msg(BaseModel):
 
 @app.post("/send-msg")
 def send_msg(body: Send_Msg):
-    user_id = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
+    user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    user_id = user_id["user_id"]
     existence = db_fetchone(
             "SELECT id FROM users WHERE id = ?",
             (body.to_whom_id,)
@@ -472,13 +949,9 @@ class Recv_Msg(BaseModel):
 
 @app.post("/recv-msg")
 def recv_msg(body: Recv_Msg):
-    user_id = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
+    user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    user_id = user_id["user_id"]
     msgs = [dict(row) for row in db_fetchall(
             "SELECT sender_id, sent_at, content FROM offline_messages WHERE receiver_id = ?",
             (user_id,)
@@ -497,13 +970,9 @@ class Pub_Post(BaseModel):
 
 @app.post("/pub-post")
 def pub_post(body: Pub_Post):
-    user_id = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
+    user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    user_id = user_id["user_id"]
     if (not body.text) and (not body.media):
         return {"error": "Empty post not allowed."}
     if len(body.media) > 9:
@@ -530,14 +999,9 @@ class Post_Fetch(BaseModel):
 
 @app.post("/post-fetch")
 def post_fetch(body: Post_Fetch):
-    print(f"DEBUG post_fetch: cookie={repr(body.cookie)}, count={body.count}", flush=True)
-    row = db_fetchone(
-        "SELECT user_id FROM cookies WHERE token = ?",
-        (body.cookie,)
-    )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
 
     # 1. 关注的人发的帖子
     followed = db_fetchall("""
@@ -597,11 +1061,8 @@ class Get_Post(BaseModel):
 
 @app.post("/get-post")
 def get_post(body: Get_Post):
-    row = db_fetchone(
-        "SELECT user_id FROM cookies WHERE token = ?",
-        (body.cookie,)
-    )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
 
     post = db_fetchone(
@@ -618,7 +1079,7 @@ def get_post(body: Get_Post):
 
     liked = db_fetchone(
         "SELECT 1 FROM liking_users WHERE post_id = ? AND liker_id = ?",
-        (body.post_id, row["user_id"])
+        (body.post_id, user_id)
     )
 
     return {
@@ -640,15 +1101,11 @@ class Create_Group_Req(BaseModel):
 
 @app.post("/create-group")
 def create_group(body: Create_Group_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
     if not body.name:
         return {"error": "Group name cannot be empty."}
-    user_id = row["user_id"]
     db_execute("INSERT INTO groups (name, owner_id) VALUES (?, ?)",
             (body.name, user_id)
             )
@@ -666,13 +1123,9 @@ class Join_Group_Req(BaseModel):
 
 @app.post("/join-group")
 def join_group(body: Join_Group_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     group = db_fetchone(
             "SELECT id FROM groups WHERE id = ?",
             (body.group_id,)
@@ -691,13 +1144,9 @@ class Leave_Group_Req(BaseModel):
 
 @app.post("/leave-group")
 def leave_group(body: Leave_Group_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     db_execute("DELETE FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
             )
@@ -711,13 +1160,9 @@ class Send_Group_Msg_Req(BaseModel):
 
 @app.post("/send-group-msg")
 def send_group_msg(body: Send_Group_Msg_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     in_group = db_fetchone(
             "SELECT role FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
@@ -739,13 +1184,9 @@ class Recv_Group_Msg_Req(BaseModel):
 
 @app.post("/recv-group-msg")
 def recv_group_msg(body: Recv_Group_Msg_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     membership = db_fetchone(
             "SELECT last_read_id FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
@@ -774,11 +1215,8 @@ class Get_Group_Members_Req(BaseModel):
 
 @app.post("/get-group-members")
 def get_group_members(body: Get_Group_Members_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
     members = db_fetchall("""
             SELECT u.id, u.username, u.nickname, ug.role, ug.joined_at
@@ -794,13 +1232,9 @@ class Get_My_Groups_Req(BaseModel):
 
 @app.post("/get-my-groups")
 def get_my_groups(body: Get_My_Groups_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     groups = db_fetchall("""
             SELECT g.id, g.name, g.owner_id, ug.role, ug.joined_at
             FROM user_in_group ug
@@ -825,15 +1259,12 @@ class Check_Cookie_Req(BaseModel):
 def check_cookie(body: Check_Cookie_Req):
     if not body.cookie:
         return {"error": "Empty cookie."}
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"valid": False}
     user = db_fetchone(
-            "SELECT id, username, nickname, avatar, signature FROM users WHERE id = ?",
-            (row["user_id"],)
+            "SELECT id, username, nickname, avatar, signature, email FROM users WHERE id = ?",
+            (user_id,)
             )
     if not user:
         return {"valid": False}
@@ -844,7 +1275,28 @@ def check_cookie(body: Check_Cookie_Req):
         "nickname": user["nickname"],
         "avatar": user["avatar"],
         "signature": user["signature"],
+        "email": user["email"],
     }
+
+# =============================================================================
+# 用户系统：查询自己的邮箱
+# POST /get-email — 输入 cookie，返回 email
+# =============================================================================
+class Get_Email_Req(BaseModel):
+    cookie: str
+
+@app.post("/get-email")
+def get_email(body: Get_Email_Req):
+    user_id = get_user_id(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    user = db_fetchone(
+        "SELECT email FROM users WHERE id = ?",
+        (user_id,)
+    )
+    if not user:
+        return {"error": "User not exist."}
+    return {"email": user["email"] or ""}
 
 class Logout_Req(BaseModel):
     cookie: str
@@ -869,13 +1321,9 @@ class Del_Post_Req(BaseModel):
 
 @app.post("/delete-post")
 def delete_post(body: Del_Post_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     post = db_fetchone(
             "SELECT publisher_id FROM posts WHERE id = ?",
             (body.post_id,)
@@ -903,13 +1351,9 @@ class Del_Comment_Req(BaseModel):
 
 @app.post("/delete-comment")
 def delete_comment(body: Del_Comment_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     comment = db_fetchone(
             "SELECT commenter_id FROM comments WHERE id = ?",
             (body.comment_id,)
@@ -936,13 +1380,9 @@ class Edit_Profile_Req(BaseModel):
 
 @app.post("/edit-profile")
 def edit_profile(body: Edit_Profile_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     if body.nickname:
         db_execute(
                 "UPDATE users SET nickname = ? WHERE id = ?",
@@ -966,13 +1406,9 @@ class Bookmark_Req(BaseModel):
 
 @app.post("/bookmark")
 def bookmark(body: Bookmark_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     post = db_fetchone(
             "SELECT id FROM posts WHERE id = ?",
             (body.post_id,)
@@ -992,13 +1428,9 @@ def bookmark(body: Bookmark_Req):
 # =============================================================================
 @app.post("/unbookmark")
 def unbookmark(body: Bookmark_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     db_execute(
             "DELETE FROM bookmarks WHERE user_id = ? AND post_id = ?",
             (user_id, body.post_id)
@@ -1015,13 +1447,9 @@ class Get_Bookmarks_Req(BaseModel):
 
 @app.post("/get-bookmarks")
 def get_bookmarks(body: Get_Bookmarks_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     posts = db_fetchall("""
             SELECT p.*, u.username, u.nickname, b.bookmarked_at
             FROM bookmarks b
@@ -1062,13 +1490,9 @@ class Repost_Req(BaseModel):
 
 @app.post("/repost")
 def repost(body: Repost_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     original = db_fetchone(
             "SELECT id, publisher_id FROM posts WHERE id = ?",
             (body.post_id,)
@@ -1091,13 +1515,9 @@ class Patch_Avatar_Req(BaseModel):
 
 @app.post("/avatar")
 def patch_avatar(body: Patch_Avatar_Req):
-    row = db_fetchone(
-            "SELECT user_id FROM cookies WHERE token = ?",
-            (body.cookie,)
-            )
-    if not row:
+    user_id = get_user_id(body.cookie)
+    if not user_id:
         return {"error": "Bad cookie."}
-    user_id = row["user_id"]
     if body.avatar:
         db_execute("UPDATE users SET avatar = ? WHERE id = ?",
                 (body.avatar, user_id)

@@ -50,9 +50,18 @@ class ApiClient : public QObject {
     // ── 请求方法（异步，结果通过信号返回）──
 
     // 用户
-    void registerUser(const QString& username, const QString& password,
-                      const QString& nickname);
-    void login(const QString& username, const QString& password);
+    // 新注册流程三步：startRegister → verifyRegister → completeRegister
+    void startRegister(const QString& username, const QString& password,
+                       const QString& nickname);
+    void verifyRegister(const QString& cookie, const QString& captcha,
+                        const QString& email);
+    void completeRegister(const QString& cookie, const QString& emailCode);
+    // 登录安全三步：startLogin → [verifyCaptcha] → [sendEmailCode+verifyEmail] → completeLogin
+    void startLogin(const QString& username, const QString& password);
+    void loginVerifyCaptcha(const QString& cookie, const QString& captcha);
+    void loginSendEmailCode(const QString& cookie);
+    void loginVerifyEmail(const QString& cookie, const QString& emailCode);
+    void completeLogin(const QString& cookie);
 
     // 认证
     void checkCookie();
@@ -100,6 +109,12 @@ class ApiClient : public QObject {
 
     // ── 认证 ──
     void registerSuccess(const QString& cookie);
+    void registerStep1Done(const QString& cookie, const QString& captcha);
+    void registerStep2Done();
+    void loginStep1Done(const QString& cookie, bool needCaptcha, bool needEmail,
+                         const QString& captcha, const QString& email);
+    void loginStep2Done();
+    void loginStep3Done();
     void loginSuccess(const QString& cookie);
     void cookieCheckComplete(bool valid, int userId);
 
