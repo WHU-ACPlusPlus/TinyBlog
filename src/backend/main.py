@@ -357,7 +357,43 @@ if __name__ == "__main__":
 import io, math
 from PIL import Image, ImageDraw, ImageFont
 
-_FONT_PATH = "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc"
+# 尝试多个常见的 CJK 字体路径（按优先级排序）
+_CJK_FONT_PATHS = [
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",         # Arch Linux
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",   # Debian/Ubuntu
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",   # 其他发行版
+    "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",            # 其他发行版
+    "/usr/share/fonts/noto-sans-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/wenquanyi/wqy-zenhei.ttc",               # 文泉驿
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/opentype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+]
+
+def _load_cjk_font(size):
+    """加载 CJK 字体，返回 ImageFont 对象。尝试多个路径，fallback 到默认字体。"""
+    # 先尝试 fontconfig（如果系统已注册 CJK 字体）
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["fc-match", "-f", "%{file}", "sans:lang=zh"],
+            capture_output=True, text=True, timeout=3
+        )
+        fc_path = result.stdout.strip()
+        if fc_path and os.path.isfile(fc_path):
+            return ImageFont.truetype(fc_path, size)
+    except Exception:
+        pass
+    # 尝试预设路径列表
+    for path in _CJK_FONT_PATHS:
+        if os.path.isfile(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    # 全都不行，fallback
+    print("[avatar] 警告：未找到 CJK 字体，头像中文可能显示为方框")
+    return ImageFont.load_default()
 
 def _luminance(r, g, b):
     """计算 sRGB 相对亮度 (WCAG)"""
@@ -402,7 +438,7 @@ def generate_avatar(nickname):
 
     # 先画文字（！必须在 compositing 之前，否则 draw 绑定到旧对象）
     try:
-        font = ImageFont.truetype(_FONT_PATH, 72)
+        font = _load_cjk_font(72)
     except Exception:
         font = ImageFont.load_default()
     bbox = draw.textbbox((0, 0), char, font=font)
@@ -449,7 +485,7 @@ def generate_captcha(length=4):
 
     # 加载字体
     try:
-        font = ImageFont.truetype(_FONT_PATH, 36)
+        font = _load_cjk_font(36)
     except Exception:
         font = ImageFont.load_default()
 
@@ -501,13 +537,13 @@ def build_verification_email(code, to_email):
 <table width="100%%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
 <table width="400" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
 <tr><td style="padding:32px 24px 24px;text-align:center">
-<div style="font-size:22px;font-weight:700;color:#333;margin-bottom:8px">Tiny Chat</div>
+<div style="font-size:22px;font-weight:700;color:#333;margin-bottom:8px">Tiny Blog</div>
 <div style="font-size:14px;color:#888;margin-bottom:28px">邮箱地址验证</div>
 <div style="font-size:13px;color:#555;margin-bottom:20px">您的验证码为：</div>
 <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#4a90d9;background:#f0f7ff;border-radius:8px;padding:16px 24px;display:inline-block">{code}</div>
 <div style="font-size:12px;color:#aaa;margin-top:28px;line-height:1.6">验证码有效期为 10 分钟。<br>如非本人操作，请忽略此邮件。</div>
 </td></tr>
-<tr><td style="background:#fafafa;padding:16px 24px;text-align:center;font-size:11px;color:#bbb">Tiny Chat — 自动发送，请勿回复</td></tr>
+<tr><td style="background:#fafafa;padding:16px 24px;text-align:center;font-size:11px;color:#bbb">Tiny Blog — 自动发送，请勿回复</td></tr>
 </table>
 </td></tr></table>
 </body>
@@ -516,7 +552,7 @@ def build_verification_email(code, to_email):
     # 注意：%% 是 Python format 中转义为单个 % 的方式，
     # 模板中不用再关心这个细节。
     msg = MIMEText(html, "html", "utf-8")
-    msg["Subject"] = "Tiny Chat 邮箱验证"
+    msg["Subject"] = "Tiny Blog 邮箱验证"
     msg["To"] = to_email
     return msg
 
@@ -538,7 +574,7 @@ def send_verification_email(to_email, code):
     from_addr = os.environ.get("SMTP_FROM", user)
 
     msg = build_verification_email(code, to_email)
-    msg["From"] = formataddr(("Tiny Chat", from_addr))
+    msg["From"] = formataddr(("Tiny Blog", from_addr))
 
     with smtplib.SMTP_SSL(host, port) as server:
         server.login(user, password)

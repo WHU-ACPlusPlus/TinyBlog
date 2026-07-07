@@ -76,6 +76,9 @@ ApiClient::ApiClient(QObject* parent)
 
 void ApiClient::setBaseUrl(const QString& url) {
     m_baseUrl = url;
+    // 未指明协议时默认为 http
+    if (!m_baseUrl.startsWith("http://") && !m_baseUrl.startsWith("https://"))
+        m_baseUrl.prepend("http://");
     while (m_baseUrl.endsWith('/'))
         m_baseUrl.chop(1);
     QSettings settings;
