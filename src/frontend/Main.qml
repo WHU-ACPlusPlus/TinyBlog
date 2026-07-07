@@ -8,7 +8,7 @@ ApplicationWindow {
     minimumWidth: 700
     minimumHeight: 500
     visible: true
-    title: qsTr("Tiny Chat")
+    title: qsTr("Tiny Blog")
 
     // ── 深色模式色板 ──
     property bool darkMode: Qt.styleHints.colorScheme === Qt.Dark

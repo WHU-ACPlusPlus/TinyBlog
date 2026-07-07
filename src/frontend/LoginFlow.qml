@@ -41,7 +41,7 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: qsTr("Tiny Chat")
+            text: qsTr("Tiny Blog")
             font.pixelSize: 32
             font.bold: true
             color: window.textPrimary

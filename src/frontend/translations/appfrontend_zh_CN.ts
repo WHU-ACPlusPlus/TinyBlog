@@ -140,14 +140,14 @@
         <location filename="../build/frontend/LoginFlow.qml" line="33"/>
         <location filename="../LoginFlow.qml" line="33"/>
         <source></source>
-        <translation>Tiny Chat</translation>
+        <translation>Tiny Blog</translation>
     </message>
     <message>
         <location filename="../build/Debug/frontend/LoginFlow.qml" line="44"/>
         <location filename="../build/frontend/LoginFlow.qml" line="44"/>
         <location filename="../LoginFlow.qml" line="44"/>
-        <source>Tiny Chat</source>
-        <translation>Tiny Chat</translation>
+        <source>Tiny Blog</source>
+        <translation>Tiny Blog</translation>
     </message>
     <message>
         <location filename="../build/Debug/frontend/LoginFlow.qml" line="52"/>
@@ -404,14 +404,14 @@
         <location filename="../build/frontend/Main.qml" line="11"/>
         <location filename="../Main.qml" line="11"/>
         <source></source>
-        <translation>Tiny Chat</translation>
+        <translation>Tiny Blog</translation>
     </message>
     <message>
         <location filename="../build/Debug/frontend/Main.qml" line="11"/>
         <location filename="../build/frontend/Main.qml" line="11"/>
         <location filename="../Main.qml" line="11"/>
-        <source>Tiny Chat</source>
-        <translation>Tiny Chat</translation>
+        <source>Tiny Blog</source>
+        <translation>Tiny Blog</translation>
     </message>
 </context>
 <context>

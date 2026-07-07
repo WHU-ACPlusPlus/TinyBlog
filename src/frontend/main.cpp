@@ -16,8 +16,8 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
     // 设组织名和应用名，让 QSettings 存到可预期的路径
-    app.setOrganizationName("TinyChat");
-    app.setApplicationName("TinyChat");
+    app.setOrganizationName("TinyBlog");
+    app.setApplicationName("TinyBlog");
 
     // ── 关闭 Qt 调试日志（避免在前端控制台打印 HTTP 请求体和 base64 数据）──
     QLoggingCategory::setFilterRules("*.debug=false");

@@ -17,7 +17,7 @@
 #include "api_types.h"
 
 /**
- * Tiny Chat 客户端网络层
+ * Tiny Blog 客户端网络层
  *
  * 封装所有 API 端点的 HTTP 请求和 JSON 解析。
  * 所有请求为异步，通过信号返回结果。
