@@ -279,6 +279,15 @@ Rectangle {
                                             visible: status === Image.Ready
                                         }
 
+                                        Image {
+                                            anchors.fill: parent
+                                            fillMode: Image.PreserveAspectCrop
+                                            source: modelData.avatar
+                                                     ? "data:image/jpeg;base64," + modelData.avatar
+                                                     : ""
+                                            visible: status === Image.Ready
+                                        }
+
                                         Text {
                                             anchors.centerIn: parent
                                             text: modelData.nickname[0]
@@ -369,6 +378,19 @@ Rectangle {
                                                     text: "▶"
                                                     font.pixelSize: 11
                                                     color: window.bgSurface
+                                                }
+                                            }
+
+                                            // 点击查看大图
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                visible: modelData.source && modelData.source.length > 0
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    mediaViewer.viewerSource = modelData.source
+                                                    mediaViewer.viewerIsVideo = modelData.isVideo || false
+                                                    mediaViewer.viewerContent = modelData.isVideo ? (modelData.content || "") : ""
+                                                    mediaViewer.visible = true
                                                 }
                                             }
 

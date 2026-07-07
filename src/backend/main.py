@@ -4,7 +4,65 @@
 
 # Databases
 
-import sqlite3, bcrypt, secrets, threading, base64, random
+import sqlite3, bcrypt, secrets, threading, logging, sys
+from datetime import datetime, timezone, timedelta
+
+# ── 日志系统配置 ──
+# 北京时间 (UTC+8)
+TZ_BEIJING = timezone(timedelta(hours=8))
+
+def _beijing_time():
+    """返回北京时间字符串，格式: 2026-07-07 14:30:05"""
+    return datetime.now(TZ_BEIJING).strftime("%Y-%m-%d %H:%M:%S")
+
+# 同时输出到控制台和文件
+_log_format = logging.Formatter(
+    "[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+_logger = logging.getLogger("tinyblog")
+_logger.setLevel(logging.DEBUG)
+
+# 控制台 handler
+_ch = logging.StreamHandler(sys.stdout)
+_ch.setFormatter(_log_format)
+_ch.setLevel(logging.DEBUG)
+_logger.addHandler(_ch)
+
+# 文件 handler（写入 api.log）
+_fh = logging.FileHandler("api.log", encoding="utf-8")
+_fh.setFormatter(_log_format)
+_fh.setLevel(logging.DEBUG)
+_logger.addHandler(_fh)
+
+def log_api(endpoint: str, user_id, req_detail: str = "", resp_summary: str = ""):
+    """统一API日志记录。
+    
+    Args:
+        endpoint: 如 "POST /send-msg"
+        user_id: 调用者user_id，None表示未认证
+        req_detail: 请求关键参数简述
+        resp_summary: 响应结果简述
+    """
+    uid = f"user={user_id}" if user_id else "user=?"
+    parts = [endpoint, uid]
+    if req_detail:
+        parts.append(req_detail)
+    if resp_summary:
+        parts.append(f"→ {resp_summary}")
+    else:
+        parts.append("→ (no summary)")
+    _logger.info(" | ".join(parts))
+
+def resolve_user(cookie: str):
+    """通过cookie解析user_id，失败返回None。"""
+    if not cookie:
+        return None
+    row = db_fetchone(
+        "SELECT user_id FROM cookies WHERE token = ?",
+        (cookie,)
+    )
+    return row["user_id"] if row else None
 
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
@@ -251,6 +309,44 @@ if __name__ == "__main__":
             email_verified INTEGER NOT NULL DEFAULT 0,
             email_code TEXT,
             created_at TEXT DEFAULT (datetime('now'))
+
+    # ── 消息功能：数据库迁移 ──
+    # 私信增加 is_read 标记（替代"阅后即焚"模式）
+    try:
+        db_execute("ALTER TABLE offline_messages ADD COLUMN is_read INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    # 群组增加头像字段
+    try:
+        db_execute("ALTER TABLE groups ADD COLUMN avatar TEXT NOT NULL DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    # 统一会话表（私聊 + 群聊统一存储）
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            type TEXT NOT NULL DEFAULT 'private',
+            target_id INTEGER NOT NULL,
+            last_message TEXT DEFAULT '',
+            last_message_time TEXT DEFAULT '',
+            unread_count INTEGER DEFAULT 0,
+            is_hidden INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            UNIQUE(user_id, type, target_id)
+        )
+    """)
+    # 好友申请表
+    db_execute("""
+        CREATE TABLE IF NOT EXISTS friend_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_user_id INTEGER NOT NULL,
+            to_user_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (from_user_id) REFERENCES users(id),
+            FOREIGN KEY (to_user_id) REFERENCES users(id),
+            UNIQUE(from_user_id, to_user_id)
         )
     """)
     db_commit()
@@ -781,7 +877,7 @@ def get_follow_list(body: Get_Follower):
         return {"error": "Bad cookie."}
     followers = [dict(row) for row in db_fetchall(
             """
-            SELECT u.id, u.username, u.nickname
+            SELECT u.id, u.username, u.nickname, u.avatar
             FROM following f
             JOIN users u ON u.id == f.follower
             WHERE f.followee == ?
@@ -790,7 +886,7 @@ def get_follow_list(body: Get_Follower):
             )]
     followees = [dict(now) for now in db_fetchall(
             """
-            SELECT u.id, u.username, u.nickname
+            SELECT u.id, u.username, u.nickname, u.avatar
             FROM following f
             JOIN users u ON u.id == f.followee
             WHERE f.follower == ?
@@ -812,17 +908,25 @@ def follow(body: Follow_Req):
     if not user_id:
         return {"error": "Bad cookie."}
     if user_id == body.followee_id:
+        log_api("POST /follow", user_id, "to=self", "Cannot follow yourself")
         return {"error": "Cannot follow yourself."}
     target = db_fetchone(
             "SELECT id FROM users WHERE id = ?",
             (body.followee_id,)
             )
     if not target:
+        log_api("POST /follow", user_id, f"to={body.followee_id}", "User not exist")
         return {"error": "User not exist."}
     db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
             (user_id, body.followee_id)
             )
+    # 关注成功后，为关注者创建占位会话（使对方出现在会话列表中）
+    db_execute("""
+        INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count)
+        VALUES (?, 'private', ?, '', datetime('now'), 0)
+    """, (user_id, body.followee_id))
     db_commit()
+    log_api("POST /follow", user_id, f"to={body.followee_id}", "success + conversation created")
     return {"status": "success"}
 
 @app.post("/unfollow")
@@ -931,17 +1035,71 @@ class Send_Msg(BaseModel):
 def send_msg(body: Send_Msg):
     user_id = get_user_id(body.cookie)
     if not user_id:
+        log_api("POST /send-msg", None, f"to={body.to_whom_id}", "Bad cookie")
         return {"error": "Bad cookie."}
     existence = db_fetchone(
             "SELECT id FROM users WHERE id = ?",
             (body.to_whom_id,)
             )
     if not existence:
+        log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Bad to_whom_id")
         return {"error": "Bad `to_whom_id`"}
+    if not body.content:
+        log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Empty message")
+        return {"error": "Empty message not allowed."}
+    # ── 单向关注限制：对方未关注我且未回复 → 只能发1条 ──
+    mutual = db_fetchone("""
+        SELECT 1 FROM following f1
+        JOIN following f2 ON f1.followee = f2.follower AND f1.follower = f2.followee
+        WHERE f1.follower = ? AND f1.followee = ?
+    """, (user_id, body.to_whom_id))
+    if not mutual:
+        # 对方是否给我发过消息（即已回复）
+        replied = db_fetchone(
+            "SELECT 1 FROM offline_messages WHERE sender_id = ? AND receiver_id = ?",
+            (body.to_whom_id, user_id)
+        )
+        if not replied:
+            # 我是否已给对方发过消息
+            sent_count = db_fetchone(
+                "SELECT COUNT(*) AS cnt FROM offline_messages WHERE sender_id = ? AND receiver_id = ?",
+                (user_id, body.to_whom_id)
+            )
+            already_sent = sent_count["cnt"] if sent_count else 0
+            if already_sent >= 1:
+                log_api("POST /send-msg", user_id,
+                        f"to={body.to_whom_id} one_way_limit sent={already_sent}", "blocked: 单向限制")
+                return {"error": "对方尚未回复，只能发送一条消息。请等待对方回复后再发送。"}
+            log_api("POST /send-msg", user_id,
+                    f"to={body.to_whom_id} one_way(1st msg)", "allowed")
+        else:
+            log_api("POST /send-msg", user_id,
+                    f"to={body.to_whom_id} one_way(replied)", "allowed")
+    # 1. 插入消息
     db_execute("INSERT INTO offline_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
             (user_id, body.to_whom_id, body.content,)
             )
+    # 2. 更新/创建发送方的会话记录（unread=0, is_hidden=0）
+    db_execute("""
+        INSERT INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count, is_hidden)
+        VALUES (?, 'private', ?, ?, datetime('now'), 0, 0)
+        ON CONFLICT(user_id, type, target_id) DO UPDATE SET
+            last_message = excluded.last_message,
+            last_message_time = excluded.last_message_time,
+            is_hidden = 0
+    """, (user_id, body.to_whom_id, body.content))
+    # 3. 更新/创建接收方的会话记录（unread+1, 如果已隐藏则重新激活）
+    db_execute("""
+        INSERT INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count, is_hidden)
+        VALUES (?, 'private', ?, ?, datetime('now'), 1, 0)
+        ON CONFLICT(user_id, type, target_id) DO UPDATE SET
+            last_message = excluded.last_message,
+            last_message_time = excluded.last_message_time,
+            unread_count = unread_count + 1,
+            is_hidden = 0
+    """, (body.to_whom_id, user_id, body.content))
     db_commit()
+    log_api("POST /send-msg", user_id, f"to={body.to_whom_id} len={len(body.content)}", "success")
     return {"status": "success"}
 
 class Recv_Msg(BaseModel):
@@ -951,16 +1109,19 @@ class Recv_Msg(BaseModel):
 def recv_msg(body: Recv_Msg):
     user_id = get_user_id(body.cookie)
     if not user_id:
+        log_api("POST /recv-msg [DEPRECATED]", None, "", "Bad cookie")
         return {"error": "Bad cookie."}
     msgs = [dict(row) for row in db_fetchall(
-            "SELECT sender_id, sent_at, content FROM offline_messages WHERE receiver_id = ?",
+            "SELECT sender_id, sent_at, content FROM offline_messages WHERE receiver_id = ? AND is_read = 0",
             (user_id,)
             )]
+    # 标记为已读，不再删除
     db_execute(
-            "DELETE FROM offline_messages WHERE receiver_id = ?",
+            "UPDATE offline_messages SET is_read = 1 WHERE receiver_id = ? AND is_read = 0",
             (user_id,)
             )
     db_commit()
+    log_api("POST /recv-msg [DEPRECATED]", user_id, "", f"{len(msgs)} msgs")
     return {"msgs": msgs}
 
 class Pub_Post(BaseModel):
@@ -1105,6 +1266,7 @@ def create_group(body: Create_Group_Req):
     if not user_id:
         return {"error": "Bad cookie."}
     if not body.name:
+        log_api("POST /create-group", user_id, "", "Empty name")
         return {"error": "Group name cannot be empty."}
     db_execute("INSERT INTO groups (name, owner_id) VALUES (?, ?)",
             (body.name, user_id)
@@ -1114,7 +1276,13 @@ def create_group(body: Create_Group_Req):
             "INSERT INTO user_in_group (group_id, user_id, role) VALUES (?, ?, ?)",
             (group_id, user_id, "owner")
             )
+    # 为创建者初始化会话记录
+    db_execute("""
+        INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count)
+        VALUES (?, 'group', ?, '群聊已创建', datetime('now'), 0)
+    """, (user_id, group_id))
     db_commit()
+    log_api("POST /create-group", user_id, f"name={body.name}", f"group_id={group_id}")
     return {"group_id": group_id}
 
 class Join_Group_Req(BaseModel):
@@ -1131,11 +1299,18 @@ def join_group(body: Join_Group_Req):
             (body.group_id,)
             )
     if not group:
+        log_api("POST /join-group", user_id, f"group={body.group_id}", "Group not exist")
         return {"error": "Group not exist."}
     db_execute("INSERT OR IGNORE INTO user_in_group (group_id, user_id) VALUES (?, ?)",
             (body.group_id, user_id)
             )
+    # 为新成员创建会话记录
+    db_execute("""
+        INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count)
+        VALUES (?, 'group', ?, '', datetime('now'), 0)
+    """, (user_id, body.group_id))
     db_commit()
+    log_api("POST /join-group", user_id, f"group={body.group_id}", "success")
     return {"status": "success"}
 
 class Leave_Group_Req(BaseModel):
@@ -1150,7 +1325,13 @@ def leave_group(body: Leave_Group_Req):
     db_execute("DELETE FROM user_in_group WHERE group_id = ? AND user_id = ?",
             (body.group_id, user_id)
             )
+    # 隐藏该用户的群聊会话
+    db_execute("""
+        UPDATE conversations SET is_hidden = 1
+        WHERE user_id = ? AND type = 'group' AND target_id = ?
+    """, (user_id, body.group_id))
     db_commit()
+    log_api("POST /leave-group", user_id, f"group={body.group_id}", "success")
     return {"status": "success"}
 
 class Send_Group_Msg_Req(BaseModel):
@@ -1168,19 +1349,49 @@ def send_group_msg(body: Send_Group_Msg_Req):
             (body.group_id, user_id)
             )
     if not in_group:
+        log_api("POST /send-group-msg", user_id, f"group={body.group_id}", "Not in group")
         return {"error": "You are not in this group."}
     if not body.content:
+        log_api("POST /send-group-msg", user_id, f"group={body.group_id}", "Empty message")
         return {"error": "Empty message not allowed."}
+    # 1. 插入群消息
     db_execute("INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)",
             (body.group_id, user_id, body.content)
             )
+    # 2. 获取发送者昵称用于会话预览
+    sender = db_fetchone("SELECT nickname FROM users WHERE id = ?", (user_id,))
+    sender_name = sender["nickname"] if sender else "Unknown"
+    # 3. 更新所有群成员的会话记录
+    members = db_fetchall("SELECT user_id FROM user_in_group WHERE group_id = ?", (body.group_id,))
+    for m in members:
+        if m["user_id"] == user_id:
+            db_execute("""
+                INSERT INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count, is_hidden)
+                VALUES (?, 'group', ?, ?, datetime('now'), 0, 0)
+                ON CONFLICT(user_id, type, target_id) DO UPDATE SET
+                    last_message = excluded.last_message,
+                    last_message_time = excluded.last_message_time,
+                    is_hidden = 0
+            """, (user_id, body.group_id, f"我: {body.content}"))
+        else:
+            db_execute("""
+                INSERT INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count, is_hidden)
+                VALUES (?, 'group', ?, ?, datetime('now'), 1, 0)
+                ON CONFLICT(user_id, type, target_id) DO UPDATE SET
+                    last_message = excluded.last_message,
+                    last_message_time = excluded.last_message_time,
+                    unread_count = unread_count + 1,
+                    is_hidden = 0
+            """, (m["user_id"], body.group_id, f"{sender_name}: {body.content}"))
     db_commit()
+    log_api("POST /send-group-msg", user_id, f"group={body.group_id} members={len(members)} len={len(body.content)}", "success")
     return {"status": "success"}
 
 class Recv_Group_Msg_Req(BaseModel):
     cookie: str
     group_id: int
     count: int = 20
+    before_id: int = 0       # 游标分页：获取id < before_id的消息，0=最新
 
 @app.post("/recv-group-msg")
 def recv_group_msg(body: Recv_Group_Msg_Req):
@@ -1192,22 +1403,53 @@ def recv_group_msg(body: Recv_Group_Msg_Req):
             (body.group_id, user_id)
             )
     if not membership:
+        log_api("POST /recv-group-msg", user_id, f"group={body.group_id}", "Not in group")
         return {"error": "You are not in this group."}
-    messages = db_fetchall("""
-            SELECT gm.id, gm.sender_id, u.username, u.nickname, gm.content, gm.sent_at
-            FROM group_messages gm
-            JOIN users u ON u.id = gm.sender_id
-            WHERE gm.group_id = ? AND gm.id > ?
-            ORDER BY gm.id ASC
-            LIMIT ?
-    """, (body.group_id, membership["last_read_id"], body.count))
+    last_read = membership["last_read_id"]
+
+    # 游标分页：before_id>0 时加载更早的消息
+    if body.before_id > 0:
+        messages = db_fetchall("""
+                SELECT gm.id, gm.sender_id, u.username, u.nickname, u.avatar, gm.content, gm.sent_at
+                FROM group_messages gm
+                JOIN users u ON u.id = gm.sender_id
+                WHERE gm.group_id = ? AND gm.id < ?
+                ORDER BY gm.id DESC
+                LIMIT ?
+        """, (body.group_id, body.before_id, body.count))
+        messages = list(reversed(messages))  # 反转为时间正序
+        has_more = len(messages) == body.count
+        page_mode = f"before_id={body.before_id}"
+    else:
+        # before_id=0: 返回最新 N 条消息（不受 last_read_id 影响，与私聊一致）
+        messages = db_fetchall("""
+                SELECT gm.id, gm.sender_id, u.username, u.nickname, u.avatar, gm.content, gm.sent_at
+                FROM group_messages gm
+                JOIN users u ON u.id = gm.sender_id
+                WHERE gm.group_id = ?
+                ORDER BY gm.id DESC
+                LIMIT ?
+        """, (body.group_id, body.count))
+        messages = list(reversed(messages))  # 反转为时间正序
+        has_more = len(messages) == body.count
+        page_mode = "latest"
+
+    # 更新 last_read_id（仅用于未读计数追踪，不影响消息返回）
     if messages:
-        db_execute(
-                "UPDATE user_in_group SET last_read_id = ? WHERE group_id = ? AND user_id = ?",
-                (messages[-1]["id"], body.group_id, user_id)
-                )
-        db_commit()
-    return {"messages": [dict(m) for m in messages]}
+        max_id = max(m["id"] for m in messages)
+        if max_id > last_read:
+            db_execute(
+                    "UPDATE user_in_group SET last_read_id = ? WHERE group_id = ? AND user_id = ?",
+                    (max_id, body.group_id, user_id)
+                    )
+    # 重置该群聊会话的未读计数
+    db_execute("""
+        UPDATE conversations SET unread_count = 0
+        WHERE user_id = ? AND type = 'group' AND target_id = ?
+    """, (user_id, body.group_id))
+    db_commit()
+    log_api("POST /recv-group-msg", user_id, f"group={body.group_id} {page_mode}", f"{len(messages)} msgs has_more={has_more}")
+    return {"messages": [dict(m) for m in messages], "has_more": has_more}
 
 class Get_Group_Members_Req(BaseModel):
     cookie: str
@@ -1225,6 +1467,7 @@ def get_group_members(body: Get_Group_Members_Req):
             WHERE ug.group_id = ?
             ORDER BY ug.joined_at ASC
     """, (body.group_id,))
+    log_api("POST /get-group-members", user_id, f"group={body.group_id}", f"{len(members)} members")
     return {"members": [dict(m) for m in members]}
 
 class Get_My_Groups_Req(BaseModel):
@@ -1242,6 +1485,7 @@ def get_my_groups(body: Get_My_Groups_Req):
             WHERE ug.user_id = ?
             ORDER BY ug.joined_at DESC
     """, (user_id,))
+    log_api("POST /get-my-groups", user_id, "", f"{len(groups)} groups")
     return {"groups": [dict(g) for g in groups]}
 
 # =============================================================================
@@ -1293,7 +1537,7 @@ def check_cookie(body: Check_Cookie_Req):
         "followee_count": followee_count["cnt"] if followee_count else 0,
     }
 
-# =============================================================================
+# ======================================================================
 # 用户系统：查询自己的邮箱
 # POST /get-email — 输入 cookie，返回 email
 # =============================================================================
@@ -1312,6 +1556,7 @@ def get_email(body: Get_Email_Req):
     if not user:
         return {"error": "User not exist."}
     return {"email": user["email"] or ""}
+=======
 
 class Logout_Req(BaseModel):
     cookie: str
@@ -1556,6 +1801,502 @@ def get_avatar(user_id: int = 0):
     if not row:
         return {"error": "User not found."}
     return {"user_id": user_id, "avatar": row["avatar"], "signature": row["signature"]}
+
+# =============================================================================
+# 消息功能：新增 API 端点
+# =============================================================================
+
+# ── Pydantic 模型 ──
+
+class Fetch_Conversations_Req(BaseModel):
+    cookie: str
+
+class Hide_Conversation_Req(BaseModel):
+    cookie: str
+    conversation_id: int
+
+class Fetch_Private_Msgs_Req(BaseModel):
+    cookie: str
+    with_user_id: int
+    before_id: int = 0      # 游标分页：获取id < before_id的消息，0=最新
+    count: int = 20
+
+class Search_Contacts_Req(BaseModel):
+    cookie: str
+    keyword: str
+    type: str = "all"       # "all" | "user" | "group"
+
+class Get_Contacts_Req(BaseModel):
+    cookie: str
+
+class Get_User_Detail_Req(BaseModel):
+    cookie: str
+    user_id: int
+
+class Get_Group_Detail_Req(BaseModel):
+    cookie: str
+    group_id: int
+
+class Update_Group_Req(BaseModel):
+    cookie: str
+    group_id: int
+    name: str = ""          # 可选：新群名称
+    avatar: str = ""        # 可选：新群头像(base64)
+
+# ── 2.3.1 POST /get-conversations ──
+
+@app.post("/get-conversations")
+def get_conversations(body: Fetch_Conversations_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /get-conversations", None, "", "Bad cookie")
+        return {"error": "Bad cookie."}
+    convs = db_fetchall("""
+        SELECT id, type, target_id, last_message, last_message_time, unread_count
+        FROM conversations
+        WHERE user_id = ? AND is_hidden = 0
+        ORDER BY last_message_time DESC
+    """, (user_id,))
+    result = []
+    for c in convs:
+        item = dict(c)
+        if c["type"] == "private":
+            target = db_fetchone(
+                    "SELECT nickname, avatar FROM users WHERE id = ?",
+                    (c["target_id"],)
+                    )
+            item["target_name"] = target["nickname"] if target else "Unknown"
+            item["target_avatar"] = target["avatar"] if target else ""
+        else:
+            target = db_fetchone(
+                    "SELECT name, avatar FROM groups WHERE id = ?",
+                    (c["target_id"],)
+                    )
+            item["target_name"] = target["name"] if target else "Unknown"
+            item["target_avatar"] = target["avatar"] if target else ""
+        result.append(item)
+    unread_total = sum(c.get("unread_count", 0) for c in result)
+    log_api("POST /get-conversations", user_id, "", f"{len(result)} convs, unread_total={unread_total}")
+    return {"conversations": result}
+
+# ── 2.3.2 POST /get-private-messages ──
+
+@app.post("/get-private-messages")
+def get_private_messages(body: Fetch_Private_Msgs_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /get-private-messages", None, f"with={body.with_user_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    # 游标分页查询（双方的消息都查）
+    if body.before_id > 0:
+        msgs = db_fetchall("""
+            SELECT m.id, m.sender_id, u.nickname AS sender_name, u.avatar AS sender_avatar, m.sent_at, m.content
+            FROM offline_messages m
+            JOIN users u ON u.id = m.sender_id
+            WHERE ((m.sender_id = ? AND m.receiver_id = ?)
+                OR (m.sender_id = ? AND m.receiver_id = ?))
+              AND m.id < ?
+            ORDER BY m.id DESC
+            LIMIT ?
+        """, (user_id, body.with_user_id, body.with_user_id, user_id,
+              body.before_id, body.count))
+        has_more = len(msgs) == body.count
+        msgs_list = [dict(m) for m in reversed(msgs)]
+        page_mode = f"before_id={body.before_id}"
+    else:
+        msgs = db_fetchall("""
+            SELECT m.id, m.sender_id, u.nickname AS sender_name, u.avatar AS sender_avatar, m.sent_at, m.content
+            FROM offline_messages m
+            JOIN users u ON u.id = m.sender_id
+            WHERE ((m.sender_id = ? AND m.receiver_id = ?)
+                OR (m.sender_id = ? AND m.receiver_id = ?))
+            ORDER BY m.id DESC
+            LIMIT ?
+        """, (user_id, body.with_user_id, body.with_user_id, user_id, body.count))
+        has_more = len(msgs) == body.count
+        msgs_list = [dict(m) for m in reversed(msgs)]
+        page_mode = "latest"
+    # 将对方发来的未读消息标记为已读
+    db_execute("""
+        UPDATE offline_messages SET is_read = 1
+        WHERE sender_id = ? AND receiver_id = ? AND is_read = 0
+    """, (body.with_user_id, user_id))
+    # 重置该私聊会话的未读计数
+    db_execute("""
+        UPDATE conversations SET unread_count = 0
+        WHERE user_id = ? AND type = 'private' AND target_id = ?
+    """, (user_id, body.with_user_id))
+    db_commit()
+    log_api("POST /get-private-messages", user_id, f"with={body.with_user_id} {page_mode}", f"{len(msgs_list)} msgs has_more={has_more}")
+    return {"messages": msgs_list, "has_more": has_more}
+
+# ── 2.3.3 POST /search-contacts ──
+
+@app.post("/search-contacts")
+def search_contacts(body: Search_Contacts_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /search-contacts", None, f"kw={body.keyword} type={body.type}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    keyword = f"%{body.keyword}%"
+    users_result = []
+    groups_result = []
+    if body.type in ("all", "user"):
+        users = db_fetchall("""
+            SELECT u.id, u.username, u.nickname, u.avatar,
+                   (SELECT 1 FROM following WHERE follower = ? AND followee = u.id) AS is_following,
+                   (SELECT 1 FROM following WHERE follower = u.id AND followee = ?) AS is_followed_back,
+                   (SELECT status FROM friend_requests WHERE from_user_id = ? AND to_user_id = u.id) AS sent_request_status,
+                   (SELECT status FROM friend_requests WHERE from_user_id = u.id AND to_user_id = ?) AS received_request_status
+            FROM users u
+            WHERE u.id != ?
+              AND (u.username LIKE ? OR u.nickname LIKE ?)
+            LIMIT 30
+        """, (user_id, user_id, user_id, user_id, user_id, keyword, keyword))
+        for u in users:
+            d = dict(u)
+            d["is_following"] = d["is_following"] is not None
+            d["is_mutual"] = d["is_following"] and (d["is_followed_back"] is not None)
+            # 好友请求状态: None=无申请, "pending"=待处理, "accepted"=已接受, "rejected"=已拒绝
+            d["friend_request_status"] = d["sent_request_status"] or d["received_request_status"]
+            del d["is_followed_back"]
+            del d["sent_request_status"]
+            del d["received_request_status"]
+            users_result.append(d)
+    if body.type in ("all", "group"):
+        groups = db_fetchall("""
+            SELECT g.id, g.name, g.avatar, g.owner_id,
+                   (SELECT 1 FROM user_in_group WHERE group_id = g.id AND user_id = ?) AS is_member
+            FROM groups g
+            WHERE g.name LIKE ?
+            LIMIT 30
+        """, (user_id, keyword))
+        for g in groups:
+            d = dict(g)
+            d["is_member"] = d["is_member"] is not None
+            groups_result.append(d)
+    log_api("POST /search-contacts", user_id, f"kw={body.keyword} type={body.type}", f"{len(users_result)} users + {len(groups_result)} groups")
+    return {"users": users_result, "groups": groups_result}
+
+# ── 2.3.4 POST /get-contacts ──
+
+@app.post("/get-contacts")
+def get_contacts(body: Get_Contacts_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /get-contacts", None, "", "Bad cookie")
+        return {"error": "Bad cookie."}
+    # 好友（双向关注）
+    mutual = db_fetchall("""
+        SELECT u.id, u.username, u.nickname, u.avatar, u.signature
+        FROM users u
+        WHERE u.id IN (
+            SELECT f1.followee FROM following f1 WHERE f1.follower = ?
+            INTERSECT
+            SELECT f2.follower FROM following f2 WHERE f2.followee = ?
+        )
+    """, (user_id, user_id))
+    # 仅关注的（单向）
+    followed_only = db_fetchall("""
+        SELECT u.id, u.username, u.nickname, u.avatar, u.signature
+        FROM users u
+        WHERE u.id IN (SELECT followee FROM following WHERE follower = ?)
+          AND u.id NOT IN (SELECT follower FROM following WHERE followee = ?)
+    """, (user_id, user_id))
+    log_api("POST /get-contacts", user_id, "", f"mutual={len(mutual)} followed={len(followed_only)}")
+    # 待处理的好友申请（别人发给我的）
+    pending_requests = db_fetchall("""
+        SELECT fr.id AS request_id, u.id, u.username, u.nickname, u.avatar,
+               fr.status, fr.created_at AS requested_at
+        FROM friend_requests fr
+        JOIN users u ON u.id = fr.from_user_id
+        WHERE fr.to_user_id = ? AND fr.status = 'pending'
+        ORDER BY fr.created_at DESC
+    """, (user_id,))
+    return {
+        "mutual": [dict(m) for m in mutual],
+        "followed_only": [dict(f) for f in followed_only],
+        "pending_requests": [dict(p) for p in pending_requests]
+    }
+
+# ── 2.3.5 POST /hide-conversation ──
+
+@app.post("/hide-conversation")
+def hide_conversation(body: Hide_Conversation_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /hide-conversation", None, f"conv={body.conversation_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    conv = db_fetchone(
+            "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
+            (body.conversation_id, user_id)
+            )
+    if not conv:
+        log_api("POST /hide-conversation", user_id, f"conv={body.conversation_id}", "Not found")
+        return {"error": "Conversation not found."}
+    db_execute(
+            "UPDATE conversations SET is_hidden = 1 WHERE id = ? AND user_id = ?",
+            (body.conversation_id, user_id)
+            )
+    db_commit()
+    log_api("POST /hide-conversation", user_id, f"conv={body.conversation_id}", "success")
+    return {"status": "success"}
+
+# ── 2.3.6 POST /get-user-detail ──
+
+@app.post("/get-user-detail")
+def get_user_detail(body: Get_User_Detail_Req):
+    my_id = resolve_user(body.cookie)
+    if not my_id:
+        log_api("POST /get-user-detail", None, f"target={body.user_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    target = db_fetchone(
+            "SELECT id, username, nickname, avatar, signature FROM users WHERE id = ?",
+            (body.user_id,)
+            )
+    if not target:
+        log_api("POST /get-user-detail", my_id, f"target={body.user_id}", "User not exist")
+        return {"error": "User not exist."}
+    post_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM posts WHERE publisher_id = ?",
+            (body.user_id,)
+            )
+    follower_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM following WHERE followee = ?",
+            (body.user_id,)
+            )
+    followee_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM following WHERE follower = ?",
+            (body.user_id,)
+            )
+    # 关注关系
+    i_follow = db_fetchone(
+            "SELECT 1 FROM following WHERE follower = ? AND followee = ?",
+            (my_id, body.user_id)
+            )
+    follows_me = db_fetchone(
+            "SELECT 1 FROM following WHERE follower = ? AND followee = ?",
+            (body.user_id, my_id)
+            )
+    log_api("POST /get-user-detail", my_id, f"target={body.user_id}", f"user={target['username']}")
+    return {
+        "id": target["id"],
+        "username": target["username"],
+        "nickname": target["nickname"],
+        "avatar": target["avatar"],
+        "signature": target["signature"],
+        "post_count": post_count["cnt"] if post_count else 0,
+        "follower_count": follower_count["cnt"] if follower_count else 0,
+        "followee_count": followee_count["cnt"] if followee_count else 0,
+        "is_following": i_follow is not None,
+        "is_mutual": (i_follow is not None) and (follows_me is not None),
+    }
+
+# ── 2.3.7 POST /get-group-detail ──
+
+@app.post("/get-group-detail")
+def get_group_detail(body: Get_Group_Detail_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /get-group-detail", None, f"group={body.group_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    group = db_fetchone(
+            "SELECT id, name, owner_id, avatar, created_at FROM groups WHERE id = ?",
+            (body.group_id,)
+            )
+    if not group:
+        log_api("POST /get-group-detail", user_id, f"group={body.group_id}", "Group not exist")
+        return {"error": "Group not exist."}
+    my_membership = db_fetchone(
+            "SELECT role FROM user_in_group WHERE group_id = ? AND user_id = ?",
+            (body.group_id, user_id)
+            )
+    members = db_fetchall("""
+        SELECT u.id, u.username, u.nickname, u.avatar, ug.role, ug.joined_at
+        FROM user_in_group ug
+        JOIN users u ON u.id = ug.user_id
+        WHERE ug.group_id = ?
+        ORDER BY ug.joined_at ASC
+    """, (body.group_id,))
+    member_count = len(members)
+    log_api("POST /get-group-detail", user_id, f"group={body.group_id}", f"name={group['name']} members={member_count}")
+    return {
+        "id": group["id"],
+        "name": group["name"],
+        "avatar": group["avatar"],
+        "owner_id": group["owner_id"],
+        "created_at": group["created_at"],
+        "member_count": member_count,
+        "members": [dict(m) for m in members],
+        "my_role": my_membership["role"] if my_membership else None,
+    }
+
+# ── 补充：POST /update-group（更新群名称/头像，仅群主可操作）──
+
+@app.post("/update-group")
+def update_group(body: Update_Group_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /update-group", None, f"group={body.group_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    group = db_fetchone(
+            "SELECT id, owner_id FROM groups WHERE id = ?",
+            (body.group_id,)
+            )
+    if not group:
+        log_api("POST /update-group", user_id, f"group={body.group_id}", "Group not exist")
+        return {"error": "Group not exist."}
+    if group["owner_id"] != user_id:
+        log_api("POST /update-group", user_id, f"group={body.group_id}", "Not owner")
+        return {"error": "Only group owner can update group info."}
+    changes = []
+    if body.name:
+        db_execute(
+                "UPDATE groups SET name = ? WHERE id = ?",
+                (body.name, body.group_id)
+                )
+        changes.append("name")
+    if body.avatar:
+        db_execute(
+                "UPDATE groups SET avatar = ? WHERE id = ?",
+                (body.avatar, body.group_id)
+                )
+        changes.append("avatar")
+    db_commit()
+    log_api("POST /update-group", user_id, f"group={body.group_id}", f"updated: {','.join(changes) if changes else 'nothing'}")
+    return {"status": "success"}
+
+# =============================================================================
+# 好友申请系统 (BUG 1 修复)
+# =============================================================================
+
+class Send_Friend_Req_Req(BaseModel):
+    cookie: str
+    to_user_id: int
+
+@app.post("/send-friend-request")
+def send_friend_request(body: Send_Friend_Req_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /send-friend-request", None, f"to={body.to_user_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    if user_id == body.to_user_id:
+        log_api("POST /send-friend-request", user_id, "to=self", "Cannot friend yourself")
+        return {"error": "Cannot send friend request to yourself."}
+    target = db_fetchone("SELECT id FROM users WHERE id = ?", (body.to_user_id,))
+    if not target:
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "User not exist")
+        return {"error": "User not exist."}
+    # 检查是否已是好友（双向关注）
+    mutual = db_fetchone("""
+        SELECT 1 FROM following f1
+        WHERE f1.follower = ? AND f1.followee = ?
+        INTERSECT
+        SELECT 1 FROM following f2
+        WHERE f2.follower = ? AND f2.followee = ?
+    """, (user_id, body.to_user_id, body.to_user_id, user_id))
+    if mutual:
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "Already friends")
+        return {"error": "Already friends."}
+    # 检查是否已有待处理申请
+    existing = db_fetchone(
+        "SELECT id, status FROM friend_requests WHERE from_user_id = ? AND to_user_id = ?",
+        (user_id, body.to_user_id)
+    )
+    if existing:
+        if existing["status"] == "pending":
+            log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "Request already pending")
+            return {"error": "Friend request already sent."}
+        # 之前被拒绝过，允许重新发送：更新状态
+        db_execute(
+            "UPDATE friend_requests SET status = 'pending', created_at = datetime('now') WHERE id = ?",
+            (existing["id"],)
+        )
+        db_commit()
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "request re-sent")
+        return {"status": "success", "request_id": existing["id"]}
+    db_execute(
+        "INSERT INTO friend_requests (from_user_id, to_user_id) VALUES (?, ?)",
+        (user_id, body.to_user_id)
+    )
+    db_commit()
+    log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", f"request_id={db_lastrowid()}")
+    return {"status": "success", "request_id": db_lastrowid()}
+
+class Get_Friend_Reqs_Req(BaseModel):
+    cookie: str
+
+@app.post("/get-friend-requests")
+def get_friend_requests(body: Get_Friend_Reqs_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /get-friend-requests", None, "", "Bad cookie")
+        return {"error": "Bad cookie."}
+    # 收到的申请
+    incoming = db_fetchall("""
+        SELECT fr.id, fr.from_user_id, u.username, u.nickname, u.avatar, fr.status, fr.created_at
+        FROM friend_requests fr
+        JOIN users u ON u.id = fr.from_user_id
+        WHERE fr.to_user_id = ? AND fr.status = 'pending'
+        ORDER BY fr.created_at DESC
+    """, (user_id,))
+    # 发出的申请
+    outgoing = db_fetchall("""
+        SELECT fr.id, fr.to_user_id, u.username, u.nickname, u.avatar, fr.status, fr.created_at
+        FROM friend_requests fr
+        JOIN users u ON u.id = fr.to_user_id
+        WHERE fr.from_user_id = ?
+        ORDER BY fr.created_at DESC
+    """, (user_id,))
+    log_api("POST /get-friend-requests", user_id, "",
+            f"incoming={len(incoming)} outgoing={len(outgoing)}")
+    return {
+        "incoming": [dict(r) for r in incoming],
+        "outgoing": [dict(r) for r in outgoing]
+    }
+
+class Handle_Friend_Req_Req(BaseModel):
+    cookie: str
+    request_id: int
+    action: str   # "accept" | "reject"
+
+@app.post("/handle-friend-request")
+def handle_friend_request(body: Handle_Friend_Req_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /handle-friend-request", None, f"req={body.request_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    if body.action not in ("accept", "reject"):
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", f"Bad action: {body.action}")
+        return {"error": "Action must be 'accept' or 'reject'."}
+    req = db_fetchone(
+        "SELECT id, from_user_id, to_user_id, status FROM friend_requests WHERE id = ?",
+        (body.request_id,)
+    )
+    if not req:
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "Request not found")
+        return {"error": "Friend request not found."}
+    if req["to_user_id"] != user_id:
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "Not your request")
+        return {"error": "This request is not for you."}
+    if req["status"] != "pending":
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", f"Already {req['status']}")
+        return {"error": f"Request already {req['status']}."}
+    if body.action == "accept":
+        # 双向关注 → 成为好友
+        db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
+                   (req["from_user_id"], req["to_user_id"]))
+        db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
+                   (req["to_user_id"], req["from_user_id"]))
+        db_execute("UPDATE friend_requests SET status = 'accepted' WHERE id = ?",
+                   (body.request_id,))
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "accepted")
+    else:
+        db_execute("UPDATE friend_requests SET status = 'rejected' WHERE id = ?",
+                   (body.request_id,))
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "rejected")
+    db_commit()
+    return {"status": "success", "result": body.action}
 
 if __name__ == "__main__":
     uvicorn.run(app, port = 18999, access_log = False)

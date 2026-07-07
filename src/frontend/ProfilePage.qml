@@ -110,6 +110,109 @@ Rectangle {
         }
     }
 
+    property var profileData: ({})
+    property bool editing: false
+    property string newNickname: ""
+    property string newAvatar: ""
+    property string newSignature: ""
+
+    // 每次页面显示时刷新资料
+    onVisibleChanged: {
+        if (visible) {
+            api.fetchProfile()
+        }
+    }
+
+    // 监听 profileFetched 信号
+    Connections {
+        target: api
+
+        function onProfileFetched(profile) {
+            root.profileData = profile
+            root.newNickname = profile.nickname || ""
+            root.newSignature = profile.signature || ""
+            root.newAvatar = ""
+            root.editing = false
+        }
+
+        function onProfileUpdated() {
+            // 更新成功后重新加载
+            api.fetchProfile()
+        }
+
+        function onErrorOccurred(message) {
+            // 显示错误提示（可选）
+            console.log("Profile error:", message)
+        }
+    }
+
+    // 头像选择对话框
+    FileDialog {
+        id: avatarPicker
+        title: qsTr("选择头像")
+        nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"]
+        onAccepted: {
+            var b64 = api.readFileAsBase64(selectedFile)
+            if (b64.length > 0) {
+                root.newAvatar = b64
+            }
+        }
+    }
+
+    // 头像大图预览弹窗
+    Popup {
+        id: avatarPreview
+        modal: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        anchors.centerIn: Overlay.overlay
+        background: Rectangle {
+            color: "#00000000"
+        }
+
+        contentItem: Item {
+            implicitWidth: Math.min(300, root.width - 40)
+            implicitHeight: implicitWidth
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 12
+                color: "white"
+
+                Image {
+                    id: previewImg
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    source: avatarImg.visible ? avatarImg.source : ""
+                    fillMode: Image.PreserveAspectFit
+                }
+
+                // 关闭按钮
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 4
+                    width: 28
+                    height: 28
+                    radius: 14
+                    color: "#00000066"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "✕"
+                        color: "white"
+                        font.pixelSize: 16
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: avatarPreview.close()
+                    }
+                }
+            }
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16

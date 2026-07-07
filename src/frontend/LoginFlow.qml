@@ -569,5 +569,14 @@ Rectangle {
             if (step >= 1 && step <= 6)
                 errorText = msg
         }
+        function onLoginSuccess(cookie) {
+            errorText = ""
+        }
+        function onCookieCheckComplete(valid, userId) {
+            // 不做任何事，避免干扰登录流程
+        }
+        // 注意：不监听 onErrorOccurred，因为它包含所有模块（消息/关注/群组）的错误，
+        // 如果在注册/登录页显示了这些无关错误，用户会看到莫名其妙的提示。
+        // 注册和登录的错误直接在按钮 onClicked 中通过回调处理。
     }
 }

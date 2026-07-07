@@ -28,6 +28,21 @@ qt_add_qml_module(appfrontend
         SquarePage.qml
         MessagesPage.qml
         ProfilePage.qml
+        ConversationListPanel.qml
+        ConversationItem.qml
+        ChatPanel.qml
+        MessageBubble.qml
+)
+
+# ── 国际化 / 翻译 ──
+set(TS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/translations)
+file(MAKE_DIRECTORY ${TS_DIR})
+
+qt_add_translations(appfrontend
+    TS_FILES
+        ${TS_DIR}/appfrontend_zh_CN.ts
+        ${TS_DIR}/appfrontend_en_US.ts
+    QM_FILES_OUTPUT_VARIABLE appfrontend_qm_files
 )
 
 # ── 国际化 / 翻译 ──

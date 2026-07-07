@@ -588,7 +588,7 @@ void ApiClient::follow(int followee_id) {
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
-        emit errorOccurred("follow: " + QString::number(obj["follow_id"].toInt()));
+        // 关注成功，不发射全局errorOccurred
     });
 }
 
@@ -600,7 +600,7 @@ void ApiClient::unfollow(int followee_id) {
         (void)obj;
         if (!checkReply(reply, obj))
             return;
-        emit errorOccurred("unfollow: " + QString::number(obj["follow_id"].toInt()));
+        // 取消关注成功，不发射全局errorOccurred
     });
 }
 
@@ -899,8 +899,10 @@ void ApiClient::receiveGroupMessages(int group_id, int count) {
     QNetworkReply* reply = postJson("/recv-group-msg", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
-        if (!checkReply(reply, obj))
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::receiveGroupMessages] 请求失败";
             return;
+        }
 
         QList<GroupMessageInfo> msgs;
         for (const auto& v : obj["messages"].toArray())
@@ -936,5 +938,162 @@ void ApiClient::fetchMyGroups() {
         for (const auto& v : obj["groups"].toArray())
             groups.append(groupFromJson(v.toObject()));
         emit myGroupsFetched(groups);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ── 消息功能（新增）──
+// 以下方法依赖后端新增端点，当前为桩实现。
+// 后端完成后取消注释实际逻辑即可。
+// ═══════════════════════════════════════════════════════════════
+
+void ApiClient::fetchConversations() {
+    qDebug() << "[ApiClient::fetchConversations] 请求会话列表...";
+    QJsonObject body = withCookie();
+    QNetworkReply* reply = postJson("/get-conversations", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchConversations] 请求失败";
+            return;
+        }
+
+        QVariantList conversations;
+        for (const auto& v : obj["conversations"].toArray())
+            conversations.append(v.toObject().toVariantMap());
+        qDebug() << "[ApiClient::fetchConversations] 成功获取" << conversations.size() << "个会话";
+        emit conversationsFetched(conversations);
+    });
+}
+
+void ApiClient::hideConversation(int conversation_id) {
+    qDebug() << "[ApiClient::hideConversation] 隐藏会话 id=" << conversation_id;
+    QJsonObject body = withCookie({{"conversation_id", conversation_id}});
+    QNetworkReply* reply = postJson("/hide-conversation", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, conversation_id]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::hideConversation] 隐藏失败 id=" << conversation_id;
+            return;
+        }
+        qDebug() << "[ApiClient::hideConversation] 成功隐藏 id=" << conversation_id;
+        emit conversationHidden(conversation_id);
+    });
+}
+
+void ApiClient::fetchPrivateMessages(int with_user_id, int before_id, int count) {
+    qDebug() << "[ApiClient::fetchPrivateMessages] 请求私聊历史 with_user_id=" << with_user_id
+             << "before_id=" << before_id << "count=" << count;
+    QJsonObject body = withCookie({
+        {"with_user_id", with_user_id},
+        {"before_id", before_id},
+        {"count", count}
+    });
+    QNetworkReply* reply = postJson("/get-private-messages", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchPrivateMessages] 请求失败";
+            return;
+        }
+
+        QVariantList messages;
+        for (const auto& v : obj["messages"].toArray())
+            messages.append(v.toObject().toVariantMap());
+        bool hasMore = obj["has_more"].toBool(false);
+        qDebug() << "[ApiClient::fetchPrivateMessages] 成功获取" << messages.size()
+                 << "条消息, hasMore=" << hasMore;
+        emit privateMessagesFetched(messages, hasMore);
+    });
+}
+
+void ApiClient::searchContacts(const QString& keyword, const QString& type) {
+    qDebug() << "[ApiClient::searchContacts] 搜索 keyword=" << keyword << "type=" << type;
+
+    // ── 输入校验 ──
+    QString trimmed = keyword.trimmed();
+    if (trimmed.isEmpty()) {
+        qDebug() << "[ApiClient::searchContacts] 关键词为空，跳过请求";
+        emit contactsSearched({}, {});
+        return;
+    }
+    if (trimmed.length() > 100) {
+        qDebug() << "[ApiClient::searchContacts] 关键词过长(" << trimmed.length() << ")，截断至100字符";
+        trimmed = trimmed.left(100);
+    }
+
+    QJsonObject body = withCookie({{"keyword", trimmed}, {"type", type}});
+    QNetworkReply* reply = postJson("/search-contacts", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::searchContacts] 搜索失败";
+            return;
+        }
+
+        QVariantList users;
+        for (const auto& v : obj["users"].toArray())
+            users.append(v.toObject().toVariantMap());
+        QVariantList groups;
+        for (const auto& v : obj["groups"].toArray())
+            groups.append(v.toObject().toVariantMap());
+        qDebug() << "[ApiClient::searchContacts] 搜索结果: users=" << users.size()
+                 << "groups=" << groups.size();
+        emit contactsSearched(users, groups);
+    });
+}
+
+void ApiClient::fetchContacts() {
+    qDebug() << "[ApiClient::fetchContacts] 请求联系人列表...";
+    QJsonObject body = withCookie();
+    QNetworkReply* reply = postJson("/get-contacts", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchContacts] 请求失败";
+            return;
+        }
+
+        QVariantList contacts;
+        for (const auto& v : obj["contacts"].toArray())
+            contacts.append(v.toObject().toVariantMap());
+        QVariantList followedOnly;
+        for (const auto& v : obj["followed_only"].toArray())
+            followedOnly.append(v.toObject().toVariantMap());
+        qDebug() << "[ApiClient::fetchContacts] 成功: contacts=" << contacts.size()
+                 << "followedOnly=" << followedOnly.size();
+        emit contactsFetched(contacts, followedOnly);
+    });
+}
+
+void ApiClient::fetchUserDetail(int user_id) {
+    qDebug() << "[ApiClient::fetchUserDetail] 请求用户详情 user_id=" << user_id;
+    QJsonObject body = withCookie({{"user_id", user_id}});
+    QNetworkReply* reply = postJson("/get-user-detail", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchUserDetail] 请求失败 user_id="
+                     << reply->property("req_user_id").toInt();
+            return;
+        }
+        qDebug() << "[ApiClient::fetchUserDetail] 成功获取用户详情";
+        emit userDetailFetched(obj.toVariantMap());
+    });
+}
+
+void ApiClient::fetchGroupDetail(int group_id) {
+    qDebug() << "[ApiClient::fetchGroupDetail] 请求群组详情 group_id=" << group_id;
+    QJsonObject body = withCookie({{"group_id", group_id}});
+    QNetworkReply* reply = postJson("/get-group-detail", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchGroupDetail] 请求失败 group_id="
+                     << reply->property("req_group_id").toInt();
+            return;
+        }
+        qDebug() << "[ApiClient::fetchGroupDetail] 成功获取群组详情";
+        emit groupDetailFetched(obj.toVariantMap());
     });
 }
