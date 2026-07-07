@@ -46,7 +46,7 @@ Rectangle {
     // 头像选择对话框
     FileDialog {
         id: avatarPicker
-        title: "选择头像"
+        title: qsTr("选择头像")
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"]
         onAccepted: {
             var b64 = api.readFileAsBase64(selectedFile)
@@ -197,7 +197,7 @@ Rectangle {
                                 color: "#00000088"
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "更换"
+                                    text: qsTr("更换")
                                     color: "white"
                                     font.pixelSize: 11
                                 }
@@ -236,7 +236,7 @@ Rectangle {
 
                     // 用户名（只读）
                     Text {
-                        text: "@" + (root.profileData.username || "用户名")
+                        text: "@" + (root.profileData.username || qsTr("用户名"))
                         font.pixelSize: 14
                         color: "#999"
                     }
@@ -255,7 +255,7 @@ Rectangle {
                 id: signatureField
                 anchors.fill: parent
                 anchors.margins: 10
-                text: root.editing ? root.newSignature : (root.profileData.signature || "这个人很懒，什么都没有留下……")
+                text: root.editing ? root.newSignature : (root.profileData.signature || qsTr("这个人很懒，什么都没有留下……"))
                 color: root.editing ? "#222" : "#999"
                 font.pixelSize: 14
                 readOnly: !root.editing
@@ -289,22 +289,37 @@ Rectangle {
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
+<<<<<<< HEAD
                     Text { text: root.profileData.post_count || "0"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
                     Text { text: "帖子"; font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+=======
+                    Text { text: "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: qsTr("帖子"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+>>>>>>> 9003f79d747be1701c0835fad5afda10239532ce
                 }
                 Item { Layout.fillWidth: true }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
+<<<<<<< HEAD
                     Text { text: root.profileData.follower_count || "0"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
                     Text { text: "粉丝"; font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+=======
+                    Text { text: "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: qsTr("粉丝"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+>>>>>>> 9003f79d747be1701c0835fad5afda10239532ce
                 }
                 Item { Layout.fillWidth: true }
                 ColumnLayout {
                     Layout.alignment: Qt.AlignCenter
                     spacing: 2
+<<<<<<< HEAD
                     Text { text: root.profileData.followee_count || "0"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
                     Text { text: "关注"; font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+=======
+                    Text { text: "---"; font.bold: true; font.pixelSize: 18; color: "#333"; Layout.alignment: Qt.AlignHCenter }
+                    Text { text: qsTr("关注"); font.pixelSize: 13; color: "#999"; Layout.alignment: Qt.AlignHCenter }
+>>>>>>> 9003f79d747be1701c0835fad5afda10239532ce
                 }
                 Item { Layout.fillWidth: true }
             }
@@ -318,7 +333,7 @@ Rectangle {
             Button {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 44
-                text: root.editing ? "保存" : "编辑资料"
+                text: root.editing ? qsTr("保存") : qsTr("编辑资料")
 
                 contentItem: Text {
                     text: parent.text
@@ -355,12 +370,12 @@ Rectangle {
             Button {
                 Layout.preferredWidth: root.editing ? 80 : 0
                 Layout.preferredHeight: 44
-                text: "取消"
+                text: qsTr("取消")
                 clip: true
                 visible: root.editing
 
                 contentItem: Text {
-                    text: "取消"
+                    text: qsTr("取消")
                     color: "#666"
                     font.pixelSize: 16
                     horizontalAlignment: Text.AlignHCenter
@@ -385,10 +400,10 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
             Layout.topMargin: 8
-            text: "登出"
+            text: qsTr("登出")
 
             contentItem: Text {
-                text: "登出"
+                text: qsTr("登出")
                 color: "white"
                 font.pixelSize: 16
                 horizontalAlignment: Text.AlignHCenter

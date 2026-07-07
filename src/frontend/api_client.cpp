@@ -3,6 +3,7 @@
 #include <QBuffer>
 #include <QDebug>
 #include <QFile>
+#include <QHash>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -17,6 +18,35 @@
 #include <QVideoFrame>
 #include <QVideoFrameFormat>
 #include <QVideoSink>
+
+// ─── 后端英文错误 → 中文翻译 ───
+static QString trBackendError(const QString& msg) {
+    static const QHash<QString, QString> map = {
+        {QStringLiteral("Bad username."),          QStringLiteral("无效的用户名")},
+        {QStringLiteral("Bad nickname."),          QStringLiteral("无效的昵称")},
+        {QStringLiteral("Bad password."),          QStringLiteral("无效的密码")},
+        {QStringLiteral("Username occupied."),     QStringLiteral("用户名已被占用")},
+        {QStringLiteral("User not exist."),        QStringLiteral("用户不存在")},
+        {QStringLiteral("Incorrect password."),    QStringLiteral("密码错误")},
+        {QStringLiteral("Empty post not allowed."),   QStringLiteral("内容不能为空")},
+        {QStringLiteral("Too many media."),        QStringLiteral("媒体文件过多")},
+        {QStringLiteral("Media cannot be larger than 16MiB."), QStringLiteral("媒体文件不能超过 16MiB")},
+        {QStringLiteral("Post not exist."),        QStringLiteral("帖子不存在")},
+        {QStringLiteral("Post not found."),        QStringLiteral("帖子不存在")},
+        {QStringLiteral("Empty comment not allowed."), QStringLiteral("评论不能为空")},
+        {QStringLiteral("Cannot follow yourself."),    QStringLiteral("不能关注自己")},
+        {QStringLiteral("Not your post."),         QStringLiteral("不能删除他人的帖子")},
+        {QStringLiteral("Not your comment."),      QStringLiteral("不能删除他人的评论")},
+        {QStringLiteral("Cannot repost your own post."), QStringLiteral("不能转发自己的帖子")},
+        {QStringLiteral("Group name cannot be empty."),  QStringLiteral("群组名称不能为空")},
+        {QStringLiteral("Group not exist."),       QStringLiteral("群组不存在")},
+        {QStringLiteral("You are not in this group."),   QStringLiteral("你不在该群组中")},
+        {QStringLiteral("Empty message not allowed."),   QStringLiteral("消息不能为空")},
+        {QStringLiteral("You are already in this group."), QStringLiteral("你已在该群组中")},
+        {QStringLiteral("Bad `to_whom_id`"),       QStringLiteral("无效的收信人")},
+    };
+    return map.value(msg, msg);
+}
 
 // ─── 构造与基础设置 ───
 
@@ -330,7 +360,7 @@ bool ApiClient::checkReply(QNetworkReply* reply, QJsonObject& out) {
 
     // 检查服务端返回的错误
     if (out.contains("error")) {
-        emit errorOccurred(out["error"].toString());
+        emit errorOccurred(trBackendError(out["error"].toString()));
         return false;
     }
 
@@ -347,7 +377,7 @@ void ApiClient::checkCookie() {
     QNetworkReply* reply = postJson("/check-cookie", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            emit errorOccurred(QStringLiteral("网络错误: %1").arg(reply->errorString()));
+            emit errorOccurred(tr("网络错误: %1").arg(reply->errorString()));
             reply->deleteLater();
             return;
         }
@@ -357,7 +387,7 @@ void ApiClient::checkCookie() {
         QJsonParseError parseErr;
         QJsonDocument doc = QJsonDocument::fromJson(data, &parseErr);
         if (parseErr.error != QJsonParseError::NoError) {
-            emit errorOccurred(QStringLiteral("JSON 解析失败: %1").arg(parseErr.errorString()));
+            emit errorOccurred(tr("JSON 解析失败: %1").arg(parseErr.errorString()));
             return;
         }
 
@@ -654,7 +684,7 @@ void ApiClient::fetchAvatar(int user_id) {
     QNetworkReply* reply = m_manager->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            emit errorOccurred(QStringLiteral("网络错误: %1").arg(reply->errorString()));
+            emit errorOccurred(tr("网络错误: %1").arg(reply->errorString()));
             reply->deleteLater();
             return;
         }
@@ -664,7 +694,7 @@ void ApiClient::fetchAvatar(int user_id) {
         QJsonParseError err;
         QJsonDocument doc = QJsonDocument::fromJson(data, &err);
         if (err.error != QJsonParseError::NoError) {
-            emit errorOccurred(QStringLiteral("JSON 解析失败: %1").arg(err.errorString()));
+            emit errorOccurred(tr("JSON 解析失败: %1").arg(err.errorString()));
             return;
         }
         QJsonObject obj = doc.object();

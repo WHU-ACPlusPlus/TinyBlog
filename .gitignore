@@ -1,5 +1,7 @@
 # Python
 src/backend/.venv
+__pycache__/
+*.pyc
 
 # Database
 *.db*
@@ -40,3 +42,5 @@ qmldir
 *.qrc
 meta_types/
 appfrontend_autogen/
+.qtcreator/
+.qmlls.ini
