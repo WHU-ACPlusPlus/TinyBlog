@@ -115,18 +115,6 @@ Rectangle {
         return result
     }
 
-    // ── 日历/时间格式化辅助 ──
-    function formatPostTime(ts) {
-        if (!ts) return ""
-        var d = new Date(ts * 1000)
-        var now = new Date()
-        var diff = Math.floor((now.getTime() - d.getTime()) / 1000)
-        if (diff < 60) return qsTr("刚刚")
-        if (diff < 3600) return Math.floor(diff / 60) + qsTr("分钟前")
-        if (diff < 86400) return Math.floor(diff / 3600) + qsTr("小时前")
-        return d.getFullYear() + "/" + (d.getMonth()+1) + "/" + d.getDate()
-    }
-
     // 可见性变化时自动刷新（应对横竖屏切换，MainPage 中有两个独立实例）
     onVisibleChanged: {
         if (visible && posts.length === 0 && api.isLoggedIn && !isFetching) {
@@ -179,7 +167,7 @@ Rectangle {
         id: normalView
         anchors.fill: parent
         visible: !publishing
-        color: root.softUIMode ? "#e8edf2" : (root.glassMode ? "transparent" : "#f5f5f5")
+        color: window.bgPage
 
         // ── 辅助刷新函数 ──
         function doRefresh() {
@@ -225,13 +213,13 @@ Rectangle {
                             text: qsTr("广场")
                             font.pixelSize: 18
                             font.bold: true
-                            color: window.textPrimary
+                            color: root.textPrimary
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: root._refreshHint
                             font.pixelSize: 11
-                            color: window.accent
+                            color: root.textAccent
                             visible: text.length > 0
                         }
 
@@ -248,6 +236,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: "↻"
                         font.pixelSize: 20
+                        color: root.textSecondary
                     }
 
                     MouseArea {
@@ -312,7 +301,7 @@ Rectangle {
                         text: parent.parent._pullOffset >= parent.parent._pullThreshold
                               ? qsTr("释放刷新") : qsTr("下拉刷新")
                         font.pixelSize: 13
-                        color: window.textSecondary
+                        color: root.textSecondary
                     }
                 }
 
@@ -349,16 +338,7 @@ Rectangle {
                                         width: 40
                                         height: 40
                                         radius: 20
-                                        color: window.border
-
-                                        Image {
-                                            anchors.fill: parent
-                                            fillMode: Image.PreserveAspectCrop
-                                            source: modelData.avatar
-                                                     ? "data:image/jpeg;base64," + modelData.avatar
-                                                     : ""
-                                            visible: status === Image.Ready
-                                        }
+                                        color: window.divider
 
                                         Image {
                                             anchors.fill: parent
@@ -373,7 +353,7 @@ Rectangle {
                                             anchors.centerIn: parent
                                             text: modelData.nickname[0]
                                             font.pixelSize: 18
-                                            color: window.textSecondary
+                                            color: root.textSecondary
                                             visible: !modelData.avatar
                                         }
                                     }
@@ -391,7 +371,7 @@ Rectangle {
                                         Text {
                                             text: "@" + modelData.username
                                             font.pixelSize: 12
-                                            color: root.textTertiary
+                                            color: root.textSecondary
                                         }
                                     }
                                 }
@@ -438,7 +418,7 @@ Rectangle {
                                                 anchors.centerIn: parent
                                                 text: "▣"
                                                 font.pixelSize: 18
-                                                color: window.textSecondary
+                                                color: root.textSecondary
                                                 visible: !modelData.source || modelData.source.length === 0
                                             }
 
@@ -474,19 +454,6 @@ Rectangle {
                                                     mediaViewer.visible = true
                                                 }
                                             }
-
-                                            // 点击查看大图
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                visible: modelData.source && modelData.source.length > 0
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    mediaViewer.viewerSource = modelData.source
-                                                    mediaViewer.viewerIsVideo = modelData.isVideo || false
-                                                    mediaViewer.viewerContent = modelData.isVideo ? (modelData.content || "") : ""
-                                                    mediaViewer.visible = true
-                                                }
-                                            }
                                         }
                                     }
                                 }
@@ -501,7 +468,7 @@ Rectangle {
                 root._timeTick;  // bind to tick so it refreshes
                 return root.formatTime(modelData.created_at)}
                                         font.pixelSize: 12
-                                        color: window.textSecondary
+                                        color: root.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
 
@@ -530,7 +497,7 @@ Rectangle {
                                     Text {
                                         text: String(modelData.like_num || 0)
                                         font.pixelSize: 13
-                                        color: window.textSecondary
+                                        color: root.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
@@ -561,7 +528,7 @@ Rectangle {
                                                 height: 32
                                                 radius: 6
                                                 color: window.bgSurface
-                                                border.color: window.textOnDark
+                                                border.color: glassMode ? Qt.rgba(1,1,1,0.3) : window.border
                                                 border.width: 1
 
                                                 TextInput {
@@ -571,7 +538,7 @@ Rectangle {
                                                     anchors.rightMargin: 8
                                                     verticalAlignment: Text.AlignVCenter
                                                     font.pixelSize: 13
-                                                    color: window.textPrimary
+                                                    color: root.textPrimary
                                                 }
 
                                                 Text {
@@ -580,7 +547,7 @@ Rectangle {
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     text: qsTr("写评论...")
                                                     font.pixelSize: 13
-                                                    color: window.textSecondary
+                                                    color: root.textSecondary
                                                     visible: commentInput.text.length === 0
                                                 }
                                             }
@@ -589,7 +556,7 @@ Rectangle {
                                                 width: 40
                                                 height: 32
                                                 radius: 6
-                                                color: window.accent
+                                                color: root.textAccent
 
                                                 Text {
                                                     anchors.centerIn: parent
@@ -605,8 +572,6 @@ Rectangle {
                                                         if (!txt) return
                                                         commentInput.text = ""
                                                         var postId = modelData.id
-                                                        // 在 root.posts 数组中按 ID 设置标记，
-                                                        // 因为 Repeater 的 modelData 可能是副本
                                                         for (var pi = 0; pi < root.posts.length; pi++) {
                                                             if (root.posts[pi].id === postId) {
                                                                 root.posts[pi]._pendingCommentRefresh = true
@@ -624,9 +589,9 @@ Rectangle {
                                         Text {
                                             text: modelData.comments && modelData.comments.length > 0
                                                    ? "🧵 %1 条评论".arg(modelData.comments.length)
-                                                   : "加载评论"
+                                                   : qsTr("加载评论")
                                             font.pixelSize: 12
-                                            color: window.accent
+                                            color: root.textAccent
                                             visible: !modelData._commentsLoading
 
                                             MouseArea {
@@ -659,7 +624,7 @@ Rectangle {
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     text: "<b>" + modelData.nickname + "</b> " + modelData.content
                                                     font.pixelSize: 12
-                                                    color: window.textPrimary
+                                                    color: root.textPrimary
                                                     elide: Text.ElideRight
                                                     width: parent.width
                                                     wrapMode: Text.Wrap
@@ -686,7 +651,7 @@ Rectangle {
             width: 52
             height: 52
             radius: 26
-            color: window.accent
+            color: root.textAccent
             z: 2
 
             Text {
@@ -733,7 +698,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: "←"
                         font.pixelSize: 22
-                        color: window.accent
+                        color: root.textAccent
                     }
 
                     MouseArea {
@@ -750,7 +715,7 @@ Rectangle {
                     text: qsTr("发布帖子")
                     font.pixelSize: 18
                     font.bold: true
-                    color: window.textPrimary
+                    color: root.textPrimary
                 }
 
                 // 错误提示
@@ -770,7 +735,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.rightMargin: 12
                     radius: 6
-                    color: window.accent
+                    color: root.textAccent
 
                     Text {
                         anchors.centerIn: parent
@@ -841,9 +806,9 @@ Rectangle {
                         anchors.fill: parent
                         anchors.margins: 12
                         placeholderText: qsTr("分享你的想法……")
-                        placeholderTextColor: window.textSecondary
+                        placeholderTextColor: root.textSecondary
                         font.pixelSize: 16
-                        color: window.textPrimary
+                        color: root.textPrimary
                         wrapMode: TextEdit.Wrap
                         focus: false
                     }
@@ -955,7 +920,7 @@ Rectangle {
                                     text: "+"
                                     font.pixelSize: 28
                                     font.bold: true
-                                    color: window.textSecondary
+                                    color: root.textSecondary
                                 }
 
                                 MouseArea {
@@ -1080,8 +1045,6 @@ Rectangle {
             // 用户修改昵称/头像后，更新广场中该用户的所有帖子
             var uid = profile.user_id
             if (!uid) return
-            // profile.avatar 是完整 data URI（如 data:image/png;base64,XXXX）
-            // SquarePage 渲染时自己会加 "data:image/jpeg;base64," 前缀，所以需要纯 base64
             var rawAvatar = ""
             var av = profile.avatar || ""
             if (av.indexOf("base64,") >= 0)
@@ -1110,7 +1073,6 @@ Rectangle {
         }
 
         function onProfileUpdated() {
-            // 用户保存了个人资料，拉取最新数据更新广场帖子
             if (root.posts.length > 0) {
                 api.fetchProfile()
             }
@@ -1118,7 +1080,6 @@ Rectangle {
 
         function onErrorOccurred(msg) {
             pubError = msg
-            // 获取帖子过程中出错 → 跳过这个失败的帖子，继续等待剩余的
             if (isFetching && pendingPostCount > 0) {
                 pendingPostCount--
                 if (pendingPostCount <= 0) {
@@ -1128,7 +1089,6 @@ Rectangle {
         }
 
         function onTimelineFetched(postIds, count) {
-            // 只拉取尚未加载的帖子
             var existingIds = {}
             for (var i = 0; i < posts.length; i++)
                 existingIds[posts[i].id] = true
@@ -1151,12 +1111,10 @@ Rectangle {
         }
 
         function onPostFetched(post) {
-            // 跳过过时响应
             if (!isFetching) {
                 return
             }
 
-            // post 是 QVariantMap → QML 中为 JS 对象
             var entry = {
                 id: post.id,
                 publisher_id: post.publisher_id,
@@ -1172,8 +1130,6 @@ Rectangle {
                 _commentsLoading: false,
                 _pendingCommentRefresh: false
             }
-            // 暂存到映射中，等待全部获取完毕后按序合并到列表顶部
-            // 拉取发帖人头像
             api.fetchAvatar(post.publisher_id)
             _newPostsMap[post.id] = entry
             if (pendingPostCount > 0)
@@ -1184,7 +1140,6 @@ Rectangle {
         }
 
         function onAvatarFetched(userId, avatar, signature) {
-            // 遍历所有帖子，更新该用户的头像
             for (var i = 0; i < posts.length; i++) {
                 if (posts[i].publisher_id === userId && posts[i].avatar !== avatar) {
                     var updated = Object.assign({}, posts[i], {avatar: avatar})
@@ -1203,7 +1158,6 @@ Rectangle {
             }
             posts = ordered.concat(posts)
 
-            // 为所有视频异步提取缩略图
             for (var pi = 0; pi < ordered.length; pi++) {
                 var postEntry = ordered[pi]
                 if (postEntry.media) {
@@ -1230,13 +1184,8 @@ Rectangle {
             _newPostsMap = ({})
         }
 
-        function onPostLiked() {
-            // 乐观更新已完成，无需额外操作
-        }
-
-        function onPostUnliked() {
-            // 乐观更新已完成
-        }
+        function onPostLiked() {}
+        function onPostUnliked() {}
 
         function onCommentPosted() {
             for (var i = 0; i < posts.length; i++) {
@@ -1274,7 +1223,6 @@ Rectangle {
 
         function onLoggedInChanged() {
             if (!api.isLoggedIn) {
-                // 登出后清空所有用户数据，防止不同用户串台
                 posts = []
                 _newPostIds = []
                 _newPostsMap = ({})
@@ -1314,25 +1262,20 @@ Rectangle {
 
         property string viewerSource: ""
         property bool viewerIsVideo: false
-        property string viewerContent: ""   // 视频 base64 原始数据
+        property string viewerContent: ""
         property real zoomLevel: 1.0
-        property string viewerTempFile: ""  // 视频临时文件路径
+        property string viewerTempFile: ""
 
-        // Esc 关闭
         Keys.onEscapePressed: visible = false
 
-        // 打开时处理视频
         onVisibleChanged: {
             if (!visible) {
-                // 关闭时清理
                 if (videoPlayer.playbackState !== MediaPlayer.StoppedState)
                     videoPlayer.stop()
                 if (viewerTempFile) {
-                    // QML 无法直接删文件，交给下次打开覆盖
                     viewerTempFile = ""
                 }
             } else if (viewerIsVideo && viewerContent) {
-                // 打开视频时保存并开始播放
                 var url = api.saveBase64ToTempFile(viewerContent, "mp4")
                 if (url) {
                     viewerTempFile = url
@@ -1343,7 +1286,6 @@ Rectangle {
             }
         }
 
-        // 点击空白区关闭（图片支持缩放，视频不缩放）
         MouseArea {
             id: viewerBg
             anchors.fill: parent
@@ -1381,7 +1323,6 @@ Rectangle {
             }
         }
 
-        // 关闭按钮
         Rectangle {
             anchors.top: parent.top
             anchors.right: parent.right
@@ -1405,7 +1346,6 @@ Rectangle {
             }
         }
 
-        // ── 图片查看模式 ──
         Item {
             id: viewerContainer
             anchors.fill: parent
@@ -1475,7 +1415,6 @@ Rectangle {
             }
         }
 
-        // ── 视频播放模式 ──
         Item {
             id: videoContainer
             anchors.fill: parent
@@ -1489,7 +1428,6 @@ Rectangle {
                 fillMode: VideoOutput.PreserveAspectFit
             }
 
-            // 单击视频切换暂停/播放
             MouseArea {
                 anchors.fill: parent
                 onClicked: {
@@ -1500,7 +1438,6 @@ Rectangle {
                 }
             }
 
-            // 底部控制栏
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
@@ -1514,19 +1451,11 @@ Rectangle {
                     anchors.rightMargin: 12
                     spacing: 8
 
-                    // 暂停/播放
-                    Rectangle {
-                        Layout.preferredWidth: 32
-                        Layout.preferredHeight: 32
+                    Text {
                         Layout.alignment: Qt.AlignVCenter
-                        radius: 16
-                        color: window.bgSurface
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: videoPlayer.playbackState === MediaPlayer.PlayingState ? "⏸" : "▶"
-                            font.pixelSize: 16
-                        }
+                        text: videoPlayer.playbackState === MediaPlayer.PlayingState ? "⏸" : "▶"
+                        font.pixelSize: 22
+                        color: "white"
 
                         MouseArea {
                             anchors.fill: parent
@@ -1539,25 +1468,6 @@ Rectangle {
                         }
                     }
 
-                    // 播放进度文字
-                    Text {
-                        Layout.preferredWidth: 110
-                        Layout.alignment: Qt.AlignVCenter
-                        font.pixelSize: 12
-                        font.family: "monospace"
-                        color: window.bgSurface
-                        text: {
-                            var p = Math.floor((videoPlayer.position || 0) / 1000)
-                            var d = Math.floor((videoPlayer.duration || 0) / 1000)
-                            var pm = Math.floor(p / 60), ps = p % 60
-                            var dm = Math.floor(d / 60), ds = d % 60
-                            return (pm < 10 ? "0" : "") + pm + ":" + (ps < 10 ? "0" : "") + ps
-                                 + " / "
-                                 + (dm < 10 ? "0" : "") + dm + ":" + (ds < 10 ? "0" : "") + ds
-                        }
-                    }
-
-                    // 进度条
                     Slider {
                         id: progressSlider
                         Layout.fillWidth: true
@@ -1594,7 +1504,6 @@ Rectangle {
                         }
                     }
 
-                    // 静音按钮
                     Text {
                         Layout.alignment: Qt.AlignVCenter
                         text: "M"
@@ -1610,7 +1519,6 @@ Rectangle {
                         }
                     }
 
-                    // 音量滑块
                     Slider {
                         id: volumeSlider
                         Layout.preferredWidth: 80
@@ -1650,7 +1558,6 @@ Rectangle {
             }
         }
 
-        // ── 媒体播放器（全局唯一，视频模式才激活）──
         MediaPlayer {
             id: videoPlayer
             videoOutput: videoOutput

@@ -17,7 +17,7 @@ Rectangle {
     color: {
         if (softUIMode) return "#e8edf2"
         if (glassMode)  return "transparent"
-        return window.bgSurface          // styleMode 0: follow theme
+        return window.bgSurface
     }
 
     // ── 鼠标位置（用于毛玻璃跟随光源）──
@@ -181,7 +181,7 @@ Rectangle {
                 // 弹性空间
                 Item { Layout.fillHeight: true }
 
-                // ── 风格切换按钮 ──
+                // ── 风格切换按钮（第二栏）──
                 Rectangle {
                     Layout.preferredWidth: 48
                     Layout.preferredHeight: 48
@@ -213,7 +213,7 @@ Rectangle {
                     HoverHandler { id: styleTip }
                 }
 
-                // ── 深色模式切换按钮（仅普通模式下有效）──
+                // ── 深色模式切换按钮（始终在底部最边缘）──
                 Rectangle {
                     Layout.preferredWidth: 48
                     Layout.preferredHeight: 48
@@ -221,7 +221,7 @@ Rectangle {
                     color: window.darkModeFollowSystem !== 0
                             ? window.selectedBg : "transparent"
                     radius: 12
-                    visible: root.styleMode === 0
+                    visible: root.styleMode === 0  // 仅普通模式可用
 
                     Text {
                         anchors.centerIn: parent
@@ -389,7 +389,7 @@ Rectangle {
                     }
                 }
 
-                // ── 深色模式切换（窄屏，仅普通模式可见）──
+                // ── 深色模式切换（窄屏，始终在最右边缘）──
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
