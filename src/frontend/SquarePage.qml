@@ -768,6 +768,14 @@ Rectangle {
                                     console.log("[SquarePage]   readFileAsBase64[" + i + "] =",
                                         b64 ? b64.substring(0, 40) + "...(" + b64.length + " chars)" : "(empty/null)")
                                 }
+                                // 对过大图片压缩（超过 3MB base64 自动压缩，最长边 ≤1920px）
+                                if (b64 && b64.length > 3145728) {
+                                    var compressed = api.compressImageBase64(b64)
+                                    if (compressed) {
+                                        console.log("[SquarePage]   compressed[" + i + "]:", b64.length, "→", compressed.length, "chars")
+                                        b64 = compressed
+                                    }
+                                }
                                 b64List.push(b64)
                             }
                             api.publishPost(textInput.text, b64List)
