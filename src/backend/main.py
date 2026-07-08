@@ -372,8 +372,15 @@ _CJK_FONT_PATHS = [
 ]
 
 def _load_cjk_font(size):
-    """加载 CJK 字体，返回 ImageFont 对象。尝试多个路径，fallback 到默认字体。"""
-    # 先尝试 fontconfig（如果系统已注册 CJK 字体）
+    """加载 CJK 字体，返回 ImageFont 对象。优先尝试已知的 CJK 字体路径。"""
+    # 先尝试已知的 CJK 字体路径（更可靠）
+    for path in _CJK_FONT_PATHS:
+        if os.path.isfile(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    # fallback：用 fontconfig 尝试找一个支持中文的字体
     try:
         import subprocess
         result = subprocess.run(
@@ -382,16 +389,21 @@ def _load_cjk_font(size):
         )
         fc_path = result.stdout.strip()
         if fc_path and os.path.isfile(fc_path):
-            return ImageFont.truetype(fc_path, size)
+            # 确认该字体真的能渲染 CJK（避免 fontconfig 匹配到 DejaVu 等非 CJK 字体）
+            try:
+                test_font = ImageFont.truetype(fc_path, size)
+                # 测试渲染一个中文字符，检查是否有非空白像素
+                from PIL import Image, ImageDraw
+                test_img = Image.new("L", (size, size), 0)
+                test_draw = ImageDraw.Draw(test_img)
+                test_draw.text((0, 0), "中", font=test_font, fill=255)
+                bbox = test_img.getbbox()
+                if bbox and bbox[2] > 2 and bbox[3] > 2:
+                    return test_font
+            except Exception:
+                pass
     except Exception:
         pass
-    # 尝试预设路径列表
-    for path in _CJK_FONT_PATHS:
-        if os.path.isfile(path):
-            try:
-                return ImageFont.truetype(path, size)
-            except Exception:
-                continue
     # 全都不行，fallback
     print("[avatar] 警告：未找到 CJK 字体，头像中文可能显示为方框")
     return ImageFont.load_default()
