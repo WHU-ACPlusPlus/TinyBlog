@@ -2,9 +2,14 @@
 src/backend/.venv
 __pycache__/
 *.pyc
+.python-version
 
 # Database
 *.db*
+*.db-*
+
+# Backend runtime files
+api.log
 
 # Library
 lib/
