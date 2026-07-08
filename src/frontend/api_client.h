@@ -124,6 +124,10 @@ class ApiClient : public QObject {
     // 联系人列表
     void fetchContacts();
 
+    // 用户自己的帖子
+    void fetchUserPosts(int publisher_id);
+    void fetchMyPostsDetail(int publisher_id);  // 一次性拉取完整帖子数据
+
     // 用户/群组详情（侧边面板）
     void fetchUserDetail(int user_id);
     void fetchGroupDetail(int group_id);
@@ -181,6 +185,14 @@ class ApiClient : public QObject {
     void myGroupsFetched(const QList<GroupInfo>& groups);
 
     void groupMessagesReceived(const QVariantList& messages);  // R4修复: QVariantList使QML可读字段
+
+    // ── 用户帖子 ──
+    void userPostsFetched(const QVariantList& postIds);  // QList<int> wrapped as QVariantList for QML
+    void myPostsFetched(const QVariantList& posts);      // 帖子完整数据（QML 友好）
+
+    // ── 关注列表（QML 友好版）──
+    void followListFetchedForQml(const QVariantList& followers,
+                                 const QVariantList& followees);
 
     // ── 消息功能（新增）──
     void conversationsFetched(const QVariantList& conversations);  // QVariantList of QVariantMap (QML-friendly)
