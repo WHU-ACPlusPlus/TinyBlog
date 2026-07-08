@@ -1,0 +1,15 @@
+<RCC>
+  <qresource prefix="/qt/qml/frontend/">
+    <file alias="Main.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/Main.qml</file>
+    <file alias="LoginFlow.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/LoginFlow.qml</file>
+    <file alias="MainPage.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/MainPage.qml</file>
+    <file alias="SquarePage.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/SquarePage.qml</file>
+    <file alias="MessagesPage.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/MessagesPage.qml</file>
+    <file alias="ProfilePage.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/ProfilePage.qml</file>
+    <file alias="ConversationListPanel.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/ConversationListPanel.qml</file>
+    <file alias="ConversationItem.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/ConversationItem.qml</file>
+    <file alias="ChatPanel.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/ChatPanel.qml</file>
+    <file alias="MessageBubble.qml">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/MessageBubble.qml</file>
+  </qresource>
+</RCC>
+

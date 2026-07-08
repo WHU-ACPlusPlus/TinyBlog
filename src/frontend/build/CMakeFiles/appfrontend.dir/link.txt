@@ -1,0 +1,3 @@
+D:\ProgramFiles\Qt\Tools\CMake_64\bin\cmake.exe -E rm -f CMakeFiles\appfrontend.dir/objects.a
+D:\ProgramFiles\Qt\Tools\mingw1310_64\bin\ar.exe qc CMakeFiles\appfrontend.dir/objects.a @CMakeFiles\appfrontend.dir\objects1.rsp
+D:\ProgramFiles\Qt\Tools\mingw1310_64\bin\g++.exe -mwindows -Wl,--whole-archive CMakeFiles\appfrontend.dir/objects.a -Wl,--no-whole-archive -o appfrontend.exe -Wl,--out-implib,libappfrontend.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\appfrontend.dir\linkLibs.rsp

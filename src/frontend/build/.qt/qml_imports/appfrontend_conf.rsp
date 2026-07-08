@@ -1,0 +1,15 @@
+-rootPath
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend
+-cmake-output
+-output-file
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/qml_imports/appfrontend_conf.cmake
+-importPath
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build
+-importPath
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/frontend
+-importPath
+D:/ProgramFiles/Qt/6.11.1/mingw_64/qml
+-qrcFiles
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/rcc/appfrontend_assets.qrc
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/rcc/qmake_frontend.qrc
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/rcc/appfrontend_raw_qml_0.qrc
