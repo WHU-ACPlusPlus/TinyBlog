@@ -764,18 +764,26 @@ void ApiClient::updateProfile(const QString& nickname,
                               const QString& avatar,
                               const QString& signature) {
     auto pending = std::make_shared<int>(0);
+    auto failed = std::make_shared<bool>(false);
+
+    auto checkDone = [this, pending, failed]() {
+        if (*pending == 0 && !*failed) {
+            emit profileUpdated();
+        }
+    };
 
     // 更新昵称
     if (!nickname.isEmpty()) {
         (*pending)++;
         QJsonObject body = withCookie({{"nickname", nickname}});
         QNetworkReply* reply = postJson("/edit-profile", body);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, pending]() {
-            reply->deleteLater();
-            (*pending)--;
-            if (*pending == 0) {
-                emit profileUpdated();
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pending, failed, checkDone]() {
+            QJsonObject obj;
+            if (!checkReply(reply, obj)) {
+                *failed = true;
             }
+            (*pending)--;
+            checkDone();
         });
     }
     // 更新头像和签名
@@ -785,18 +793,17 @@ void ApiClient::updateProfile(const QString& nickname,
         if (!avatar.isEmpty()) body["avatar"] = avatar;
         if (!signature.isEmpty()) body["signature"] = signature;
         QNetworkReply* reply = postJson("/avatar", body);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, pending]() {
-            reply->deleteLater();
-            (*pending)--;
-            if (*pending == 0) {
-                emit profileUpdated();
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pending, failed, checkDone]() {
+            QJsonObject obj;
+            if (!checkReply(reply, obj)) {
+                *failed = true;
             }
+            (*pending)--;
+            checkDone();
         });
     }
     // 没有要更新的内容
-    if (*pending == 0) {
-        emit profileUpdated();
-    }
+    checkDone();
 }
 
 void ApiClient::patchAvatar(const QString& avatar, const QString& signature) {

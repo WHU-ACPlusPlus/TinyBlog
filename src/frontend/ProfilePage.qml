@@ -11,6 +11,7 @@ Rectangle {
     property bool editing: false
     property string newNickname: ""
     property string newAvatar: ""
+    property string newAvatarMime: "image/png"
     property string newSignature: ""
 
     // 每次页面显示时刷新资料
@@ -52,6 +53,18 @@ Rectangle {
             var b64 = api.readFileAsBase64(selectedFile)
             if (b64.length > 0) {
                 root.newAvatar = b64
+                // 从文件名推断 MIME 类型
+                var path = String(selectedFile).toLowerCase()
+                if (path.endsWith(".jpg") || path.endsWith(".jpeg"))
+                    root.newAvatarMime = "image/jpeg"
+                else if (path.endsWith(".gif"))
+                    root.newAvatarMime = "image/gif"
+                else if (path.endsWith(".webp"))
+                    root.newAvatarMime = "image/webp"
+                else if (path.endsWith(".bmp"))
+                    root.newAvatarMime = "image/bmp"
+                else
+                    root.newAvatarMime = "image/png"
             }
         }
     }
@@ -153,7 +166,9 @@ Rectangle {
                                     var av = root.newAvatar.length > 0
                                             ? root.newAvatar
                                             : (root.profileData.avatar || "")
-                                    return av ? "data:image/png;base64," + av : ""
+                                    if (av)
+                                        return "data:" + root.newAvatarMime + ";base64," + av
+                                    return ""
                                 }
                                 fillMode: Image.PreserveAspectCrop
                                 visible: source.toString().length > 0
