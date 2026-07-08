@@ -64,6 +64,29 @@ def resolve_user(cookie: str):
     )
     return row["user_id"] if row else None
 
+# ── 屏蔽词库加载 ──
+_BLOCKED_WORDS = []
+_blocked_words_path = os.path.join(os.path.dirname(__file__), "blocked_words.txt")
+if os.path.exists(_blocked_words_path):
+    with open(_blocked_words_path, encoding="utf-8") as _f:
+        _BLOCKED_WORDS = [
+            _l.strip() for _l in _f
+            if _l.strip() and not _l.startswith("#")
+        ]
+    log_api("SYSTEM", None, f"loaded {len(_BLOCKED_WORDS)} blocked words", "ok")
+else:
+    log_api("SYSTEM", None, f"blocked_words.txt not found at {_blocked_words_path}", "empty")
+
+def contains_blocked(text: str) -> bool:
+    """检查文本是否包含屏蔽词，命中返回 True。"""
+    if not text or not _BLOCKED_WORDS:
+        return False
+    text_lower = text.lower()
+    for w in _BLOCKED_WORDS:
+        if w.lower() in text_lower:
+            return True
+    return False
+
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
 conn.execute("PRAGMA journal_mode=WAL")
@@ -1035,6 +1058,8 @@ def comment(body: Comment_Req):
         return {"error": "Bad cookie."}
     if not body.content:
         return {"error": "Empty comment not allowed."}
+    if contains_blocked(body.content):
+        return {"error": "内容不符合发布要求"}
     post = db_fetchone(
             "SELECT id FROM posts WHERE id = ?",
             (body.post_id,)
@@ -1086,6 +1111,12 @@ def send_msg(body: Send_Msg):
         log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Bad to_whom_id")
         return {"error": "Bad `to_whom_id`"}
     if not body.content:
+        log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Empty message")
+        return {"error": "Empty message not allowed."}
+    if contains_blocked(body.content):
+        log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "blocked")
+        return {"error": "消息包含不允许的内容"}
+
         log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Empty message")
         return {"error": "Empty message not allowed."}
     # ── 单向关注限制：对方未关注我且未回复 → 只能发1条 ──
@@ -1179,6 +1210,8 @@ def pub_post(body: Pub_Post):
         return {"error": "Empty post not allowed."}
     if len(body.media) > 9:
         return {"error": "Too many media."}
+    if contains_blocked(body.text):
+        return {"error": "内容不符合发布要求"}
     for medium in body.media:
         if len(medium) > (1 << 24):
             return {"error": "Media cannot be larger than 16MiB."}
@@ -1452,6 +1485,11 @@ def send_group_msg(body: Send_Group_Msg_Req):
         return {"error": "You are not in this group."}
     if not body.content:
         log_api("POST /send-group-msg", user_id, f"group={body.group_id}", "Empty message")
+        return {"error": "Empty message not allowed."}
+    if contains_blocked(body.content):
+        log_api("POST /send-group-msg", user_id, f"group={body.group_id}", "blocked")
+        return {"error": "消息包含不允许的内容"}
+
         return {"error": "Empty message not allowed."}
     # 1. 插入群消息
     db_execute("INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)",
@@ -1748,6 +1786,8 @@ def edit_profile(body: Edit_Profile_Req):
     if not user_id:
         return {"error": "Bad cookie."}
     if body.nickname:
+        if contains_blocked(body.nickname):
+            return {"error": "昵称包含不允许的内容"}
         db_execute(
                 "UPDATE users SET nickname = ? WHERE id = ?",
                 (body.nickname, user_id)
@@ -1857,6 +1897,8 @@ def repost(body: Repost_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
+    if contains_blocked(body.text):
+        return {"error": "内容不符合发布要求"}
     original = db_fetchone(
             "SELECT id, publisher_id FROM posts WHERE id = ?",
             (body.post_id,)
@@ -1882,6 +1924,8 @@ def patch_avatar(body: Patch_Avatar_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
+    if body.signature and contains_blocked(body.signature):
+        return {"error": "个性签名包含不允许的内容"}
     with db_lock:
         if body.avatar:
             conn.execute("UPDATE users SET avatar = ? WHERE id = ?",
