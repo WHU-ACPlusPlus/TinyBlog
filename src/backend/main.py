@@ -106,18 +106,19 @@ def get_user_id(cookie):
     """Check cookie validity and auto-extend (+1 hour), return user_id or None."""
     if not cookie:
         return None
-    row = db_fetchone(
-        "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
-        (cookie,)
-    )
-    if not row:
-        return None
-    db_execute(
-        "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
-        (cookie,)
-    )
-    db_commit()
-    return row['user_id']
+    with db_lock:
+        row = conn.execute(
+            "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
+            (cookie,)
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
+            (cookie,)
+        )
+        conn.commit()
+        return row['user_id']
 
 if __name__ == "__main__":
     db_execute("""
@@ -1296,6 +1297,64 @@ def get_post(body: Get_Post):
         "media": [dict(m) for m in media]
     }
 
+class Get_User_Posts_Req(BaseModel):
+    cookie: str
+    publisher_id: int
+
+@app.post("/get-user-posts")
+def get_user_posts(body: Get_User_Posts_Req):
+    user_id = get_user_id(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    posts = db_fetchall(
+        "SELECT id FROM posts WHERE publisher_id = ? ORDER BY created_at DESC LIMIT 100",
+        (body.publisher_id,)
+    )
+    log_api("POST /get-user-posts", user_id,
+            f"publisher_id={body.publisher_id}", f"count={len(posts)}")
+    return {"post_ids": [p["id"] for p in posts]}
+
+class Get_User_Posts_Detail_Req(BaseModel):
+    cookie: str
+    publisher_id: int
+
+@app.post("/get-user-posts-detail")
+def get_user_posts_detail(body: Get_User_Posts_Detail_Req):
+    user_id = get_user_id(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    posts = db_fetchall(
+        "SELECT p.*, u.username, u.nickname FROM posts p "
+        "JOIN users u ON u.id = p.publisher_id "
+        "WHERE p.publisher_id = ? ORDER BY p.created_at DESC LIMIT 100",
+        (body.publisher_id,)
+    )
+    result = []
+    for post in posts:
+        media = db_fetchall(
+            "SELECT offset, content FROM post_media WHERE post_id = ? ORDER BY offset",
+            (post["id"],)
+        )
+        liked = db_fetchone(
+            "SELECT 1 FROM liking_users WHERE post_id = ? AND liker_id = ?",
+            (post["id"], user_id)
+        )
+        result.append({
+            "id": post["id"],
+            "publisher_id": post["publisher_id"],
+            "username": post["username"],
+            "nickname": post["nickname"],
+            "content": post["content"],
+            "like_num": post["like_num"],
+            "liked": liked is not None,
+            "created_at": post["created_at"],
+            "repost_id": post["repost_id"],
+            "media": [dict(m) for m in media]
+        })
+    log_api("POST /get-user-posts-detail", user_id,
+            f"publisher_id={body.publisher_id}", f"count={len(result)}")
+    return {"posts": result}
+
 class Create_Group_Req(BaseModel):
     cookie: str
     name: str
@@ -1546,24 +1605,30 @@ def check_cookie(body: Check_Cookie_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"valid": False}
-    user = db_fetchone(
-            "SELECT id, username, nickname, avatar, signature, email FROM users WHERE id = ?",
-            (user_id,)
-            )
-    if not user:
-        return {"valid": False}
-    post_count = db_fetchone(
-            "SELECT COUNT(*) AS cnt FROM posts WHERE publisher_id = ?",
-            (user["id"],)
-        )
-    follower_count = db_fetchone(
-            "SELECT COUNT(*) AS cnt FROM following WHERE followee = ?",
-            (user["id"],)
-        )
-    followee_count = db_fetchone(
-            "SELECT COUNT(*) AS cnt FROM following WHERE follower = ?",
-            (user["id"],)
-        )
+    # 在一次锁内读取所有用户数据，确保一致性
+    with db_lock:
+        user = conn.execute(
+                "SELECT id, username, nickname, avatar, signature, email FROM users WHERE id = ?",
+                (user_id,)
+                ).fetchone()
+        if not user:
+            return {"valid": False}
+        post_count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM posts WHERE publisher_id = ?",
+                (user["id"],)
+            ).fetchone()
+        follower_count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM following WHERE followee = ?",
+                (user["id"],)
+            ).fetchone()
+        followee_count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM following WHERE follower = ?",
+                (user["id"],)
+            ).fetchone()
+    avatar_preview = (user["avatar"][:80] + "...") if user["avatar"] and len(user["avatar"]) > 80 else (user["avatar"] or "(empty)")
+    log_api("POST /check-cookie", user_id,
+            f"avatar_len={len(user['avatar']) if user['avatar'] else 0}",
+            f"avatar_head={avatar_preview}")
     return {
         "valid": True,
         "user_id": user["id"],
@@ -1817,16 +1882,20 @@ def patch_avatar(body: Patch_Avatar_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    if body.avatar:
-        db_execute("UPDATE users SET avatar = ? WHERE id = ?",
-                (body.avatar, user_id)
-                )
-    if body.signature:
-        db_execute(
-                "UPDATE users SET signature = ? WHERE id = ?",
-                (body.signature, user_id)
-                )
-    db_commit()
+    with db_lock:
+        if body.avatar:
+            conn.execute("UPDATE users SET avatar = ? WHERE id = ?",
+                    (body.avatar, user_id)
+                    )
+        if body.signature:
+            conn.execute(
+                    "UPDATE users SET signature = ? WHERE id = ?",
+                    (body.signature, user_id)
+                    )
+        conn.commit()
+    log_api("POST /avatar", user_id,
+            f"avatar_len={len(body.avatar) if body.avatar else 0}, sig_len={len(body.signature) if body.signature else 0}",
+            "success")
     return {"status": "success"}
 
 @app.get("/avatar")
