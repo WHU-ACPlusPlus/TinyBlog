@@ -14,6 +14,10 @@
 #include <QTimer>
 #include <QTranslator>
 
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#endif
+
 #include "api_types.h"
 
 /**
@@ -32,6 +36,7 @@ class ApiClient : public QObject {
     // ── QML 可绑定的属性 ──
     Q_PROPERTY(bool isLoggedIn READ isLoggedIn NOTIFY loggedInChanged)
     Q_PROPERTY(QString baseUrl READ baseUrl WRITE setBaseUrl NOTIFY baseUrlChanged)
+    Q_PROPERTY(bool isAndroid READ isAndroid CONSTANT)
 
     void setBaseUrl(const QString& url);  // e.g. "http://becharmkon.cn:18999"
     QString baseUrl() const;
@@ -46,6 +51,7 @@ class ApiClient : public QObject {
     Q_INVOKABLE QString videoThumbnailFromBase64(const QString& b64);                                        // 从 base64 视频数据提取缩略图
     Q_INVOKABLE QString saveBase64ToTempFile(const QString& b64, const QString& ext);                        // base64 → 临时文件 → file:// URL
     Q_INVOKABLE void extractVideoThumbnailAsync(const QString& postId, int mediaIndex, const QString& b64);  // 异步抽视频第一帧
+    bool isAndroid() const;                                                                                     // 编译时判断是否为 Android 平台
 
    signals:
     void loggedInChanged();
@@ -95,6 +101,10 @@ class ApiClient : public QObject {
 
     // 头像/签名/个人资料
     void fetchProfile();
+
+#ifdef Q_OS_ANDROID
+    Q_INVOKABLE bool pickMediaFiles();  // 启动 Android SAF 文件选择器，返回 true 表示已启动
+#endif
     void updateProfile(const QString& nickname = {},
                        const QString& avatar = {},
                        const QString& signature = {});
@@ -165,6 +175,10 @@ class ApiClient : public QObject {
     // ── 媒体 ──
     void videoThumbnailExtracted(const QString& postId, int mediaIndex, const QString& thumbnailB64);
 
+    // ── Android 文件选择 ──
+    void mediaFilesPicked(const QVariantList& files);
+    // files: QVariantList of QVariantMap {url, b64, mime, size}
+
     // ── 私信 ──
     void messageSent();
     void messagesReceived(const QList<MessageInfo>& messages);
@@ -219,6 +233,11 @@ class ApiClient : public QObject {
     QTranslator* m_translator;
     QQmlEngine* m_engine;
     QString m_currentLocale;
+
+#ifdef Q_OS_ANDROID
+    void handleMediaPickerResult(int resultCode, const QJniObject& intentData);
+    QVariantMap readUriInfo(const QJniObject& uri);
+#endif
 };
 
 #endif  // API_CLIENT_H

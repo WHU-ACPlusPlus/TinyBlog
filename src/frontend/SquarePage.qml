@@ -11,8 +11,10 @@ Rectangle {
     // ── 状态：normal / publishing ──
     property bool publishing: false
     property string pubError: ""
-    property var selectedMedia: []   // 已选媒体文件的 url[]
-    property var mediaThumbnails: [] // 对应的缩略图 url[]（视频为抽帧图，图片为原图）
+    property var selectedMedia: []      // 已选媒体文件的 url[]
+    property var mediaThumbnails: []    // 对应的缩略图 url[]（视频为抽帧图，图片为原图）
+    property var _pendingB64: ({})       // Android 端预读取的 base64 数据 {url: b64}
+    property var _pendingMime: ({})      // Android 端预读取的 MIME 类型 {url: mime}
 
     property int _timeTick: 0
 
@@ -25,6 +27,18 @@ Rectangle {
     }
 
     // ── 辅助判断 ──
+    // 一键重置发布状态（包括 Android 预读缓存）
+    function resetPublishState() {
+        publishing = false
+        textInput.text = ""
+        selectedMedia = []
+        mediaThumbnails = []
+        _pendingB64 = ({})
+        _pendingMime = ({})
+        pubError = ""
+    }
+
+    // 判断 base64 对应的 MIME 类型
     function detectMimeFromBase64(b64) {
         if (!b64) return "image/jpeg"
         var p = b64.substring(0, 6)
@@ -89,6 +103,13 @@ Rectangle {
             })
         }
         return result
+    }
+
+    // 可见性变化时自动刷新（应对横竖屏切换，MainPage 中有两个独立实例）
+    onVisibleChanged: {
+        if (visible && posts.length === 0 && api.isLoggedIn && !isFetching) {
+            normalView.doRefresh()
+        }
     }
 
     // ── 帖子数据（从 API 获取）──
@@ -203,7 +224,7 @@ Rectangle {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "🔄"
+                        text: "↻"
                         font.pixelSize: 20
                     }
 
@@ -234,6 +255,44 @@ Rectangle {
                 contentHeight: feedCol.implicitHeight + 80
                 boundsBehavior: Flickable.DragOverBounds
                 clip: true
+
+                // ── 下拉刷新 ──
+                property real _pullOffset: 0        // 当前下拉偏移量（给指示器用）
+                property real _maxPullOffset: 0     // 本次拖拽的最大下拉距离
+                readonly property real _pullThreshold: 60
+
+                onContentYChanged: {
+                    if (dragging && contentY < 0 && !isFetching) {
+                        _pullOffset = Math.min(-contentY, _pullThreshold * 1.5)
+                        _maxPullOffset = Math.max(_maxPullOffset, _pullOffset)
+                    } else if (!dragging || contentY >= 0) {
+                        _pullOffset = 0
+                    }
+                }
+                onMovementEnded: {
+                    if (_maxPullOffset >= _pullThreshold && !isFetching)
+                        normalView.doRefresh()
+                    _maxPullOffset = 0
+                    _pullOffset = 0
+                }
+
+                // 下拉刷新指示器
+                Rectangle {
+                    x: 0
+                    y: -60 + Math.min(parent._pullOffset, 60)
+                    width: parent.width
+                    height: 60
+                    color: "transparent"
+                    visible: parent._pullOffset > 0
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: parent.parent._pullOffset >= parent.parent._pullThreshold
+                              ? qsTr("释放刷新") : qsTr("下拉刷新")
+                        font.pixelSize: 13
+                        color: window.textSecondary
+                    }
+                }
 
                 Column {
                     id: feedCol
@@ -355,7 +414,7 @@ Rectangle {
 
                                             Text {
                                                 anchors.centerIn: parent
-                                                text: "📷"
+                                                text: "▣"
                                                 font.pixelSize: 18
                                                 color: window.textSecondary
                                                 visible: !modelData.source || modelData.source.length === 0
@@ -436,7 +495,7 @@ Rectangle {
 
                                         Text {
                                             anchors.centerIn: parent
-                                            text: modelData.liked ? "❤️" : "🤍"
+                                            text: modelData.liked ? "♥" : "♡"
                                             font.pixelSize: 14
                                         }
 
@@ -543,7 +602,7 @@ Rectangle {
                                         Text {
                                             text: modelData.comments && modelData.comments.length > 0
                                                    ? "🧵 %1 条评论".arg(modelData.comments.length)
-                                                   : "💬 加载评论"
+                                                   : "加载评论"
                                             font.pixelSize: 12
                                             color: window.accent
                                             visible: !modelData._commentsLoading
@@ -657,7 +716,7 @@ Rectangle {
 
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: publishing = false
+                        onClicked: root.resetPublishState()
                     }
                 }
 
@@ -708,11 +767,22 @@ Rectangle {
                             }
                             pubError = ""
 
-                            // 将已选媒体转为 base64
+                            // 将已选媒体转为 base64（Android 优先用预读缓存）
                             var b64List = []
-                            for (var i = 0; i < selectedMedia.length; i++)
-                                b64List.push(api.readFileAsBase64(selectedMedia[i]))
-
+                            console.log("[SquarePage] publish: selectedMedia.length =", selectedMedia.length)
+                            for (var i = 0; i < selectedMedia.length; i++) {
+                                var url = selectedMedia[i]
+                                var b64 = _pendingB64[url]
+                                if (b64) {
+                                    console.log("[SquarePage]   using cached b64[" + i + "] =",
+                                        b64.substring(0, 40) + "...(" + b64.length + " chars)")
+                                } else {
+                                    b64 = api.readFileAsBase64(url)
+                                    console.log("[SquarePage]   readFileAsBase64[" + i + "] =",
+                                        b64 ? b64.substring(0, 40) + "...(" + b64.length + " chars)" : "(empty/null)")
+                                }
+                                b64List.push(b64)
+                            }
                             api.publishPost(textInput.text, b64List)
                         }
                     }
@@ -868,7 +938,14 @@ Rectangle {
 
                                 MouseArea {
                                     anchors.fill: parent
-                                    onClicked: mediaPicker.open()
+                                    onClicked: {
+                                        console.log("[SquarePage] + clicked, isAndroid =", api.isAndroid)
+                                        if (api.isAndroid) {
+                                            api.pickMediaFiles()
+                                        } else {
+                                            mediaPicker.open()
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -888,21 +965,29 @@ Rectangle {
         ]
 
         onAccepted: {
+            console.log("[SquarePage] onAccepted fired, selectedFiles.length =", selectedFiles.length)
             var newUrls = []
             var newThumbs = []
             for (var i = 0; i < selectedFiles.length; i++) {
                 if (newUrls.length >= 9) break
                 var url = selectedFiles[i]
+                console.log("[SquarePage]   file[" + i + "] url =", url.toString())
                 newUrls.push(url)
                 if (isVideo(url)) {
                     var thumb = api.generateVideoThumbnail(url)
-                    newThumbs.push(thumb.toString() !== "" ? thumb : url)
+                    var thumbStr = thumb.toString()
+                    console.log("[SquarePage]   isVideo, thumb =", thumbStr !== "" ? thumbStr : "(empty, fallback to url)")
+                    newThumbs.push(thumbStr !== "" ? thumb : url)
                 } else {
+                    console.log("[SquarePage]   isImage, use url as thumb")
                     newThumbs.push(url)
                 }
             }
+            console.log("[SquarePage] newUrls =", newUrls.length, "newThumbs =", newThumbs.length)
+            console.log("[SquarePage] selectedMedia BEFORE concat:", selectedMedia.length)
             selectedMedia = selectedMedia.concat(newUrls).slice(0, 9)
             mediaThumbnails = mediaThumbnails.concat(newThumbs).slice(0, 9)
+            console.log("[SquarePage] selectedMedia AFTER concat:", selectedMedia.length)
         }
     }
 
@@ -921,11 +1006,52 @@ Rectangle {
 
         function onPostPublished() {
             // 发布成功 → 回到广场视图，清空输入
-            publishing = false
-            textInput.text = ""
-            selectedMedia = []
-            mediaThumbnails = []
+            root.resetPublishState()
+        }
+
+        function onMediaFilesPicked(files) {
+            console.log("[SquarePage] onMediaFilesPicked: files.length =", files.length)
+            if (!files || files.length === 0) {
+                pubError = "没有选中任何文件"
+                return
+            }
             pubError = ""
+
+            var newUrls = []
+            var newThumbs = []
+            for (var i = 0; i < files.length; i++) {
+                if (newUrls.length >= 9) break
+                var f = files[i]
+                var url = f.url || ""
+                var mime = f.mime || "image/jpeg"
+                var b64 = f.b64 || ""
+
+                if (!url) {
+                    console.log("[SquarePage]   skip file[" + i + "]: no url")
+                    continue
+                }
+
+                console.log("[SquarePage]   file[" + i + "] url=", url, "mime=", mime,
+                    "b64 len =", b64.length, "size=", f.size)
+
+                newUrls.push(url)
+
+                // 缓存 base64 以备发布使用
+                root._pendingB64[url] = b64
+                root._pendingMime[url] = mime
+
+                if (mime.indexOf("video") >= 0) {
+                    newThumbs.push("")   // 视频缩略图暂时留空
+                } else {
+                    // 图片直接用 data: URI 显示缩略图
+                    newThumbs.push("data:" + mime + ";base64," + b64)
+                }
+            }
+
+            var oldLen = selectedMedia.length
+            selectedMedia = selectedMedia.concat(newUrls).slice(0, 9)
+            mediaThumbnails = mediaThumbnails.concat(newThumbs).slice(0, 9)
+            console.log("[SquarePage] selectedMedia:", oldLen, "→", selectedMedia.length)
         }
 
         function onProfileFetched(profile) {
@@ -1130,11 +1256,7 @@ Rectangle {
                 posts = []
                 _newPostIds = []
                 _newPostsMap = ({})
-                publishing = false
-                textInput.text = ""
-                selectedMedia = []
-                mediaThumbnails = []
-                pubError = ""
+                root.resetPublishState()
             }
         }
 
@@ -1322,6 +1444,8 @@ Rectangle {
             PinchHandler {
                 minimumScale: 1.0
                 maximumScale: 5.0
+                minimumRotation: 0
+                maximumRotation: 0
                 onScaleChanged: {
                     mediaViewer.zoomLevel = Math.max(1.0, Math.min(5.0, scale))
                     awaitDouble.stop()

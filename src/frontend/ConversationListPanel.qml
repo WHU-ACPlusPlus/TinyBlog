@@ -62,7 +62,7 @@ Rectangle {
                         spacing: 6
 
                         Text {
-                            text: "🔍"
+                            text: "⌕"
                             font.pixelSize: 14
                         }
 
@@ -166,7 +166,7 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { text: qsTr("添加好友"), icon: "👤" },
+                        { text: qsTr("添加好友"), icon: "＋" },
                         { text: qsTr("创建群聊"), icon: "👥" },
                         { text: qsTr("加入群聊"), icon: "🔗" }
                     ]
@@ -234,7 +234,7 @@ Rectangle {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "💬"
+                        text: "≡"
                         font.pixelSize: 40
                     }
                     Text {

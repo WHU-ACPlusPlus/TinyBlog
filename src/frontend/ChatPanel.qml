@@ -100,7 +100,7 @@ Rectangle {
 
             Text {
                 Layout.alignment: Qt.AlignHCenter
-                text: "💬"
+                text: "≡"
                 font.pixelSize: 56
             }
             Text {
