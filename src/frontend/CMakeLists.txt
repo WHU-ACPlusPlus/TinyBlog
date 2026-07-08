@@ -4,7 +4,7 @@ project(frontend VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
-set(QT_QML_GENERATE_QMLLS_INI ON)
+set(QT_QML_GENERATE_QMLLS_INI OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia LinguistTools)
 
@@ -15,12 +15,14 @@ qt_add_executable(appfrontend
     api_client.cpp
     api_client.h
     api_types.h
+    resources.qrc
 )
 
 # 注册 QML 模块 —— QML 文件放到 qml/ 目录下
 qt_add_qml_module(appfrontend
     URI frontend
     VERSION 1.0
+    NO_CACHEGEN
     QML_FILES
         Main.qml
         LoginFlow.qml
@@ -44,8 +46,6 @@ qt_add_translations(appfrontend
         ${TS_DIR}/appfrontend_en_US.ts
     QM_FILES_OUTPUT_VARIABLE appfrontend_qm_files
 )
-
-
 
 target_link_libraries(appfrontend
     PRIVATE Qt6::Quick Qt6::Network Qt6::QuickDialogs2 Qt6::Multimedia Qt6::Core

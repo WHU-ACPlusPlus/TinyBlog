@@ -62,10 +62,12 @@ Rectangle {
         title: qsTr("选择头像")
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"]
         onAccepted: {
-            var b64 = api.readFileAsBase64(selectedFile)
-            if (b64.length > 0) {
-                root.newAvatar = b64
-                root.newAvatarMime = root.detectMime(b64)
+            if (selectedFiles.length > 0) {
+                var b64 = api.readFileAsBase64(selectedFiles[0])
+                if (b64.length > 0) {
+                    root.newAvatar = b64
+                    root.newAvatarMime = root.detectMime(b64)
+                }
             }
         }
     }
@@ -179,7 +181,7 @@ Rectangle {
                         // 无头像时的默认图标
                         Text {
                             anchors.centerIn: parent
-                            text: "👤"
+                            text: "●"
                             font.pixelSize: 30
                             visible: !avatarImg.visible
                         }
