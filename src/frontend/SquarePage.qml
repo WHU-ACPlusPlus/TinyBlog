@@ -774,6 +774,10 @@ Rectangle {
                                     if (compressed) {
                                         console.log("[SquarePage]   compressed[" + i + "]:", b64.length, "→", compressed.length, "chars")
                                         b64 = compressed
+                                    } else {
+                                        pubError = "图片 \"" + (selectedMedia[i] ? selectedMedia[i].toString().split("/").pop() : "第" + (i+1) + "张") + "\" 压缩后仍然过大，无法发布"
+                                        publishing = false
+                                        return
                                     }
                                 }
                                 b64List.push(b64)

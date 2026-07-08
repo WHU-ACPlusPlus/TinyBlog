@@ -319,10 +319,9 @@ QString ApiClient::compressImageBase64(const QString& base64Input, int maxSizeBy
         }
     }
 
-    // 如果 JPEG 50 仍然超限，返回最后一次压缩结果（至少尺寸已缩小）
-    qDebug() << "[compressImageBase64] Still over limit after JPEG 50, returning best effort";
-    QString resultB64 = QString::fromLatin1(compressed.toBase64());
-    return resultB64;
+    // 如果 JPEG 50 仍然超限，放弃（返回空字符串让调用方反馈错误）
+    qWarning() << "[compressImageBase64] Cannot compress to target size, giving up";
+    return {};
 }
 
 bool ApiClient::isAndroid() const {
