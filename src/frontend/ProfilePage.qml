@@ -5,8 +5,15 @@ import QtQuick.Dialogs
 
 Rectangle {
     id: root
-    color: window.bgPage
+    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#f5f5f5")
 
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : "#222222")
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : "#666666")
+    property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : "#999999")
     property var profileData: ({})
     property bool editing: false
     property bool saving: false
@@ -382,8 +389,8 @@ Rectangle {
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 2
-                        Text { text: (root.profileData.post_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                        Text { text: qsTr("帖子"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: (root.profileData.post_count ?? "---"); font.bold: true; font.pixelSize: 18; color: root.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("帖子"); font.pixelSize: 13; color: root.textTertiary; Layout.alignment: Qt.AlignHCenter }
                     }
 
                     MouseArea {
@@ -403,8 +410,8 @@ Rectangle {
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 2
-                        Text { text: (root.profileData.follower_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                        Text { text: qsTr("粉丝"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: (root.profileData.follower_count ?? "---"); font.bold: true; font.pixelSize: 18; color: root.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("粉丝"); font.pixelSize: 13; color: root.textTertiary; Layout.alignment: Qt.AlignHCenter }
                     }
 
                     MouseArea {
@@ -424,8 +431,8 @@ Rectangle {
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 2
-                        Text { text: (root.profileData.followee_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                        Text { text: qsTr("关注"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: (root.profileData.followee_count ?? "---"); font.bold: true; font.pixelSize: 18; color: root.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("关注"); font.pixelSize: 13; color: root.textTertiary; Layout.alignment: Qt.AlignHCenter }
                     }
 
                     MouseArea {
