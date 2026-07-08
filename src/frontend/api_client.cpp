@@ -151,9 +151,11 @@ void ApiClient::setLanguage(const QString& locale) {
 }
 
 QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
+    QByteArray data;
     QString localPath;
 
 #ifdef Q_OS_ANDROID
+    QString uriStr = fileUrl.toString();
     qDebug() << "[readFileAsBase64] URI:" << uriStr;
 
     // Android: 统一走 ContentResolver 读取（兼容 content:// 和 file:// URI）
