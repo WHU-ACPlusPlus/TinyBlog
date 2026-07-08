@@ -15,7 +15,16 @@ qt_add_executable(appfrontend
     api_client.cpp
     api_client.h
     api_types.h
-    resources.qrc
+)
+
+set(appfrontend_qrc_srcs "")
+qt6_add_resources(appfrontend_qrc_srcs ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc)
+target_sources(appfrontend PRIVATE ${appfrontend_qrc_srcs})
+
+qt_add_resources(appfrontend appfrontend_assets
+    PREFIX "/"
+    FILES
+        assets/icon.png
 )
 
 # 注册 QML 模块 —— QML 文件放到 qml/ 目录下
