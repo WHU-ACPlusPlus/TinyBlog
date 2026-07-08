@@ -106,18 +106,19 @@ def get_user_id(cookie):
     """Check cookie validity and auto-extend (+1 hour), return user_id or None."""
     if not cookie:
         return None
-    row = db_fetchone(
-        "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
-        (cookie,)
-    )
-    if not row:
-        return None
-    db_execute(
-        "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
-        (cookie,)
-    )
-    db_commit()
-    return row['user_id']
+    with db_lock:
+        row = conn.execute(
+            "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
+            (cookie,)
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
+            (cookie,)
+        )
+        conn.commit()
+        return row['user_id']
 
 if __name__ == "__main__":
     db_execute("""
@@ -1546,24 +1547,30 @@ def check_cookie(body: Check_Cookie_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"valid": False}
-    user = db_fetchone(
-            "SELECT id, username, nickname, avatar, signature, email FROM users WHERE id = ?",
-            (user_id,)
-            )
-    if not user:
-        return {"valid": False}
-    post_count = db_fetchone(
-            "SELECT COUNT(*) AS cnt FROM posts WHERE publisher_id = ?",
-            (user["id"],)
-        )
-    follower_count = db_fetchone(
-            "SELECT COUNT(*) AS cnt FROM following WHERE followee = ?",
-            (user["id"],)
-        )
-    followee_count = db_fetchone(
-            "SELECT COUNT(*) AS cnt FROM following WHERE follower = ?",
-            (user["id"],)
-        )
+    # 在一次锁内读取所有用户数据，确保一致性
+    with db_lock:
+        user = conn.execute(
+                "SELECT id, username, nickname, avatar, signature, email FROM users WHERE id = ?",
+                (user_id,)
+                ).fetchone()
+        if not user:
+            return {"valid": False}
+        post_count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM posts WHERE publisher_id = ?",
+                (user["id"],)
+            ).fetchone()
+        follower_count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM following WHERE followee = ?",
+                (user["id"],)
+            ).fetchone()
+        followee_count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM following WHERE follower = ?",
+                (user["id"],)
+            ).fetchone()
+    avatar_preview = (user["avatar"][:80] + "...") if user["avatar"] and len(user["avatar"]) > 80 else (user["avatar"] or "(empty)")
+    log_api("POST /check-cookie", user_id,
+            f"avatar_len={len(user['avatar']) if user['avatar'] else 0}",
+            f"avatar_head={avatar_preview}")
     return {
         "valid": True,
         "user_id": user["id"],
@@ -1817,16 +1824,20 @@ def patch_avatar(body: Patch_Avatar_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    if body.avatar:
-        db_execute("UPDATE users SET avatar = ? WHERE id = ?",
-                (body.avatar, user_id)
-                )
-    if body.signature:
-        db_execute(
-                "UPDATE users SET signature = ? WHERE id = ?",
-                (body.signature, user_id)
-                )
-    db_commit()
+    with db_lock:
+        if body.avatar:
+            conn.execute("UPDATE users SET avatar = ? WHERE id = ?",
+                    (body.avatar, user_id)
+                    )
+        if body.signature:
+            conn.execute(
+                    "UPDATE users SET signature = ? WHERE id = ?",
+                    (body.signature, user_id)
+                    )
+        conn.commit()
+    log_api("POST /avatar", user_id,
+            f"avatar_len={len(body.avatar) if body.avatar else 0}, sig_len={len(body.signature) if body.signature else 0}",
+            "success")
     return {"status": "success"}
 
 @app.get("/avatar")

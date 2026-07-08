@@ -9,6 +9,7 @@ Rectangle {
 
     property var profileData: ({})
     property bool editing: false
+    property bool saving: false
     property string newNickname: ""
     property string newAvatar: ""
     property string newAvatarMime: "image/png"
@@ -25,9 +26,9 @@ Rectangle {
         return "image/png"  // 默认 PNG / 或未知
     }
 
-    // 每次页面显示时刷新资料
+    // 每次页面显示时刷新资料（但保存进行中时不刷新，避免竞态条件）
     onVisibleChanged: {
-        if (visible) {
+        if (visible && !root.saving) {
             api.fetchProfile()
         }
     }
@@ -37,6 +38,9 @@ Rectangle {
         target: api
 
         function onProfileFetched(profile) {
+            // 如果正在保存中，忽略此次返回（可能是保存前发出的旧请求）
+            if (root.saving) return
+
             root.profileData = profile
             root.newNickname = profile.nickname || ""
             root.newSignature = profile.signature || ""
@@ -46,12 +50,27 @@ Rectangle {
         }
 
         function onProfileUpdated() {
-            // 更新成功后重新加载
-            api.fetchProfile()
+            // 保存成功：退出编辑模式，保持本地数据
+            // 不重新拉取服务器，避免旧请求返回覆盖新数据
+            root.saving = false
+            root.editing = false
+
+            // 将本地修改同步到 profileData（包括新头像）
+            var merged = Object.assign({}, root.profileData)
+            if (root.newNickname)
+                merged.nickname = root.newNickname
+            if (root.newSignature)
+                merged.signature = root.newSignature
+            if (root.newAvatar)
+                merged.avatar = root.newAvatar
+            root.profileData = merged
+
+            // root.newAvatar 不清空，保持当前显示的新头像
         }
 
         function onErrorOccurred(message) {
-            // 显示错误提示（可选）
+            root.saving = false
+            root.editing = false
             console.log("Profile error:", message)
         }
     }
@@ -62,12 +81,22 @@ Rectangle {
         title: qsTr("选择头像")
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"]
         onAccepted: {
-            if (selectedFiles.length > 0) {
-                var b64 = api.readFileAsBase64(selectedFiles[0])
-                if (b64.length > 0) {
-                    root.newAvatar = b64
-                    root.newAvatarMime = root.detectMime(b64)
-                }
+            var b64 = api.readFileAsBase64(selectedFile, 1048576)  // 超过 1MB 自动压缩
+            if (b64.length > 0) {
+                // 从文件名推断 MIME 类型
+                var mime = "image/png"
+                var path = String(selectedFile).toLowerCase()
+                if (path.endsWith(".jpg") || path.endsWith(".jpeg"))
+                    mime = "image/jpeg"
+                else if (path.endsWith(".gif"))
+                    mime = "image/gif"
+                else if (path.endsWith(".webp"))
+                    mime = "image/webp"
+                else if (path.endsWith(".bmp"))
+                    mime = "image/bmp"
+                root.newAvatarMime = mime
+                // 把完整的 data URI 存下来（带 MIME），后续传给服务器也带 MIME
+                root.newAvatar = "data:" + mime + ";base64," + b64
             }
         }
     }
@@ -169,9 +198,11 @@ Rectangle {
                                     var av = root.newAvatar.length > 0
                                             ? root.newAvatar
                                             : (root.profileData.avatar || "")
-                                    if (av)
-                                        return "data:" + root.newAvatarMime + ";base64," + av
-                                    return ""
+                                    if (!av) return ""
+                                    // 新格式：已包含 "data:..." 前缀，直接使用
+                                    if (av.indexOf("data:") === 0) return av
+                                    // 旧格式（向后兼容）：纯 base64，补上 MIME 前缀
+                                    return "data:" + root.newAvatarMime + ";base64," + av
                                 }
                                 fillMode: Image.PreserveAspectCrop
                                 visible: source.toString().length > 0
@@ -354,12 +385,13 @@ Rectangle {
                 onClicked: {
                     if (root.editing) {
                         // 保存修改
+                        root.saving = true
                         api.updateProfile(
                             root.newNickname !== root.profileData.nickname ? root.newNickname : "",
                             root.newAvatar,
                             root.newSignature !== root.profileData.signature ? root.newSignature : ""
                         )
-                        root.editing = false
+                        // editing 交给 onProfileUpdated/onErrorOccurred 管理
                     } else {
                         root.editing = true
                         root.newNickname = root.profileData.nickname || ""
@@ -390,6 +422,7 @@ Rectangle {
                 }
 
                 onClicked: {
+                    root.saving = false
                     root.editing = false
                     root.newNickname = root.profileData.nickname || ""
                     root.newSignature = root.profileData.signature || ""

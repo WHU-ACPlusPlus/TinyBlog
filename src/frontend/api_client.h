@@ -45,8 +45,8 @@ class ApiClient : public QObject {
     bool isLoggedIn() const;
     Q_INVOKABLE void clearAuth();
     Q_INVOKABLE void setLanguage(const QString& locale);
-    void setQmlEngine(QQmlEngine* engine);                                                                            // 清除 cookie + QSettings
-    Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl);                                               // 读取文件内容为 base64
+    void setQmlEngine(QQmlEngine* engine);                                                                   // 清除 cookie + QSettings
+    Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes = 0);                         // 读取文件内容为 base64（可指定最大字节数，超限自动压缩）
     Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl& videoUrl);                                           // 用 ffmpeg 抽视频第一帧
     Q_INVOKABLE QString videoThumbnailFromBase64(const QString& b64);                                        // 从 base64 视频数据提取缩略图
     Q_INVOKABLE QString saveBase64ToTempFile(const QString& b64, const QString& ext);                        // base64 → 临时文件 → file:// URL
@@ -147,7 +147,7 @@ class ApiClient : public QObject {
     void registerStep1Done(const QString& cookie, const QString& captcha);
     void registerStep2Done();
     void loginStep1Done(const QString& cookie, bool needCaptcha, bool needEmail,
-                         const QString& captcha, const QString& email);
+                        const QString& captcha, const QString& email);
     void loginStep2Done();
     void loginStep3Done();
     void loginSuccess(const QString& cookie);
@@ -197,7 +197,7 @@ class ApiClient : public QObject {
     void groupMessagesReceived(const QVariantList& messages);  // R4修复: QVariantList使QML可读字段
 
     // ── 消息功能（新增）──
-    void conversationsFetched(const QVariantList& conversations);   // QVariantList of QVariantMap (QML-friendly)
+    void conversationsFetched(const QVariantList& conversations);  // QVariantList of QVariantMap (QML-friendly)
     void conversationHidden(int conversation_id);
     void privateMessagesFetched(const QVariantList& messages, bool hasMore);  // QVariantList of QVariantMap
     void contactsSearched(const QVariantList& users, const QVariantList& groups);
