@@ -1180,8 +1180,8 @@ def pub_post(body: Pub_Post):
     if len(body.media) > 9:
         return {"error": "Too many media."}
     for medium in body.media:
-        if len(medium) > (1 << 24):
-            return {"error": "Media cannot be larger than 16MiB."}
+        if len(medium) > 5 * 1024 * 1024:
+            return {"error": "Media too large (max 5MB base64 / ~3.75MB raw)."}
     db_execute("INSERT INTO posts (publisher_id, content) VALUES (?, ?)",
             (user_id, body.text)
             )
