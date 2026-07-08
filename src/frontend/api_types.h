@@ -51,9 +51,12 @@ struct CommentInfo {
 // ─── 私信数据 ───
 
 struct MessageInfo {
+    int id = 0;             // 消息ID（新增，用于游标分页）
     int sender_id = 0;
+    QString sender_name;    // 发送者昵称（新增）
     QString sent_at;
     QString content;
+    bool is_read = false;   // 已读标记（新增）
 };
 
 // ─── 群消息数据 ───
@@ -73,8 +76,33 @@ struct GroupInfo {
     int id = 0;
     QString name;
     int owner_id = 0;
+    QString avatar;         // 群头像 base64（新增）
     QString role;
     QString joined_at;
+};
+
+// ─── 会话数据（新增：消息功能） ───
+
+struct ConversationInfo {
+    int id = 0;
+    QString type;           // "private" | "group"
+    int target_id = 0;      // 私聊:对方user_id / 群聊:group_id
+    QString target_name;    // 对方昵称 或 群名称
+    QString target_avatar;  // 对方头像 或 群头像 (base64)
+    QString last_message;   // 最后一条消息预览
+    QString last_message_time;
+    int unread_count = 0;
+};
+
+// ─── 搜索结果数据（新增：消息功能） ───
+
+struct ContactSearchResult {
+    int id = 0;
+    QString username;
+    QString nickname;
+    QString avatar;
+    bool is_following = false;
+    bool is_mutual = false;
 };
 
 // ─── 请求/响应辅助 ───
@@ -92,6 +120,8 @@ Q_DECLARE_METATYPE(CommentInfo)
 Q_DECLARE_METATYPE(MessageInfo)
 Q_DECLARE_METATYPE(GroupMessageInfo)
 Q_DECLARE_METATYPE(GroupInfo)
+Q_DECLARE_METATYPE(ConversationInfo)
+Q_DECLARE_METATYPE(ContactSearchResult)
 
 // ─── JSON 序列化辅助 ───
 
@@ -137,8 +167,14 @@ inline CommentInfo commentFromJson(const QJsonObject &obj) {
 }
 
 inline MessageInfo msgFromJson(const QJsonObject &obj) {
-    return {obj["sender_id"].toInt(), obj["sent_at"].toString(),
-            obj["content"].toString()};
+    MessageInfo m;
+    m.id = obj["id"].toInt();
+    m.sender_id = obj["sender_id"].toInt();
+    m.sender_name = obj["sender_name"].toString();
+    m.sent_at = obj["sent_at"].toString();
+    m.content = obj["content"].toString();
+    m.is_read = obj["is_read"].toBool(true);
+    return m;
 }
 
 inline GroupMessageInfo groupMsgFromJson(const QJsonObject &obj) {
@@ -153,9 +189,40 @@ inline GroupMessageInfo groupMsgFromJson(const QJsonObject &obj) {
 }
 
 inline GroupInfo groupFromJson(const QJsonObject &obj) {
-    return {obj["id"].toInt(),     obj["name"].toString(),
-            obj["owner_id"].toInt(), obj["role"].toString(),
-            obj["joined_at"].toString()};
+    GroupInfo g;
+    g.id = obj["id"].toInt();
+    g.name = obj["name"].toString();
+    g.owner_id = obj["owner_id"].toInt();
+    g.avatar = obj["avatar"].toString();
+    g.role = obj["role"].toString();
+    g.joined_at = obj["joined_at"].toString();
+    return g;
+}
+
+// ─── 新增：会话 & 搜索 JSON 解析 ───
+
+inline ConversationInfo convFromJson(const QJsonObject &obj) {
+    ConversationInfo c;
+    c.id = obj["id"].toInt();
+    c.type = obj["type"].toString();
+    c.target_id = obj["target_id"].toInt();
+    c.target_name = obj["target_name"].toString();
+    c.target_avatar = obj["target_avatar"].toString();
+    c.last_message = obj["last_message"].toString();
+    c.last_message_time = obj["last_message_time"].toString();
+    c.unread_count = obj["unread_count"].toInt();
+    return c;
+}
+
+inline ContactSearchResult searchResultFromJson(const QJsonObject &obj) {
+    ContactSearchResult r;
+    r.id = obj["id"].toInt();
+    r.username = obj["username"].toString();
+    r.nickname = obj["nickname"].toString();
+    r.avatar = obj["avatar"].toString();
+    r.is_following = obj["is_following"].toBool();
+    r.is_mutual = obj["is_mutual"].toBool();
+    return r;
 }
 
 #endif // API_TYPES_H

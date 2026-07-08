@@ -31,6 +31,35 @@ Rectangle {
     property string loginEmail: ""
     property bool loginEmailSent: false
 
+    // ── 重置到初始状态 ──
+    function reset() {
+        step = 0
+        errorText = ""
+
+        regCookie = ""
+        captchaB64 = ""
+        regEmail = ""
+
+        loginCookie = ""
+        loginNeedCaptcha = false
+        loginNeedEmail = false
+        loginCaptchaB64 = ""
+        loginEmail = ""
+        loginEmailSent = false
+
+        // 清空输入框
+        if (regUsername) regUsername.text = ""
+        if (regNickname) regNickname.text = ""
+        if (regPassword) regPassword.text = ""
+        if (captchaInput) captchaInput.text = ""
+        if (emailInput) emailInput.text = ""
+        if (emailCodeInput) emailCodeInput.text = ""
+        if (logUsername) logUsername.text = ""
+        if (logPassword) logPassword.text = ""
+        if (loginCaptchaInput) loginCaptchaInput.text = ""
+        if (loginEmailCodeInput) loginEmailCodeInput.text = ""
+    }
+
     // ── 欢迎页 (step=0) ──
     ColumnLayout {
         anchors.fill: parent
@@ -41,7 +70,7 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: qsTr("Tiny Chat")
+            text: qsTr("Tiny Blog")
             font.pixelSize: 32
             font.bold: true
             color: window.textPrimary
@@ -58,7 +87,7 @@ Rectangle {
             id: urlInput
             Layout.preferredWidth: 260
             Layout.alignment: Qt.AlignHCenter
-            placeholderText: qsTr("http://127.0.0.1:18999")
+            placeholderText: qsTr("服务地址")
             Component.onCompleted: text = api.baseUrl
             onTextChanged: api.baseUrl = text
         }
@@ -518,6 +547,7 @@ Rectangle {
         }
         function onRegisterSuccess(cookie) {
             // api 已自动保存 cookie，进入主界面
+            reset()
         }
 
         // ── 登录信号 ──
@@ -563,11 +593,18 @@ Rectangle {
 
         function onLoginSuccess(cookie) {
             // api 已自动保存 cookie，进入主界面
+            reset()
         }
 
         function onErrorOccurred(msg) {
             if (step >= 1 && step <= 6)
                 errorText = msg
         }
+        function onCookieCheckComplete(valid, userId) {
+            // 不做任何事，避免干扰登录流程
+        }
+        // 注意：不监听 onErrorOccurred，因为它包含所有模块（消息/关注/群组）的错误，
+        // 如果在注册/登录页显示了这些无关错误，用户会看到莫名其妙的提示。
+        // 注册和登录的错误直接在按钮 onClicked 中通过回调处理。
     }
 }

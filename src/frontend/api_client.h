@@ -17,7 +17,7 @@
 #include "api_types.h"
 
 /**
- * Tiny Chat 客户端网络层
+ * Tiny Blog 客户端网络层
  *
  * 封装所有 API 端点的 HTTP 请求和 JSON 解析。
  * 所有请求为异步，通过信号返回结果。
@@ -110,6 +110,24 @@ class ApiClient : public QObject {
     void fetchGroupMembers(int group_id);
     void fetchMyGroups();
 
+    // ── 消息功能（新增）──
+    // 会话
+    void fetchConversations();
+    void hideConversation(int conversation_id);
+
+    // 聊天历史
+    void fetchPrivateMessages(int with_user_id, int before_id = 0, int count = 20);
+
+    // 搜索联系人/群组
+    void searchContacts(const QString& keyword, const QString& type = "all");
+
+    // 联系人列表
+    void fetchContacts();
+
+    // 用户/群组详情（侧边面板）
+    void fetchUserDetail(int user_id);
+    void fetchGroupDetail(int group_id);
+
    signals:
     // ── 通用信号 ──
     void errorOccurred(const QString& message);
@@ -161,6 +179,17 @@ class ApiClient : public QObject {
     void groupMessagesReceived(const QList<GroupMessageInfo>& messages);
     void groupMembersFetched(const QList<UserInfo>& members);
     void myGroupsFetched(const QList<GroupInfo>& groups);
+
+    void groupMessagesReceived(const QVariantList& messages);  // R4修复: QVariantList使QML可读字段
+
+    // ── 消息功能（新增）──
+    void conversationsFetched(const QVariantList& conversations);   // QVariantList of QVariantMap (QML-friendly)
+    void conversationHidden(int conversation_id);
+    void privateMessagesFetched(const QVariantList& messages, bool hasMore);  // QVariantList of QVariantMap
+    void contactsSearched(const QVariantList& users, const QVariantList& groups);
+    void contactsFetched(const QVariantList& contacts, const QVariantList& followedOnly);
+    void userDetailFetched(const QVariantMap& detail);
+    void groupDetailFetched(const QVariantMap& detail);
 
    private:
     // 底层工具方法

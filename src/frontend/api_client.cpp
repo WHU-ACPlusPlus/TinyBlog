@@ -26,29 +26,29 @@
 // ─── 后端英文错误 → 中文翻译 ───
 static QString trBackendError(const QString& msg) {
     static const QHash<QString, QString> map = {
-        {QStringLiteral("Bad cookie."),          QStringLiteral("登录已过期，请重新登录")},
-        {QStringLiteral("Bad username."),          QStringLiteral("无效的用户名")},
-        {QStringLiteral("Bad nickname."),          QStringLiteral("无效的昵称")},
-        {QStringLiteral("Bad password."),          QStringLiteral("无效的密码")},
-        {QStringLiteral("Username occupied."),     QStringLiteral("用户名已被占用")},
-        {QStringLiteral("User not exist."),        QStringLiteral("用户不存在")},
-        {QStringLiteral("Incorrect password."),    QStringLiteral("密码错误")},
-        {QStringLiteral("Empty post not allowed."),   QStringLiteral("内容不能为空")},
-        {QStringLiteral("Too many media."),        QStringLiteral("媒体文件过多")},
-        {QStringLiteral("Media cannot be larger than 16MiB."), QStringLiteral("媒体文件不能超过 16MiB")},
-        {QStringLiteral("Post not exist."),        QStringLiteral("帖子不存在")},
-        {QStringLiteral("Post not found."),        QStringLiteral("帖子不存在")},
-        {QStringLiteral("Empty comment not allowed."), QStringLiteral("评论不能为空")},
-        {QStringLiteral("Cannot follow yourself."),    QStringLiteral("不能关注自己")},
-        {QStringLiteral("Not your post."),         QStringLiteral("不能删除他人的帖子")},
-        {QStringLiteral("Not your comment."),      QStringLiteral("不能删除他人的评论")},
-        {QStringLiteral("Cannot repost your own post."), QStringLiteral("不能转发自己的帖子")},
-        {QStringLiteral("Group name cannot be empty."),  QStringLiteral("群组名称不能为空")},
-        {QStringLiteral("Group not exist."),       QStringLiteral("群组不存在")},
-        {QStringLiteral("You are not in this group."),   QStringLiteral("你不在该群组中")},
-        {QStringLiteral("Empty message not allowed."),   QStringLiteral("消息不能为空")},
-        {QStringLiteral("You are already in this group."), QStringLiteral("你已在该群组中")},
-        {QStringLiteral("Bad `to_whom_id`"),       QStringLiteral("无效的收信人")},
+        {QStringLiteral("Bad cookie."),          ApiClient::tr("登录已过期，请重新登录")},
+        {QStringLiteral("Bad username."),          ApiClient::tr("无效的用户名")},
+        {QStringLiteral("Bad nickname."),          ApiClient::tr("无效的昵称")},
+        {QStringLiteral("Bad password."),          ApiClient::tr("无效的密码")},
+        {QStringLiteral("Username occupied."),     ApiClient::tr("用户名已被占用")},
+        {QStringLiteral("User not exist."),        ApiClient::tr("用户不存在")},
+        {QStringLiteral("Incorrect password."),    ApiClient::tr("密码错误")},
+        {QStringLiteral("Empty post not allowed."),   ApiClient::tr("内容不能为空")},
+        {QStringLiteral("Too many media."),        ApiClient::tr("媒体文件过多")},
+        {QStringLiteral("Media cannot be larger than 16MiB."), ApiClient::tr("媒体文件不能超过 16MiB")},
+        {QStringLiteral("Post not exist."),        ApiClient::tr("帖子不存在")},
+        {QStringLiteral("Post not found."),        ApiClient::tr("帖子不存在")},
+        {QStringLiteral("Empty comment not allowed."), ApiClient::tr("评论不能为空")},
+        {QStringLiteral("Cannot follow yourself."),    ApiClient::tr("不能关注自己")},
+        {QStringLiteral("Not your post."),         ApiClient::tr("不能删除他人的帖子")},
+        {QStringLiteral("Not your comment."),      ApiClient::tr("不能删除他人的评论")},
+        {QStringLiteral("Cannot repost your own post."), ApiClient::tr("不能转发自己的帖子")},
+        {QStringLiteral("Group name cannot be empty."),  ApiClient::tr("群组名称不能为空")},
+        {QStringLiteral("Group not exist."),       ApiClient::tr("群组不存在")},
+        {QStringLiteral("You are not in this group."),   ApiClient::tr("你不在该群组中")},
+        {QStringLiteral("Empty message not allowed."),   ApiClient::tr("消息不能为空")},
+        {QStringLiteral("You are already in this group."), ApiClient::tr("你已在该群组中")},
+        {QStringLiteral("Bad `to_whom_id`"),       ApiClient::tr("无效的收信人")},
     };
     return map.value(msg, msg);
 }
@@ -76,6 +76,9 @@ ApiClient::ApiClient(QObject* parent)
 
 void ApiClient::setBaseUrl(const QString& url) {
     m_baseUrl = url;
+    // 未指明协议时默认为 http
+    if (!m_baseUrl.startsWith("http://") && !m_baseUrl.startsWith("https://"))
+        m_baseUrl.prepend("http://");
     while (m_baseUrl.endsWith('/'))
         m_baseUrl.chop(1);
     QSettings settings;
@@ -588,7 +591,7 @@ void ApiClient::follow(int followee_id) {
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
-        emit errorOccurred("follow: " + QString::number(obj["follow_id"].toInt()));
+        // 关注成功，不发射全局errorOccurred
     });
 }
 
@@ -600,7 +603,7 @@ void ApiClient::unfollow(int followee_id) {
         (void)obj;
         if (!checkReply(reply, obj))
             return;
-        emit errorOccurred("unfollow: " + QString::number(obj["follow_id"].toInt()));
+        // 取消关注成功，不发射全局errorOccurred
     });
 }
 
@@ -761,18 +764,26 @@ void ApiClient::updateProfile(const QString& nickname,
                               const QString& avatar,
                               const QString& signature) {
     auto pending = std::make_shared<int>(0);
+    auto failed = std::make_shared<bool>(false);
+
+    auto checkDone = [this, pending, failed]() {
+        if (*pending == 0 && !*failed) {
+            emit profileUpdated();
+        }
+    };
 
     // 更新昵称
     if (!nickname.isEmpty()) {
         (*pending)++;
         QJsonObject body = withCookie({{"nickname", nickname}});
         QNetworkReply* reply = postJson("/edit-profile", body);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, pending]() {
-            reply->deleteLater();
-            (*pending)--;
-            if (*pending == 0) {
-                emit profileUpdated();
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pending, failed, checkDone]() {
+            QJsonObject obj;
+            if (!checkReply(reply, obj)) {
+                *failed = true;
             }
+            (*pending)--;
+            checkDone();
         });
     }
     // 更新头像和签名
@@ -782,18 +793,17 @@ void ApiClient::updateProfile(const QString& nickname,
         if (!avatar.isEmpty()) body["avatar"] = avatar;
         if (!signature.isEmpty()) body["signature"] = signature;
         QNetworkReply* reply = postJson("/avatar", body);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, pending]() {
-            reply->deleteLater();
-            (*pending)--;
-            if (*pending == 0) {
-                emit profileUpdated();
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pending, failed, checkDone]() {
+            QJsonObject obj;
+            if (!checkReply(reply, obj)) {
+                *failed = true;
             }
+            (*pending)--;
+            checkDone();
         });
     }
     // 没有要更新的内容
-    if (*pending == 0) {
-        emit profileUpdated();
-    }
+    checkDone();
 }
 
 void ApiClient::patchAvatar(const QString& avatar, const QString& signature) {
@@ -899,8 +909,10 @@ void ApiClient::receiveGroupMessages(int group_id, int count) {
     QNetworkReply* reply = postJson("/recv-group-msg", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
-        if (!checkReply(reply, obj))
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::receiveGroupMessages] 请求失败";
             return;
+        }
 
         QList<GroupMessageInfo> msgs;
         for (const auto& v : obj["messages"].toArray())
@@ -936,5 +948,162 @@ void ApiClient::fetchMyGroups() {
         for (const auto& v : obj["groups"].toArray())
             groups.append(groupFromJson(v.toObject()));
         emit myGroupsFetched(groups);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ── 消息功能（新增）──
+// 以下方法依赖后端新增端点，当前为桩实现。
+// 后端完成后取消注释实际逻辑即可。
+// ═══════════════════════════════════════════════════════════════
+
+void ApiClient::fetchConversations() {
+    qDebug() << "[ApiClient::fetchConversations] 请求会话列表...";
+    QJsonObject body = withCookie();
+    QNetworkReply* reply = postJson("/get-conversations", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchConversations] 请求失败";
+            return;
+        }
+
+        QVariantList conversations;
+        for (const auto& v : obj["conversations"].toArray())
+            conversations.append(v.toObject().toVariantMap());
+        qDebug() << "[ApiClient::fetchConversations] 成功获取" << conversations.size() << "个会话";
+        emit conversationsFetched(conversations);
+    });
+}
+
+void ApiClient::hideConversation(int conversation_id) {
+    qDebug() << "[ApiClient::hideConversation] 隐藏会话 id=" << conversation_id;
+    QJsonObject body = withCookie({{"conversation_id", conversation_id}});
+    QNetworkReply* reply = postJson("/hide-conversation", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, conversation_id]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::hideConversation] 隐藏失败 id=" << conversation_id;
+            return;
+        }
+        qDebug() << "[ApiClient::hideConversation] 成功隐藏 id=" << conversation_id;
+        emit conversationHidden(conversation_id);
+    });
+}
+
+void ApiClient::fetchPrivateMessages(int with_user_id, int before_id, int count) {
+    qDebug() << "[ApiClient::fetchPrivateMessages] 请求私聊历史 with_user_id=" << with_user_id
+             << "before_id=" << before_id << "count=" << count;
+    QJsonObject body = withCookie({
+        {"with_user_id", with_user_id},
+        {"before_id", before_id},
+        {"count", count}
+    });
+    QNetworkReply* reply = postJson("/get-private-messages", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchPrivateMessages] 请求失败";
+            return;
+        }
+
+        QVariantList messages;
+        for (const auto& v : obj["messages"].toArray())
+            messages.append(v.toObject().toVariantMap());
+        bool hasMore = obj["has_more"].toBool(false);
+        qDebug() << "[ApiClient::fetchPrivateMessages] 成功获取" << messages.size()
+                 << "条消息, hasMore=" << hasMore;
+        emit privateMessagesFetched(messages, hasMore);
+    });
+}
+
+void ApiClient::searchContacts(const QString& keyword, const QString& type) {
+    qDebug() << "[ApiClient::searchContacts] 搜索 keyword=" << keyword << "type=" << type;
+
+    // ── 输入校验 ──
+    QString trimmed = keyword.trimmed();
+    if (trimmed.isEmpty()) {
+        qDebug() << "[ApiClient::searchContacts] 关键词为空，跳过请求";
+        emit contactsSearched({}, {});
+        return;
+    }
+    if (trimmed.length() > 100) {
+        qDebug() << "[ApiClient::searchContacts] 关键词过长(" << trimmed.length() << ")，截断至100字符";
+        trimmed = trimmed.left(100);
+    }
+
+    QJsonObject body = withCookie({{"keyword", trimmed}, {"type", type}});
+    QNetworkReply* reply = postJson("/search-contacts", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::searchContacts] 搜索失败";
+            return;
+        }
+
+        QVariantList users;
+        for (const auto& v : obj["users"].toArray())
+            users.append(v.toObject().toVariantMap());
+        QVariantList groups;
+        for (const auto& v : obj["groups"].toArray())
+            groups.append(v.toObject().toVariantMap());
+        qDebug() << "[ApiClient::searchContacts] 搜索结果: users=" << users.size()
+                 << "groups=" << groups.size();
+        emit contactsSearched(users, groups);
+    });
+}
+
+void ApiClient::fetchContacts() {
+    qDebug() << "[ApiClient::fetchContacts] 请求联系人列表...";
+    QJsonObject body = withCookie();
+    QNetworkReply* reply = postJson("/get-contacts", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchContacts] 请求失败";
+            return;
+        }
+
+        QVariantList contacts;
+        for (const auto& v : obj["contacts"].toArray())
+            contacts.append(v.toObject().toVariantMap());
+        QVariantList followedOnly;
+        for (const auto& v : obj["followed_only"].toArray())
+            followedOnly.append(v.toObject().toVariantMap());
+        qDebug() << "[ApiClient::fetchContacts] 成功: contacts=" << contacts.size()
+                 << "followedOnly=" << followedOnly.size();
+        emit contactsFetched(contacts, followedOnly);
+    });
+}
+
+void ApiClient::fetchUserDetail(int user_id) {
+    qDebug() << "[ApiClient::fetchUserDetail] 请求用户详情 user_id=" << user_id;
+    QJsonObject body = withCookie({{"user_id", user_id}});
+    QNetworkReply* reply = postJson("/get-user-detail", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchUserDetail] 请求失败 user_id="
+                     << reply->property("req_user_id").toInt();
+            return;
+        }
+        qDebug() << "[ApiClient::fetchUserDetail] 成功获取用户详情";
+        emit userDetailFetched(obj.toVariantMap());
+    });
+}
+
+void ApiClient::fetchGroupDetail(int group_id) {
+    qDebug() << "[ApiClient::fetchGroupDetail] 请求群组详情 group_id=" << group_id;
+    QJsonObject body = withCookie({{"group_id", group_id}});
+    QNetworkReply* reply = postJson("/get-group-detail", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) {
+            qDebug() << "[ApiClient::fetchGroupDetail] 请求失败 group_id="
+                     << reply->property("req_group_id").toInt();
+            return;
+        }
+        qDebug() << "[ApiClient::fetchGroupDetail] 成功获取群组详情";
+        emit groupDetailFetched(obj.toVariantMap());
     });
 }

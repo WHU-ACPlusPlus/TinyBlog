@@ -14,6 +14,16 @@ Rectangle {
     property var selectedMedia: []   // 已选媒体文件的 url[]
     property var mediaThumbnails: [] // 对应的缩略图 url[]（视频为抽帧图，图片为原图）
 
+    property int _timeTick: 0
+
+    // ── 定时刷新时间显示 ──
+    Timer {
+        interval: 60000  // 每分钟刷新一次
+        running: visible
+        repeat: true
+        onTriggered: root._timeTick++
+    }
+
     // ── 辅助判断 ──
     function detectMimeFromBase64(b64) {
         if (!b64) return "image/jpeg"
@@ -26,6 +36,33 @@ Rectangle {
         if (p === "AAAAKG") return "video/mp4"
         if (p === "AAAAFG") return "video/mp4"
         return "image/jpeg"
+    }
+
+    function formatTime(utcStr) {
+        if (!utcStr) return ""
+        // Parse UTC string "2026-07-07 14:30:00" as UTC
+        var d = new Date(utcStr + "Z")
+        if (isNaN(d.getTime())) return utcStr
+        var now = new Date()
+        var diffMs = now.getTime() - d.getTime()
+        var diffSec = Math.floor(diffMs / 1000)
+        if (diffSec < 60) return qsTr("刚刚")
+        var diffMin = Math.floor(diffSec / 60)
+        if (diffMin < 60) return qsTr("%1 分钟前").arg(diffMin)
+        var diffHour = Math.floor(diffMin / 60)
+        if (diffHour < 24) return qsTr("%1 小时前").arg(diffHour)
+        var diffDay = Math.floor(diffHour / 24)
+        if (diffDay < 2) return qsTr("昨天")
+        if (diffDay < 7) return qsTr("%1 天前").arg(diffDay)
+        // Older: show date
+        var month = d.getMonth() + 1
+        var day = d.getDate()
+        var year = d.getFullYear()
+        var curYear = now.getFullYear()
+        if (year === curYear) {
+            return month + "/" + day
+        }
+        return year + "/" + month + "/" + day
     }
 
     function isVideo(url) {
@@ -242,6 +279,15 @@ Rectangle {
                                             visible: status === Image.Ready
                                         }
 
+                                        Image {
+                                            anchors.fill: parent
+                                            fillMode: Image.PreserveAspectCrop
+                                            source: modelData.avatar
+                                                     ? "data:image/jpeg;base64," + modelData.avatar
+                                                     : ""
+                                            visible: status === Image.Ready
+                                        }
+
                                         Text {
                                             anchors.centerIn: parent
                                             text: modelData.nickname[0]
@@ -347,6 +393,19 @@ Rectangle {
                                                     mediaViewer.visible = true
                                                 }
                                             }
+
+                                            // 点击查看大图
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                visible: modelData.source && modelData.source.length > 0
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    mediaViewer.viewerSource = modelData.source
+                                                    mediaViewer.viewerIsVideo = modelData.isVideo || false
+                                                    mediaViewer.viewerContent = modelData.isVideo ? (modelData.content || "") : ""
+                                                    mediaViewer.visible = true
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -357,7 +416,9 @@ Rectangle {
                                     spacing: 6
 
                                     Text {
-                                        text: modelData.created_at
+                                        text: {
+                root._timeTick;  // bind to tick so it refreshes
+                return root.formatTime(modelData.created_at)}
                                         font.pixelSize: 12
                                         color: window.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
@@ -690,7 +751,7 @@ Rectangle {
                         placeholderText: qsTr("分享你的想法……")
                         placeholderTextColor: window.textSecondary
                         font.pixelSize: 16
-                        color: "#000"
+                        color: window.textPrimary
                         wrapMode: TextEdit.Wrap
                         focus: false
                     }

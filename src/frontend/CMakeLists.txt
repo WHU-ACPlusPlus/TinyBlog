@@ -28,6 +28,10 @@ qt_add_qml_module(appfrontend
         SquarePage.qml
         MessagesPage.qml
         ProfilePage.qml
+        ConversationListPanel.qml
+        ConversationItem.qml
+        ChatPanel.qml
+        MessageBubble.qml
 )
 
 # ── 国际化 / 翻译 ──
@@ -41,16 +45,7 @@ qt_add_translations(appfrontend
     QM_FILES_OUTPUT_VARIABLE appfrontend_qm_files
 )
 
-# Copy .qm files next to the binary so runtime translation loading works
-foreach(qm_file ${appfrontend_qm_files})
-    get_filename_component(qm_name ${qm_file} NAME)
-    add_custom_command(TARGET appfrontend POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${qm_file}"
-            "$<TARGET_FILE_DIR:appfrontend>/${qm_name}"
-        COMMENT "Copying ${qm_name} to binary dir"
-    )
-endforeach()
+
 
 target_link_libraries(appfrontend
     PRIVATE Qt6::Quick Qt6::Network Qt6::QuickDialogs2 Qt6::Multimedia Qt6::Core
