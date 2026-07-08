@@ -1,11 +1,9 @@
 #include "api_client.h"
-#include <QQmlEngine>
-#include <QTranslator>
-#include <QCoreApplication>
-#include <QDir>
 
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 #include <QHash>
 #include <QImage>
@@ -15,40 +13,43 @@
 #include <QMediaPlayer>
 #include <QNetworkRequest>
 #include <QProcess>
+#include <QQmlEngine>
 #include <QStandardPaths>
+#include <QTranslator>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QUuid>
 #include <QVideoFrame>
 #include <QVideoFrameFormat>
 #include <QVideoSink>
+#include <cmath>
 
 // ─── 后端英文错误 → 中文翻译 ───
 static QString trBackendError(const QString& msg) {
     static const QHash<QString, QString> map = {
-        {QStringLiteral("Bad cookie."),          ApiClient::tr("登录已过期，请重新登录")},
-        {QStringLiteral("Bad username."),          ApiClient::tr("无效的用户名")},
-        {QStringLiteral("Bad nickname."),          ApiClient::tr("无效的昵称")},
-        {QStringLiteral("Bad password."),          ApiClient::tr("无效的密码")},
-        {QStringLiteral("Username occupied."),     ApiClient::tr("用户名已被占用")},
-        {QStringLiteral("User not exist."),        ApiClient::tr("用户不存在")},
-        {QStringLiteral("Incorrect password."),    ApiClient::tr("密码错误")},
-        {QStringLiteral("Empty post not allowed."),   ApiClient::tr("内容不能为空")},
-        {QStringLiteral("Too many media."),        ApiClient::tr("媒体文件过多")},
+        {QStringLiteral("Bad cookie."), ApiClient::tr("登录已过期，请重新登录")},
+        {QStringLiteral("Bad username."), ApiClient::tr("无效的用户名")},
+        {QStringLiteral("Bad nickname."), ApiClient::tr("无效的昵称")},
+        {QStringLiteral("Bad password."), ApiClient::tr("无效的密码")},
+        {QStringLiteral("Username occupied."), ApiClient::tr("用户名已被占用")},
+        {QStringLiteral("User not exist."), ApiClient::tr("用户不存在")},
+        {QStringLiteral("Incorrect password."), ApiClient::tr("密码错误")},
+        {QStringLiteral("Empty post not allowed."), ApiClient::tr("内容不能为空")},
+        {QStringLiteral("Too many media."), ApiClient::tr("媒体文件过多")},
         {QStringLiteral("Media cannot be larger than 16MiB."), ApiClient::tr("媒体文件不能超过 16MiB")},
-        {QStringLiteral("Post not exist."),        ApiClient::tr("帖子不存在")},
-        {QStringLiteral("Post not found."),        ApiClient::tr("帖子不存在")},
+        {QStringLiteral("Post not exist."), ApiClient::tr("帖子不存在")},
+        {QStringLiteral("Post not found."), ApiClient::tr("帖子不存在")},
         {QStringLiteral("Empty comment not allowed."), ApiClient::tr("评论不能为空")},
-        {QStringLiteral("Cannot follow yourself."),    ApiClient::tr("不能关注自己")},
-        {QStringLiteral("Not your post."),         ApiClient::tr("不能删除他人的帖子")},
-        {QStringLiteral("Not your comment."),      ApiClient::tr("不能删除他人的评论")},
+        {QStringLiteral("Cannot follow yourself."), ApiClient::tr("不能关注自己")},
+        {QStringLiteral("Not your post."), ApiClient::tr("不能删除他人的帖子")},
+        {QStringLiteral("Not your comment."), ApiClient::tr("不能删除他人的评论")},
         {QStringLiteral("Cannot repost your own post."), ApiClient::tr("不能转发自己的帖子")},
-        {QStringLiteral("Group name cannot be empty."),  ApiClient::tr("群组名称不能为空")},
-        {QStringLiteral("Group not exist."),       ApiClient::tr("群组不存在")},
-        {QStringLiteral("You are not in this group."),   ApiClient::tr("你不在该群组中")},
-        {QStringLiteral("Empty message not allowed."),   ApiClient::tr("消息不能为空")},
+        {QStringLiteral("Group name cannot be empty."), ApiClient::tr("群组名称不能为空")},
+        {QStringLiteral("Group not exist."), ApiClient::tr("群组不存在")},
+        {QStringLiteral("You are not in this group."), ApiClient::tr("你不在该群组中")},
+        {QStringLiteral("Empty message not allowed."), ApiClient::tr("消息不能为空")},
         {QStringLiteral("You are already in this group."), ApiClient::tr("你已在该群组中")},
-        {QStringLiteral("Bad `to_whom_id`"),       ApiClient::tr("无效的收信人")},
+        {QStringLiteral("Bad `to_whom_id`"), ApiClient::tr("无效的收信人")},
     };
     return map.value(msg, msg);
 }
@@ -56,12 +57,7 @@ static QString trBackendError(const QString& msg) {
 // ─── 构造与基础设置 ───
 
 ApiClient::ApiClient(QObject* parent)
-    : QObject(parent)
-    , m_manager(new QNetworkAccessManager(this))
-    , m_baseUrl("http://127.0.0.1:18999")
-    , m_translator(nullptr)
-    , m_engine(nullptr)
-    , m_currentLocale() {
+    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("http://127.0.0.1:18999"), m_translator(nullptr), m_engine(nullptr), m_currentLocale() {
     // 启动时从本地存储加载 cookie
     QSettings settings;
     m_cookie = settings.value("auth/cookie").toString();
@@ -124,8 +120,8 @@ void ApiClient::setLanguage(const QString& locale) {
     if (locale != "zh_CN") {
         m_translator = new QTranslator(this);
         QStringList searchPaths = {
-            QCoreApplication::applicationDirPath() + "/appfrontend_" + locale + ".qm",            // dev: build/
-            QCoreApplication::applicationDirPath() + "/translations/appfrontend_" + locale + ".qm", // installed
+            QCoreApplication::applicationDirPath() + "/appfrontend_" + locale + ".qm",               // dev: build/
+            QCoreApplication::applicationDirPath() + "/translations/appfrontend_" + locale + ".qm",  // installed
         };
         bool loaded = false;
         for (const auto& path : searchPaths) {
@@ -148,7 +144,7 @@ void ApiClient::setLanguage(const QString& locale) {
     emit languageChanged();
 }
 
-QString ApiClient::readFileAsBase64(const QUrl& fileUrl) {
+QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
     QString localPath;
 
 #ifdef Q_OS_ANDROID
@@ -166,6 +162,46 @@ QString ApiClient::readFileAsBase64(const QUrl& fileUrl) {
 
     QByteArray data = file.readAll();
     file.close();
+
+    // 如果指定了最大大小且文件超过限制，自动压缩
+    if (maxSizeBytes > 0 && data.size() > maxSizeBytes) {
+        QImage img;
+        if (img.loadFromData(data)) {
+            // 计算缩放比例：面积比例 ≈ 目标文件大小 / 实际文件大小
+            double scale = std::sqrt(static_cast<double>(maxSizeBytes) / data.size());
+            // 同时限制最大边长不超过 1024px（头像不需要太大）
+            int maxDim = 1024;
+            if (img.width() > maxDim || img.height() > maxDim) {
+                double dimScale = static_cast<double>(maxDim) / std::max(img.width(), img.height());
+                scale = std::min(scale, dimScale);
+            }
+
+            int newW = qMax(1, static_cast<int>(img.width() * scale));
+            int newH = qMax(1, static_cast<int>(img.height() * scale));
+
+            QImage scaled = img.scaled(newW, newH,
+                                       Qt::KeepAspectRatio,
+                                       Qt::SmoothTransformation);
+
+            QByteArray compressed;
+            QBuffer buf(&compressed);
+            buf.open(QIODevice::WriteOnly);
+            // 先尝试 PNG 无损压缩
+            scaled.save(&buf, "PNG");
+            buf.close();
+
+            // 如果 PNG 仍然超限，改用 JPEG（更小但会有质量损失）
+            if (compressed.size() > maxSizeBytes) {
+                compressed.clear();
+                buf.open(QIODevice::WriteOnly);
+                scaled.save(&buf, "JPEG", 85);
+                buf.close();
+            }
+
+            return QString::fromLatin1(compressed.toBase64());
+        }
+        // 图片加载失败，回退到原始数据
+    }
 
     return QString::fromLatin1(data.toBase64());
 }
@@ -472,7 +508,7 @@ void ApiClient::checkCookie() {
 }
 
 void ApiClient::startRegister(const QString& username, const QString& password,
-                               const QString& nickname) {
+                              const QString& nickname) {
     QJsonObject body{{"username", username},
                      {"password", password},
                      {"nickname", nickname}};
@@ -484,8 +520,7 @@ void ApiClient::startRegister(const QString& username, const QString& password,
             return;
         emit registerStep1Done(
             obj["cookie"].toString(),
-            obj["captcha"].toString()
-        );
+            obj["captcha"].toString());
     });
 }
 
@@ -532,8 +567,7 @@ void ApiClient::startLogin(const QString& username, const QString& password) {
             obj["need_captcha"].toBool(),
             obj["need_email"].toBool(),
             obj["captcha"].toString(),
-            obj["email"].toString()
-        );
+            obj["email"].toString());
     });
 }
 
@@ -994,11 +1028,9 @@ void ApiClient::hideConversation(int conversation_id) {
 void ApiClient::fetchPrivateMessages(int with_user_id, int before_id, int count) {
     qDebug() << "[ApiClient::fetchPrivateMessages] 请求私聊历史 with_user_id=" << with_user_id
              << "before_id=" << before_id << "count=" << count;
-    QJsonObject body = withCookie({
-        {"with_user_id", with_user_id},
-        {"before_id", before_id},
-        {"count", count}
-    });
+    QJsonObject body = withCookie({{"with_user_id", with_user_id},
+                                   {"before_id", before_id},
+                                   {"count", count}});
     QNetworkReply* reply = postJson("/get-private-messages", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
