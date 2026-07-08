@@ -10,7 +10,8 @@ find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia Ling
 
 qt_standard_project_setup(REQUIRES 6.5)
 
-set(QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android)
+# ── Android 自定义资源（图标、应用名等）──
+set(QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android CACHE PATH "Android package source directory")
 
 qt_add_executable(appfrontend
     main.cpp
@@ -18,6 +19,16 @@ qt_add_executable(appfrontend
     api_client.h
     api_types.h
     resources.qrc
+)
+
+# androiddeployqt 6.5.x 需要通过 JSON 中的 android-package-source-directory
+# 定位自定义 AndroidManifest.xml 和图标。CMake 不自动写入该字段,
+# 在编译完成后、APK 打包前补上。
+add_custom_command(TARGET appfrontend POST_BUILD
+    COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/patch-deploy-json.py
+        ${CMAKE_CURRENT_BINARY_DIR}/android-appfrontend-deployment-settings.json
+        ${CMAKE_CURRENT_SOURCE_DIR}/android
+    COMMENT "Patching Android deployment JSON with custom package source"
 )
 
 # 注册 QML 模块 —— QML 文件放到 qml/ 目录下
