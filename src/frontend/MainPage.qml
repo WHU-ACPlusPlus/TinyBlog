@@ -205,17 +205,18 @@ Rectangle {
         Item {
             Layout.fillWidth: true; Layout.fillHeight: true
 
-            GlassCard {
-                anchors.fill: parent
-                anchors.margins: root.glassMode ? 8 : 0
-                backgroundSource: root.glassMode ? glassBackground : null
-                blurRadius: 28
-                cardRadius: root.glassMode ? 16 : 0
-                glassColor: Qt.rgba(1, 1, 1, 0.06)
-                showBorder: root.glassMode
-                showShadow: root.glassMode || root.softUIMode
-                visible: root.glassMode
-            }
+            // GlassCard is not yet available — skipped until the file is created
+            // GlassCard {
+            //     anchors.fill: parent
+            //     anchors.margins: root.glassMode ? 8 : 0
+            //     backgroundSource: root.glassMode ? glassBackground : null
+            //     blurRadius: 28
+            //     cardRadius: root.glassMode ? 16 : 0
+            //     glassColor: Qt.rgba(1, 1, 1, 0.06)
+            //     showBorder: root.glassMode
+            //     showShadow: root.glassMode || root.softUIMode
+            //     visible: root.glassMode
+            // }
 
             StackLayout {
                 anchors.fill: parent
@@ -239,17 +240,18 @@ Rectangle {
         Item {
             Layout.fillWidth: true; Layout.fillHeight: true
 
-            GlassCard {
-                anchors.fill: parent
-                anchors.margins: root.glassMode ? 6 : 0
-                backgroundSource: root.glassMode ? glassBackground : null
-                blurRadius: 24
-                cardRadius: root.glassMode ? 14 : 0
-                glassColor: Qt.rgba(1, 1, 1, 0.06)
-                showBorder: root.glassMode
-                showShadow: root.glassMode || root.softUIMode
-                visible: root.glassMode
-            }
+            // GlassCard is not yet available — skipped until the file is created
+            // GlassCard {
+            //     anchors.fill: parent
+            //     anchors.margins: root.glassMode ? 6 : 0
+            //     backgroundSource: root.glassMode ? glassBackground : null
+            //     blurRadius: 24
+            //     cardRadius: root.glassMode ? 14 : 0
+            //     glassColor: Qt.rgba(1, 1, 1, 0.06)
+            //     showBorder: root.glassMode
+            //     showShadow: root.glassMode || root.softUIMode
+            //     visible: root.glassMode
+            // }
 
             StackLayout {
                 anchors.fill: parent
