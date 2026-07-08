@@ -10,7 +10,16 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    color: "#f5f5f5"
+    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#f5f5f5")
+
+    // ── 风格模式（由 MainPage 传入）──
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : "#222222")
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : "#666666")
+    property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : "#999999")
 
     // ── 状态 ──
     property var conversations: []
@@ -334,6 +343,8 @@ Rectangle {
             id: convListPanelWide
             Layout.preferredWidth: 280
             Layout.fillHeight: true
+            glassMode: root.glassMode
+            softUIMode: root.softUIMode
             conversations: root.conversations
             selectedConvId: root.currentConversation ? root.currentConversation.id : -1
 
@@ -347,18 +358,21 @@ Rectangle {
             }
             onMenuAction: function(index) { handleMenuAction(index) }
             onSearchRequested: function(keyword) { root.doSearch(keyword, "all") }
+            onRefreshRequested: safeFetchConversations("manual")
         }
 
         Rectangle {
             Layout.preferredWidth: 0.5
             Layout.fillHeight: true
-            color: "#e0e0e0"
+            color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.4) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e0e0e0")
         }
 
         ChatPanel {
             id: chatPanelWide
             Layout.fillWidth: true
             Layout.fillHeight: true
+            glassMode: root.glassMode
+            softUIMode: root.softUIMode
             currentConversation: root.currentConversation
             messages: root.currentMessages
             currentUserId: root.currentUserId
@@ -381,6 +395,8 @@ Rectangle {
             id: convListPanelNarrow
             Layout.fillWidth: true
             Layout.fillHeight: true
+            glassMode: root.glassMode
+            softUIMode: root.softUIMode
             conversations: root.conversations
             selectedConvId: root.currentConversation ? root.currentConversation.id : -1
 
@@ -395,12 +411,15 @@ Rectangle {
             }
             onMenuAction: function(index) { handleMenuAction(index) }
             onSearchRequested: function(keyword) { root.doSearch(keyword, "all") }
+            onRefreshRequested: safeFetchConversations("manual")
         }
 
         ChatPanel {
             id: chatPanelNarrow
             Layout.fillWidth: true
             Layout.fillHeight: true
+            glassMode: root.glassMode
+            softUIMode: root.softUIMode
             currentConversation: root.currentConversation
             messages: root.currentMessages
             currentUserId: root.currentUserId

@@ -32,6 +32,15 @@ Rectangle {
     signal backButtonClicked()
     signal infoPanelRequested()
 
+    // ── 风格模式（由 MessagesPage 传入）──
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : "#222222")
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.60) : (softUIMode ? "#636e72" : "#555555")
+    property color textMuted:     glassMode ? Qt.rgba(1,1,1,0.35) : (softUIMode ? "#888888" : "#999999")
+
     // ── BUG5修复: 监听群组详情变化，更新成员列表 ──
     onGroupDetailDataChanged: {
         console.log("[ChatPanel] groupDetailData changed: " + JSON.stringify(groupDetailData))
@@ -71,7 +80,7 @@ Rectangle {
         }
     }
 
-    color: "#f5f5f5"
+    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#f5f5f5")
 
     // ── 日志 ──
     Component.onCompleted: {
@@ -91,7 +100,7 @@ Rectangle {
     // ── 无选中会话时：空状态 ──
     Rectangle {
         anchors.fill: parent
-        color: "#f5f5f5"
+        color: root.softUIMode ? "#e8edf2" : (root.glassMode ? "transparent" : "#f5f5f5")
         visible: !root.currentConversation
 
         ColumnLayout {
@@ -107,13 +116,13 @@ Rectangle {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("选择一个会话开始聊天")
                 font.pixelSize: 17
-                color: "#999"
+                color: root.textMuted
             }
             Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("从左侧列表选择一个联系人或群组")
                 font.pixelSize: 13
-                color: "#bbb"
+                color: root.textMuted
             }
         }
     }
@@ -128,7 +137,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 56
-            color: "white"
+            color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : "white")
 
             RowLayout {
                 anchors.fill: parent
@@ -188,7 +197,7 @@ Rectangle {
                     text: root.currentConversation ? (root.currentConversation.target_name || qsTr("未知")) : ""
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
-                    color: "#222"
+                    color: root.textPrimary
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -227,7 +236,7 @@ Rectangle {
                 anchors.bottom: parent.bottom
                 width: parent.width
                 height: 0.5
-                color: "#e8e8e8"
+                color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.3) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e8e8e8")
             }
         }
 
@@ -319,7 +328,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: inputArea.implicitHeight + 16
-            color: "white"
+            color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : "white")
 
             RowLayout {
                 id: inputArea
@@ -336,12 +345,12 @@ Rectangle {
                     TextArea {
                         id: sendTextArea
                         font.pixelSize: 14
-                        color: "#333"
                         wrapMode: TextArea.Wrap
                         placeholderText: qsTr("输入消息...")
-                        placeholderTextColor: "#ccc"
+                        placeholderTextColor: root.textMuted
+                        color: root.textPrimary
                         background: Rectangle {
-                            color: "#f5f5f5"
+                            color: root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#f5f5f5")
                             radius: 8
                         }
                         padding: 10
@@ -404,7 +413,7 @@ Rectangle {
                 anchors.top: parent.top
                 width: parent.width
                 height: 0.5
-                color: "#e8e8e8"
+                color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.3) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e8e8e8")
             }
         }
     }
@@ -439,7 +448,7 @@ Rectangle {
         }
 
         background: Rectangle {
-            color: "white"
+            color: root.softUIMode ? "#f0f2f5" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.08) : "white")
         }
 
         // 面板内容
@@ -451,7 +460,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
-                color: "#fafafa"
+                color: root.softUIMode ? "#dce3e9" : (root.glassMode ? "transparent" : "#fafafa")
 
                 Text {
                     anchors.centerIn: parent
@@ -466,7 +475,7 @@ Rectangle {
                     anchors.bottom: parent.bottom
                     width: parent.width
                     height: 0.5
-                    color: "#e8e8e8"
+                    color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e8e8e8"
                 }
             }
 

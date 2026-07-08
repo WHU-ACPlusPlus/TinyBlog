@@ -6,7 +6,17 @@ import QtMultimedia
 
 Rectangle {
     id: root
-    color: "#f5f5f5"
+    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#f5f5f5")
+
+    // ── 风格模式（由 MainPage 传入）──
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : "#222222")
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : "#666666")
+    property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : "#999999")
+    property color textAccent:    "#4a8cf7"  // 蓝色强调色三态通用
 
     // ── 状态：normal / publishing ──
     property bool publishing: false
@@ -54,6 +64,18 @@ Rectangle {
         return result
     }
 
+    // ── 日历/时间格式化辅助 ──
+    function formatPostTime(ts) {
+        if (!ts) return ""
+        var d = new Date(ts * 1000)
+        var now = new Date()
+        var diff = Math.floor((now.getTime() - d.getTime()) / 1000)
+        if (diff < 60) return qsTr("刚刚")
+        if (diff < 3600) return Math.floor(diff / 60) + qsTr("分钟前")
+        if (diff < 86400) return Math.floor(diff / 3600) + qsTr("小时前")
+        return d.getFullYear() + "/" + (d.getMonth()+1) + "/" + d.getDate()
+    }
+
     // ── 帖子数据（从 API 获取）──
     property var posts: []
     property int pendingPostCount: 0
@@ -99,7 +121,7 @@ Rectangle {
         id: normalView
         anchors.fill: parent
         visible: !publishing
-        color: "#f5f5f5"
+        color: root.softUIMode ? "#e8edf2" : (root.glassMode ? "transparent" : "#f5f5f5")
 
         // ── 辅助刷新函数 ──
         function doRefresh() {
@@ -259,12 +281,12 @@ Rectangle {
                                             text: modelData.nickname
                                             font.pixelSize: 16
                                             font.bold: true
-                                            color: "#222"
+                                            color: root.textPrimary
                                         }
                                         Text {
                                             text: "@" + modelData.username
                                             font.pixelSize: 12
-                                            color: "#888"
+                                            color: root.textTertiary
                                         }
                                     }
                                 }
@@ -274,7 +296,7 @@ Rectangle {
                                     width: parent.width
                                     text: modelData.content
                                     font.pixelSize: 15
-                                    color: "#333"
+                                    color: root.textPrimary
                                     wrapMode: Text.Wrap
                                 }
 
