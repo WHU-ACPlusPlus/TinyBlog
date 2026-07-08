@@ -5,15 +5,15 @@ import QtQuick.Dialogs
 
 Rectangle {
     id: root
-    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#f5f5f5")
+    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : window.bgPage)
 
     property bool glassMode: false
     property bool softUIMode: false
 
     // ── 自适应文字颜色 ──
-    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : "#222222")
-    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : "#666666")
-    property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : "#999999")
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : window.textPrimary)
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : window.textSecondary)
+    property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : window.textSecondary)
     property var profileData: ({})
     property bool editing: false
     property bool saving: false
