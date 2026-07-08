@@ -40,8 +40,9 @@ int main(int argc, char *argv[])
     }
 
     // 创建 API 客户端，暴露给 QML 侧使用
+    // 默认 URL 由 ApiClient 构造函数从 QSettings 加载（首次运行 = "https://api.becharmkon.cn"）
+    // 用户可在登录页手动修改并自动保存到 QSettings
     ApiClient api;
-    api.setBaseUrl("http://127.0.0.1:18999");
 
     QQmlApplicationEngine engine;
     api.setQmlEngine(&engine);

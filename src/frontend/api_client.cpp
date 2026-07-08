@@ -63,7 +63,7 @@ static QString trBackendError(const QString& msg) {
 // ─── 构造与基础设置 ───
 
 ApiClient::ApiClient(QObject* parent)
-    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("http://127.0.0.1:18999"), m_translator(nullptr), m_engine(nullptr), m_currentLocale() {
+    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("https://api.becharmkon.cn"), m_translator(nullptr), m_engine(nullptr), m_currentLocale() {
     // 启动时从本地存储加载 cookie
     QSettings settings;
     m_cookie = settings.value("auth/cookie").toString();
@@ -714,10 +714,20 @@ void ApiClient::checkCookie() {
     QNetworkReply* reply = postJson("/check-cookie", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            emit errorOccurred(tr("网络错误: %1").arg(reply->errorString()));
             reply->deleteLater();
+            m_checkCookieRetries++;
+            if (m_checkCookieRetries >= kMaxCheckCookieRetries) {
+                // 连续多次失败，放弃本次认证（QSettings 中的 cookie 保留，下次启动重试）
+                emit errorOccurred(tr("无法连接服务器，请检查网络和服务器地址"));
+                m_cookie.clear();
+                emit loggedInChanged();
+                emit cookieCheckComplete(false, 0);
+            }
             return;
         }
+        // 成功收到响应，重置重试计数
+        m_checkCookieRetries = 0;
+
         QByteArray data = reply->readAll();
         reply->deleteLater();
 
@@ -741,8 +751,6 @@ void ApiClient::checkCookie() {
             // Cookie 在服务器端已失效，清除本地认证状态
             clearAuth();
             emit cookieCheckComplete(false, 0);
-
-            // 检查过程中可能已经有过网络错误提示，覆盖为更友好的消息
             emit errorOccurred("登录已过期，请重新登录");
         }
     });

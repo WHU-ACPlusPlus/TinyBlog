@@ -263,8 +263,8 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "●"
-                            font.pixelSize: 30
+                            text: "👤"
+                            font.pixelSize: 32
                             visible: !avatarImg.visible
                         }
 

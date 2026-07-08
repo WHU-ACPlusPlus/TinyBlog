@@ -230,6 +230,8 @@ class ApiClient : public QObject {
     QNetworkAccessManager* m_manager;
     QString m_baseUrl;
     QString m_cookie;
+    int m_checkCookieRetries = 0;
+    static constexpr int kMaxCheckCookieRetries = 3;
     QTranslator* m_translator;
     QQmlEngine* m_engine;
     QString m_currentLocale;
