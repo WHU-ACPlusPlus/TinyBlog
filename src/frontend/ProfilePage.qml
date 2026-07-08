@@ -14,6 +14,17 @@ Rectangle {
     property string newAvatarMime: "image/png"
     property string newSignature: ""
 
+    // 从 base64 前几个字符推断 MIME 类型
+    function detectMime(b64) {
+        if (!b64 || b64.length < 4) return "image/png"
+        var s = b64.substring(0, 10)
+        if (s.startsWith("/9j/") || s.startsWith("/9j/4")) return "image/jpeg"
+        if (s.startsWith("R0lGODdh") || s.startsWith("R0lGODlh")) return "image/gif"
+        if (s.startsWith("UklGR")) return "image/webp"
+        if (s.startsWith("Qk")) return "image/bmp"
+        return "image/png"  // 默认 PNG / 或未知
+    }
+
     // 每次页面显示时刷新资料
     onVisibleChanged: {
         if (visible) {
@@ -30,6 +41,7 @@ Rectangle {
             root.newNickname = profile.nickname || ""
             root.newSignature = profile.signature || ""
             root.newAvatar = ""
+            root.newAvatarMime = root.detectMime(profile.avatar || "")
             root.editing = false
         }
 
@@ -53,18 +65,7 @@ Rectangle {
             var b64 = api.readFileAsBase64(selectedFile)
             if (b64.length > 0) {
                 root.newAvatar = b64
-                // 从文件名推断 MIME 类型
-                var path = String(selectedFile).toLowerCase()
-                if (path.endsWith(".jpg") || path.endsWith(".jpeg"))
-                    root.newAvatarMime = "image/jpeg"
-                else if (path.endsWith(".gif"))
-                    root.newAvatarMime = "image/gif"
-                else if (path.endsWith(".webp"))
-                    root.newAvatarMime = "image/webp"
-                else if (path.endsWith(".bmp"))
-                    root.newAvatarMime = "image/bmp"
-                else
-                    root.newAvatarMime = "image/png"
+                root.newAvatarMime = root.detectMime(b64)
             }
         }
     }
