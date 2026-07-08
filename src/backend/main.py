@@ -4,7 +4,7 @@
 
 # Databases
 
-import sqlite3, bcrypt, secrets, threading, logging, sys
+import base64, io, random, sqlite3, bcrypt, secrets, threading, logging, sys
 from datetime import datetime, timezone, timedelta
 
 # ── 日志系统配置 ──
@@ -1584,7 +1584,6 @@ def get_email(body: Get_Email_Req):
     if not user:
         return {"error": "User not exist."}
     return {"email": user["email"] or ""}
-=======
 
 class Logout_Req(BaseModel):
     cookie: str
