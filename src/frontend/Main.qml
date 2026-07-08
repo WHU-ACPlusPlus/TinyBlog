@@ -11,7 +11,9 @@ ApplicationWindow {
     title: Qt.locale().name.substring(0, 2) === "zh" ? "微微博" : "Tiny Blog"
 
     // ── 深色模式色板 ──
-    property bool darkMode: Qt.styleHints.colorScheme === Qt.Dark
+    // darkModeFollowSystem=0: 跟随系统;  1: 手动深色;  2: 手动浅色
+    property int darkModeFollowSystem: 0
+    property bool darkMode: darkModeFollowSystem === 1 ? true : (darkModeFollowSystem === 2 ? false : (Qt.styleHints.colorScheme === Qt.Dark))
 
     readonly property color bgPage:    darkMode ? "#1e1e1e" : "#f5f5f5"
     readonly property color bgSurface: darkMode ? "#2d2d2d" : "white"
