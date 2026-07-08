@@ -20,6 +20,14 @@ Rectangle {
         return window.bgSurface
     }
 
+    // 向 window 同步当前风格模式，使 window.* 颜色不受深色模式影响
+    onStyleModeChanged: {
+        window.activeStyleMode = root.styleMode
+    }
+    Component.onCompleted: {
+        window.activeStyleMode = root.styleMode
+    }
+
     // ── 鼠标位置（用于毛玻璃跟随光源）──
     property real mouseX: width / 2
     property real mouseY: height / 2
@@ -181,7 +189,39 @@ Rectangle {
                 // 弹性空间
                 Item { Layout.fillHeight: true }
 
-                // ── 风格切换按钮（第二栏）──
+                // ── 深色模式切换按钮（仅普通模式下可见）──
+                Rectangle {
+                    Layout.preferredWidth: 48
+                    Layout.preferredHeight: 48
+                    Layout.alignment: Qt.AlignHCenter
+                    color: window.darkModeFollowSystem !== 0
+                            ? window.selectedBg : "transparent"
+                    radius: 12
+                    visible: root.styleMode === 0
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.darkIcon()
+                        font.pixelSize: 20
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            window.darkModeFollowSystem = (window.darkModeFollowSystem + 1) % 3
+                        }
+                    }
+
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+
+                    ToolTip {
+                        visible: darkTip.hovered
+                        text: qsTr("主题: ") + root.darkLabel()
+                    }
+                    HoverHandler { id: darkTip }
+                }
+
+                // ── 风格切换按钮（始终在最底部边缘）──
                 Rectangle {
                     Layout.preferredWidth: 48
                     Layout.preferredHeight: 48
@@ -211,38 +251,6 @@ Rectangle {
                         text: qsTr("风格: ") + root.styleLabel(root.styleMode)
                     }
                     HoverHandler { id: styleTip }
-                }
-
-                // ── 深色模式切换按钮（始终在底部最边缘）──
-                Rectangle {
-                    Layout.preferredWidth: 48
-                    Layout.preferredHeight: 48
-                    Layout.alignment: Qt.AlignHCenter
-                    color: window.darkModeFollowSystem !== 0
-                            ? window.selectedBg : "transparent"
-                    radius: 12
-                    visible: root.styleMode === 0  // 仅普通模式可用
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.darkIcon()
-                        font.pixelSize: 20
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            window.darkModeFollowSystem = (window.darkModeFollowSystem + 1) % 3
-                        }
-                    }
-
-                    HoverHandler { cursorShape: Qt.PointingHandCursor }
-
-                    ToolTip {
-                        visible: darkTip.hovered
-                        text: qsTr("主题: ") + root.darkLabel()
-                    }
-                    HoverHandler { id: darkTip }
                 }
             }
         }
@@ -361,35 +369,7 @@ Rectangle {
                     }
                 }
 
-                // ── 风格切换（窄屏）──
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 2
-
-                        Text {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: root.styleIcon(root.styleMode)
-                            font.pixelSize: 22
-                        }
-                        Text {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: root.styleLabel(root.styleMode)
-                            font.pixelSize: 11
-                            color: root.styleMode !== 0 ? "#fa0" : (softUIMode ? "#778" : window.textSecondary)
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: root.styleMode = (root.styleMode + 1) % 3
-                    }
-                }
-
-                // ── 深色模式切换（窄屏，始终在最右边缘）──
+                // ── 深色模式切换（窄屏）──
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -417,6 +397,34 @@ Rectangle {
                         onClicked: {
                             window.darkModeFollowSystem = (window.darkModeFollowSystem + 1) % 3
                         }
+                    }
+                }
+
+                // ── 风格切换（窄屏，始终在最右边缘）──
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.styleIcon(root.styleMode)
+                            font.pixelSize: 22
+                        }
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.styleLabel(root.styleMode)
+                            font.pixelSize: 11
+                            color: root.styleMode !== 0 ? "#fa0" : (softUIMode ? "#778" : window.textSecondary)
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.styleMode = (root.styleMode + 1) % 3
                     }
                 }
             }
