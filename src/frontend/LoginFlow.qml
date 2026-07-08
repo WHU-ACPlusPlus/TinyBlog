@@ -31,6 +31,35 @@ Rectangle {
     property string loginEmail: ""
     property bool loginEmailSent: false
 
+    // ── 重置到初始状态 ──
+    function reset() {
+        step = 0
+        errorText = ""
+
+        regCookie = ""
+        captchaB64 = ""
+        regEmail = ""
+
+        loginCookie = ""
+        loginNeedCaptcha = false
+        loginNeedEmail = false
+        loginCaptchaB64 = ""
+        loginEmail = ""
+        loginEmailSent = false
+
+        // 清空输入框
+        if (regUsername) regUsername.text = ""
+        if (regNickname) regNickname.text = ""
+        if (regPassword) regPassword.text = ""
+        if (captchaInput) captchaInput.text = ""
+        if (emailInput) emailInput.text = ""
+        if (emailCodeInput) emailCodeInput.text = ""
+        if (logUsername) logUsername.text = ""
+        if (logPassword) logPassword.text = ""
+        if (loginCaptchaInput) loginCaptchaInput.text = ""
+        if (loginEmailCodeInput) loginEmailCodeInput.text = ""
+    }
+
     // ── 欢迎页 (step=0) ──
     ColumnLayout {
         anchors.fill: parent
@@ -518,6 +547,7 @@ Rectangle {
         }
         function onRegisterSuccess(cookie) {
             // api 已自动保存 cookie，进入主界面
+            reset()
         }
 
         // ── 登录信号 ──
@@ -563,7 +593,7 @@ Rectangle {
 
         function onLoginSuccess(cookie) {
             // api 已自动保存 cookie，进入主界面
-            errorText = ""
+            reset()
         }
 
         function onErrorOccurred(msg) {
