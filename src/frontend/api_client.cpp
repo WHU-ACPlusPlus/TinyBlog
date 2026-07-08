@@ -218,7 +218,7 @@ QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
         emit errorOccurred(QStringLiteral("无法打开文件: %1").arg(file.errorString()));
         return {};
     }
-    data = file.readAll();
+    auto data = file.readAll();
     file.close();
 #endif
 

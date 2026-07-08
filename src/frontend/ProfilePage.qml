@@ -15,7 +15,6 @@ Rectangle {
     property string newAvatarMime: "image/png"
     property string newSignature: ""
 
-<<<<<<< HEAD
     // ── 子页面导航 ──
     property string subPage: "profile"  // "profile" | "posts" | "followers" | "following"
     property var myPosts: []       // 帖子数据列表
@@ -63,7 +62,8 @@ Rectangle {
         var min = String(d.getMinutes()).padStart(2, "0")
         if (y === now.getFullYear()) return m + "-" + day + " " + h + ":" + min
         return y + "-" + m + "-" + day
-=======
+    }
+
     // 从 base64 前几个字符推断 MIME 类型
     function detectMime(b64) {
         if (!b64 || b64.length < 4) return "image/png"
@@ -73,7 +73,6 @@ Rectangle {
         if (s.startsWith("UklGR")) return "image/webp"
         if (s.startsWith("Qk")) return "image/bmp"
         return "image/png"  // 默认 PNG / 或未知
->>>>>>> 3767e6a007c211ca0c41be73d0749e7cf2bde82d
     }
 
     // 每次页面显示时刷新资料（但保存进行中时不刷新，避免竞态条件）
