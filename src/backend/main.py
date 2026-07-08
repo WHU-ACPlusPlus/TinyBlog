@@ -309,7 +309,8 @@ if __name__ == "__main__":
             email_verified INTEGER NOT NULL DEFAULT 0,
             email_code TEXT,
             created_at TEXT DEFAULT (datetime('now'))
-
+        )
+    """)
     # ── 消息功能：数据库迁移 ──
     # 私信增加 is_read 标记（替代"阅后即焚"模式）
     try:
