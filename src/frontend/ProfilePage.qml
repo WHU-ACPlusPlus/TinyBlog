@@ -240,8 +240,8 @@ Rectangle {
                         selectByMouse: true
                         background: Rectangle {
                             radius: 6
-                            color: root.editing ? "#f0f8ff" : "transparent"
-                            border.color: root.editing ? "#4a90d9" : "transparent"
+                            color: root.editing ? window.bgInput : "transparent"
+                            border.color: root.editing ? window.accent : "transparent"
                             border.width: root.editing ? 1 : 0
                         }
                         onTextChanged: {
@@ -279,8 +279,8 @@ Rectangle {
                 wrapMode: TextEdit.Wrap
                 background: Rectangle {
                     radius: 6
-                    color: root.editing ? "#f0f8ff" : "transparent"
-                    border.color: root.editing ? "#4a90d9" : "transparent"
+                    color: root.editing ? window.bgInput : "transparent"
+                    border.color: root.editing ? window.accent : "transparent"
                     border.width: root.editing ? 1 : 0
                 }
                 onTextChanged: {
