@@ -10,6 +10,8 @@ find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia Ling
 
 qt_standard_project_setup(REQUIRES 6.5)
 
+set(QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android)
+
 qt_add_executable(appfrontend
     main.cpp
     api_client.cpp
