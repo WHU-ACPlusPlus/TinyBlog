@@ -34,8 +34,6 @@ qt_add_qml_module(appfrontend
         ConversationItem.qml
         ChatPanel.qml
         MessageBubble.qml
-        GlassCard.qml
-        FrostedGlassDemo.qml
 )
 
 # ── 国际化 / 翻译 ──

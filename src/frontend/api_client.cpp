@@ -151,6 +151,8 @@ void ApiClient::setLanguage(const QString& locale) {
 }
 
 QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
+    QString uriStr = fileUrl.toString();
+    QByteArray data;
     QString localPath;
 
 #ifdef Q_OS_ANDROID
@@ -218,7 +220,7 @@ QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
         emit errorOccurred(QStringLiteral("无法打开文件: %1").arg(file.errorString()));
         return {};
     }
-    auto data = file.readAll();
+    data = file.readAll();
     file.close();
 #endif
 
