@@ -24,6 +24,12 @@
 #include <QVideoSink>
 #include <cmath>
 
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#include <QJniEnvironment>
+#include <QtCore/private/qandroidextras_p.h>
+#endif
+
 // ─── 后端英文错误 → 中文翻译 ───
 static QString trBackendError(const QString& msg) {
     static const QHash<QString, QString> map = {
@@ -148,20 +154,73 @@ QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
     QString localPath;
 
 #ifdef Q_OS_ANDROID
-    // Android content:// URI → Qt 6 的 QFile 可以直接打开
-    localPath = fileUrl.toString();
-#else
-    localPath = fileUrl.toLocalFile();
-#endif
+    qDebug() << "[readFileAsBase64] URI:" << uriStr;
 
-    QFile file(localPath);
+    // Android: 统一走 ContentResolver 读取（兼容 content:// 和 file:// URI）
+    QJniObject contentUri = QJniObject::fromString(uriStr);
+    QJniObject uri = QJniObject::callStaticObjectMethod(
+        "android/net/Uri", "parse",
+        "(Ljava/lang/String;)Landroid/net/Uri;",
+        contentUri.object<jstring>());
+    QJniObject context = QNativeInterface::QAndroidApplication::context();
+    qDebug() << "[readFileAsBase64] context valid:" << context.isValid();
+    QJniObject resolver = context.callObjectMethod(
+        "getContentResolver", "()Landroid/content/ContentResolver;");
+    qDebug() << "[readFileAsBase64] resolver valid:" << resolver.isValid();
+    QJniObject inputStream = resolver.callObjectMethod(
+        "openInputStream", "(Landroid/net/Uri;)Ljava/io/InputStream;",
+        uri.object());
+    qDebug() << "[readFileAsBase64] inputStream valid:" << inputStream.isValid();
+
+    if (inputStream.isValid()) {
+        QJniEnvironment jniEnv;
+        jbyteArray buffer = jniEnv->NewByteArray(4096);
+        jmethodID readMethod = jniEnv->GetMethodID(
+            jniEnv->GetObjectClass(inputStream.object<jobject>()),
+            "read", "([B)I");
+        jint bytesRead;
+        int totalRead = 0;
+        while ((bytesRead = jniEnv->CallIntMethod(
+            inputStream.object<jobject>(), readMethod, buffer)) > 0) {
+            jbyte *elements = jniEnv->GetByteArrayElements(buffer, nullptr);
+            if (elements) {
+                data.append(reinterpret_cast<const char*>(elements), bytesRead);
+                totalRead += bytesRead;
+            }
+            jniEnv->ReleaseByteArrayElements(buffer, elements, JNI_ABORT);
+        }
+        jniEnv->DeleteLocalRef(buffer);
+        qDebug() << "[readFileAsBase64] total bytes read:" << totalRead;
+
+        jmethodID closeMethod = jniEnv->GetMethodID(
+            jniEnv->GetObjectClass(inputStream.object<jobject>()),
+            "close", "()V");
+        jniEnv->CallVoidMethod(inputStream.object<jobject>(), closeMethod);
+    } else {
+        qWarning() << "[readFileAsBase64] ContentResolver openInputStream failed, falling back to QFile";
+        // 回退到 QFile（部分 file:// URI 可直接读）
+        QString localPath = fileUrl.toLocalFile();
+        qDebug() << "[readFileAsBase64] QFile fallback path:" << localPath;
+        QFile file(localPath);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qWarning() << "[readFileAsBase64] QFile open failed:" << file.errorString();
+            emit errorOccurred(QStringLiteral("无法打开文件: %1").arg(file.errorString()));
+            return {};
+        }
+        data = file.readAll();
+        qDebug() << "[readFileAsBase64] QFile read:" << data.size() << "bytes";
+        file.close();
+    }
+#else
+    // 桌面端：直接读本地文件
+    QFile file(fileUrl.toLocalFile());
     if (!file.open(QIODevice::ReadOnly)) {
         emit errorOccurred(QStringLiteral("无法打开文件: %1").arg(file.errorString()));
         return {};
     }
-
-    QByteArray data = file.readAll();
+    data = file.readAll();
     file.close();
+#endif
 
     // 如果指定了最大大小且文件超过限制，自动压缩
     if (maxSizeBytes > 0 && data.size() > maxSizeBytes) {
@@ -205,6 +264,186 @@ QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
 
     return QString::fromLatin1(data.toBase64());
 }
+
+bool ApiClient::isAndroid() const {
+#ifdef Q_OS_ANDROID
+    return true;
+#else
+    return false;
+#endif
+}
+
+#ifdef Q_OS_ANDROID
+bool ApiClient::pickMediaFiles() {
+    qDebug() << "[pickMediaFiles] Launching Android SAF file picker...";
+
+    QJniObject intent("android/content/Intent");
+    if (!intent.isValid()) {
+        qWarning() << "[pickMediaFiles] Failed to create Intent";
+        return false;
+    }
+
+    // ACTION_OPEN_DOCUMENT
+    intent.callObjectMethod("setAction",
+        "(Ljava/lang/String;)Landroid/content/Intent;",
+        QJniObject::fromString("android.intent.action.OPEN_DOCUMENT").object<jstring>());
+
+    // Allow multiple selection
+    intent.callObjectMethod("putExtra",
+        "(Ljava/lang/String;Z)Landroid/content/Intent;",
+        QJniObject::fromString("android.intent.extra.ALLOW_MULTIPLE").object<jstring>(),
+        jboolean(true));
+
+    // Set type to */* so SAF shows gallery
+    intent.callObjectMethod("setType", "(Ljava/lang/String;)Landroid/content/Intent;",
+        QJniObject::fromString("*/*").object<jstring>());
+
+    // Set MIME type filter (image/* + video/*)
+    {
+        QJniEnvironment jniEnv;
+        jclass stringClass = jniEnv->FindClass("java/lang/String");
+        jobjectArray mimeArray = jniEnv->NewObjectArray(2, stringClass, nullptr);
+        jniEnv->SetObjectArrayElement(mimeArray, 0,
+            QJniObject::fromString("image/*").object<jstring>());
+        jniEnv->SetObjectArrayElement(mimeArray, 1,
+            QJniObject::fromString("video/*").object<jstring>());
+
+        intent.callObjectMethod("putExtra",
+            "(Ljava/lang/String;[Ljava/lang/String;)Landroid/content/Intent;",
+            QJniObject::fromString("android.intent.extra.MIME_TYPES").object<jstring>(),
+            mimeArray);
+    }
+
+    // Add category OPENABLE so only browsable files are shown
+    intent.callObjectMethod("addCategory",
+        "(Ljava/lang/String;)Landroid/content/Intent;",
+        QJniObject::fromString("android.intent.category.OPENABLE").object<jstring>());
+
+    int requestCode = 9001;
+    QtAndroidPrivate::startActivity(intent, requestCode,
+        [this](int reqCode, int resultCode, const QJniObject &data) {
+            Q_UNUSED(reqCode);
+            qDebug() << "[pickMediaFiles] callback: resultCode=" << resultCode;
+            handleMediaPickerResult(resultCode, data);
+        });
+
+    return true;
+}
+
+void ApiClient::handleMediaPickerResult(int resultCode, const QJniObject &intentData) {
+    if (resultCode != -1) {  // RESULT_OK = -1
+        qDebug() << "[handleMediaPickerResult] cancelled or failed";
+        emit mediaFilesPicked({});
+        return;
+    }
+
+    if (!intentData.isValid()) {
+        qWarning() << "[handleMediaPickerResult] intentData is null";
+        emit mediaFilesPicked({});
+        return;
+    }
+
+    QVariantList files;
+
+    // Try clipData first (multiple selection)
+    QJniObject clipData = intentData.callObjectMethod("getClipData",
+        "()Landroid/content/ClipData;");
+
+    if (clipData.isValid()) {
+        jint count = clipData.callMethod<jint>("getItemCount");
+        qDebug() << "[handleMediaPickerResult] clipData items:" << count;
+
+        for (jint i = 0; i < count; ++i) {
+            QJniObject item = clipData.callObjectMethod("getItemAt",
+                "(I)Landroid/content/ClipData$Item;", i);
+            QJniObject uri = item.callObjectMethod("getUri",
+                "()Landroid/net/Uri;");
+            QVariantMap info = readUriInfo(uri);
+            if (!info.isEmpty())
+                files.append(info);
+        }
+    } else {
+        // Single selection via getData()
+        QJniObject uri = intentData.callObjectMethod("getData",
+            "()Landroid/net/Uri;");
+        if (uri.isValid()) {
+            QVariantMap info = readUriInfo(uri);
+            if (!info.isEmpty())
+                files.append(info);
+        }
+    }
+
+    qDebug() << "[handleMediaPickerResult] returning" << files.size() << "files";
+    emit mediaFilesPicked(files);
+}
+
+QVariantMap ApiClient::readUriInfo(const QJniObject &uri) {
+    QVariantMap info;
+    if (!uri.isValid()) return info;
+
+    // Get URI string
+    QJniObject uriStr = uri.callObjectMethod("toString", "()Ljava/lang/String;");
+    QString uriString = uriStr.toString();
+    info["url"] = uriString;
+    qDebug() << "[readUriInfo] URI:" << uriString;
+
+    // Get content type via ContentResolver.getType()
+    QJniObject context = QNativeInterface::QAndroidApplication::context();
+    QJniObject resolver = context.callObjectMethod(
+        "getContentResolver", "()Landroid/content/ContentResolver;");
+
+    QJniObject mimeType = resolver.callObjectMethod(
+        "getType", "(Landroid/net/Uri;)Ljava/lang/String;",
+        uri.object());
+    QString mimeStr = mimeType.toString();
+    info["mime"] = mimeStr;
+    qDebug() << "[readUriInfo] MIME:" << mimeStr;
+
+    // Open InputStream and read all bytes
+    QJniObject inputStream = resolver.callObjectMethod(
+        "openInputStream", "(Landroid/net/Uri;)Ljava/io/InputStream;",
+        uri.object());
+
+    if (!inputStream.isValid()) {
+        qWarning() << "[readUriInfo] Failed to open InputStream";
+        return info;
+    }
+
+    QByteArray data;
+    {
+        QJniEnvironment jniEnv;
+        jbyteArray buffer = jniEnv->NewByteArray(64 * 1024);  // 64KB buffer
+        jmethodID readMethod = jniEnv->GetMethodID(
+            jniEnv->GetObjectClass(inputStream.object<jobject>()),
+            "read", "([B)I");
+        jint bytesRead;
+        while ((bytesRead = jniEnv->CallIntMethod(
+            inputStream.object<jobject>(), readMethod, buffer)) > 0) {
+            jbyte *elements = jniEnv->GetByteArrayElements(buffer, nullptr);
+            if (elements) {
+                data.append(reinterpret_cast<const char*>(elements), bytesRead);
+            }
+            jniEnv->ReleaseByteArrayElements(buffer, elements, JNI_ABORT);
+        }
+        jniEnv->DeleteLocalRef(buffer);
+    }
+
+    // Close stream
+    {
+        QJniEnvironment jniEnv;
+        jmethodID closeMethod = jniEnv->GetMethodID(
+            jniEnv->GetObjectClass(inputStream.object<jobject>()),
+            "close", "()V");
+        jniEnv->CallVoidMethod(inputStream.object<jobject>(), closeMethod);
+    }
+
+    info["b64"] = QString::fromLatin1(data.toBase64());
+    info["size"] = static_cast<qint64>(data.size());
+    qDebug() << "[readUriInfo] read" << data.size() << "bytes";
+
+    return info;
+}
+#endif  // Q_OS_ANDROID
 
 QUrl ApiClient::generateVideoThumbnail(const QUrl& videoUrl) {
     QString localPath = videoUrl.toLocalFile();
@@ -421,7 +660,7 @@ QNetworkReply* ApiClient::postJson(const QString& endpoint,
                                    const QJsonObject& body) {
     QNetworkRequest req(QUrl(m_baseUrl + endpoint));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    req.setTransferTimeout(15000);  // 15s 超时
+    req.setTransferTimeout(60000);  // 60s 超时（上传媒体需要更长时间）
 
     QJsonDocument doc(body);
     QByteArray json = doc.toJson(QJsonDocument::Compact);
@@ -710,15 +949,23 @@ void ApiClient::fetchFollowList() {
 // ─── 帖子 ───
 
 void ApiClient::publishPost(const QString& text, const QStringList& media) {
+    qDebug() << "[publishPost] text length:" << text.length() << "media count:" << media.size();
     QJsonArray arr;
-    for (const auto& m : media)
+    for (const auto& m : media) {
+        if (m.isEmpty())
+            qWarning() << "[publishPost] media item" << arr.size() << "is EMPTY!";
         arr.append(m);
+    }
+    qDebug() << "[publishPost] JSON media array size:" << arr.size();
     QJsonObject body = withCookie({{"text", text}, {"media", arr}});
     QNetworkReply* reply = postJson("/pub-post", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
-        if (!checkReply(reply, obj))
+        if (!checkReply(reply, obj)) {
+            qWarning() << "[publishPost] server returned error!";
             return;
+        }
+        qDebug() << "[publishPost] success!";
         emit postPublished();
     });
 }

@@ -15,6 +15,7 @@ Rectangle {
     property string newAvatarMime: "image/png"
     property string newSignature: ""
 
+<<<<<<< HEAD
     // ── 子页面导航 ──
     property string subPage: "profile"  // "profile" | "posts" | "followers" | "following"
     property var myPosts: []       // 帖子数据列表
@@ -62,6 +63,17 @@ Rectangle {
         var min = String(d.getMinutes()).padStart(2, "0")
         if (y === now.getFullYear()) return m + "-" + day + " " + h + ":" + min
         return y + "-" + m + "-" + day
+=======
+    // 从 base64 前几个字符推断 MIME 类型
+    function detectMime(b64) {
+        if (!b64 || b64.length < 4) return "image/png"
+        var s = b64.substring(0, 10)
+        if (s.startsWith("/9j/") || s.startsWith("/9j/4")) return "image/jpeg"
+        if (s.startsWith("R0lGODdh") || s.startsWith("R0lGODlh")) return "image/gif"
+        if (s.startsWith("UklGR")) return "image/webp"
+        if (s.startsWith("Qk")) return "image/bmp"
+        return "image/png"  // 默认 PNG / 或未知
+>>>>>>> 3767e6a007c211ca0c41be73d0749e7cf2bde82d
     }
 
     // 每次页面显示时刷新资料（但保存进行中时不刷新，避免竞态条件）
@@ -81,6 +93,7 @@ Rectangle {
             root.newNickname = profile.nickname || ""
             root.newSignature = profile.signature || ""
             root.newAvatar = ""
+            root.newAvatarMime = root.detectMime(profile.avatar || "")
             root.editing = false
         }
 
@@ -244,7 +257,7 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "👤"
+                            text: "●"
                             font.pixelSize: 30
                             visible: !avatarImg.visible
                         }
@@ -300,8 +313,8 @@ Rectangle {
                         selectByMouse: true
                         background: Rectangle {
                             radius: 6
-                            color: root.editing ? "#f0f8ff" : "transparent"
-                            border.color: root.editing ? "#4a90d9" : "transparent"
+                            color: root.editing ? window.bgInput : "transparent"
+                            border.color: root.editing ? window.accent : "transparent"
                             border.width: root.editing ? 1 : 0
                         }
                         onTextChanged: {
@@ -338,8 +351,8 @@ Rectangle {
                 wrapMode: TextEdit.Wrap
                 background: Rectangle {
                     radius: 6
-                    color: root.editing ? "#f0f8ff" : "transparent"
-                    border.color: root.editing ? "#4a90d9" : "transparent"
+                    color: root.editing ? window.bgInput : "transparent"
+                    border.color: root.editing ? window.accent : "transparent"
                     border.width: root.editing ? 1 : 0
                 }
                 onTextChanged: {
