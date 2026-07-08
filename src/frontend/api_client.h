@@ -47,6 +47,7 @@ class ApiClient : public QObject {
     Q_INVOKABLE void setLanguage(const QString& locale);
     void setQmlEngine(QQmlEngine* engine);                                                                   // 清除 cookie + QSettings
     Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes = 0);                         // 读取文件内容为 base64（可指定最大字节数，超限自动压缩）
+    Q_INVOKABLE QString compressImageBase64(const QString& base64Input, int maxSizeBytes = 3145728, int maxDimension = 1920);  // 压缩 base64 图片（目标 ≤3MB base64，最长边 ≤1920px）
     Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl& videoUrl);                                           // 用 ffmpeg 抽视频第一帧
     Q_INVOKABLE QString videoThumbnailFromBase64(const QString& b64);                                        // 从 base64 视频数据提取缩略图
     Q_INVOKABLE QString saveBase64ToTempFile(const QString& b64, const QString& ext);                        // base64 → 临时文件 → file:// URL

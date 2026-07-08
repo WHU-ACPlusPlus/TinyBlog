@@ -267,6 +267,64 @@ QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
     return QString::fromLatin1(data.toBase64());
 }
 
+QString ApiClient::compressImageBase64(const QString& base64Input, int maxSizeBytes, int maxDimension) {
+    if (base64Input.isEmpty())
+        return {};
+
+    // 如果输入已经小于最大大小，直接返回
+    if (base64Input.size() <= maxSizeBytes)
+        return base64Input;
+
+    QByteArray rawData = QByteArray::fromBase64(base64Input.toLatin1());
+    QImage img;
+    if (!img.loadFromData(rawData)) {
+        qWarning() << "[compressImageBase64] Failed to decode image, returning original";
+        return base64Input;
+    }
+
+    qDebug() << "[compressImageBase64] Input image:" << img.width() << "x" << img.height()
+             << "raw=" << rawData.size() << "b64=" << base64Input.size();
+
+    // 计算缩放：先按尺寸比例，再保守一点确保反复压缩不超限
+    double scale = 1.0;
+    if (img.width() > maxDimension || img.height() > maxDimension) {
+        double dimScale = static_cast<double>(maxDimension) / std::max(img.width(), img.height());
+        scale = dimScale;
+    }
+    // 再按文件大小调整（面积比 ≈ 文件大小比）
+    double sizeScale = std::sqrt(static_cast<double>(maxSizeBytes) / base64Input.size());
+    scale = qMin(scale, sizeScale);
+
+    int newW = qMax(1, static_cast<int>(img.width() * scale));
+    int newH = qMax(1, static_cast<int>(img.height() * scale));
+
+    QImage scaled = img.scaled(newW, newH,
+                               Qt::KeepAspectRatio,
+                               Qt::SmoothTransformation);
+
+    // 先尝试 JPEG（对照片更高效），quality 从 90 逐步降到 50
+    QByteArray compressed;
+    for (int quality = 90; quality >= 50; quality -= 10) {
+        compressed.clear();
+        QBuffer buf(&compressed);
+        buf.open(QIODevice::WriteOnly);
+        scaled.save(&buf, "JPEG", quality);
+        buf.close();
+
+        QString resultB64 = QString::fromLatin1(compressed.toBase64());
+        if (resultB64.size() <= maxSizeBytes) {
+            qDebug() << "[compressImageBase64] Compressed to" << newW << "x" << newH
+                     << "quality=" << quality << "b64=" << resultB64.size();
+            return resultB64;
+        }
+    }
+
+    // 如果 JPEG 50 仍然超限，返回最后一次压缩结果（至少尺寸已缩小）
+    qDebug() << "[compressImageBase64] Still over limit after JPEG 50, returning best effort";
+    QString resultB64 = QString::fromLatin1(compressed.toBase64());
+    return resultB64;
+}
+
 bool ApiClient::isAndroid() const {
 #ifdef Q_OS_ANDROID
     return true;
