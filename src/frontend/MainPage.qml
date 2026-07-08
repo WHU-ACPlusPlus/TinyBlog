@@ -26,7 +26,7 @@ Rectangle {
     property real mouseY: height / 2
 
     // ── 背景图路径（Windows 本地绝对路径，可替换）──
-    property string bgImagePath: "file:///D:/SocialAppUI/TinyBlog/image/1.png"
+    property string bgImagePath: "qrc:/image/bg1.png"
 
     // ═══════════════════════════════════════════
     // 风格图标映射
