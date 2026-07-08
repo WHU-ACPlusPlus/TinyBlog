@@ -641,6 +641,34 @@ void ApiClient::unfollow(int followee_id) {
     });
 }
 
+// ─── 用户自己的帖子 ───
+
+void ApiClient::fetchUserPosts(int publisher_id) {
+    QJsonObject body = withCookie({{"publisher_id", publisher_id}});
+    QNetworkReply* reply = postJson("/get-user-posts", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        QVariantList ids;
+        for (const auto& v : obj["post_ids"].toArray())
+            ids.append(v.toInt());
+        emit userPostsFetched(ids);
+    });
+}
+
+void ApiClient::fetchMyPostsDetail(int publisher_id) {
+    QJsonObject body = withCookie({{"publisher_id", publisher_id}});
+    QNetworkReply* reply = postJson("/get-user-posts-detail", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        QVariantList posts = obj["posts"].toArray().toVariantList();
+        emit myPostsFetched(posts);
+    });
+}
+
 void ApiClient::fetchFollowList() {
     QJsonObject body = withCookie();
     QNetworkReply* reply = postJson("/get-follow-list", body);
@@ -651,12 +679,31 @@ void ApiClient::fetchFollowList() {
 
         QList<UserInfo> followers;
         QList<UserInfo> followees;
-        for (const auto& v : obj["followers"].toArray())
-            followers.append(userFromJson(v.toObject()));
-        for (const auto& v : obj["followees"].toArray())
-            followees.append(userFromJson(v.toObject()));
+        QVariantList followersForQml;
+        QVariantList followeesForQml;
+        for (const auto& v : obj["followers"].toArray()) {
+            auto user = userFromJson(v.toObject());
+            followers.append(user);
+            followersForQml.append(QVariantMap{
+                {"id", user.id},
+                {"username", user.username},
+                {"nickname", user.nickname},
+                {"avatar", user.avatar},
+            });
+        }
+        for (const auto& v : obj["followees"].toArray()) {
+            auto user = userFromJson(v.toObject());
+            followees.append(user);
+            followeesForQml.append(QVariantMap{
+                {"id", user.id},
+                {"username", user.username},
+                {"nickname", user.nickname},
+                {"avatar", user.avatar},
+            });
+        }
 
         emit followListFetched(followers, followees);
+        emit followListFetchedForQml(followersForQml, followeesForQml);
     });
 }
 

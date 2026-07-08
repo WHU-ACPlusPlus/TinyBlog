@@ -49,3 +49,25 @@ meta_types/
 appfrontend_autogen/
 .qtcreator/
 .qmlls.ini
+*.qm
+
+# IDE settings
+.vscode/
+.idea/
+*.user
+*.user.*
+*.suo
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Backup files
+*.bak
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.*

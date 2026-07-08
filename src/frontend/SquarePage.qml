@@ -928,6 +928,46 @@ Rectangle {
             pubError = ""
         }
 
+        function onProfileFetched(profile) {
+            // 用户修改昵称/头像后，更新广场中该用户的所有帖子
+            var uid = profile.user_id
+            if (!uid) return
+            // profile.avatar 是完整 data URI（如 data:image/png;base64,XXXX）
+            // SquarePage 渲染时自己会加 "data:image/jpeg;base64," 前缀，所以需要纯 base64
+            var rawAvatar = ""
+            var av = profile.avatar || ""
+            if (av.indexOf("base64,") >= 0)
+                rawAvatar = av.substring(av.indexOf("base64,") + 7)
+            else
+                rawAvatar = av
+            for (var i = 0; i < root.posts.length; i++) {
+                if (root.posts[i].publisher_id === uid) {
+                    var updated = Object.assign({}, root.posts[i])
+                    var dirty = false
+                    if (updated.nickname !== profile.nickname) {
+                        updated.nickname = profile.nickname
+                        dirty = true
+                    }
+                    if (updated.avatar !== rawAvatar) {
+                        updated.avatar = rawAvatar
+                        dirty = true
+                    }
+                    if (dirty) {
+                        var newPosts = root.posts.slice()
+                        newPosts[i] = updated
+                        root.posts = newPosts
+                    }
+                }
+            }
+        }
+
+        function onProfileUpdated() {
+            // 用户保存了个人资料，拉取最新数据更新广场帖子
+            if (root.posts.length > 0) {
+                api.fetchProfile()
+            }
+        }
+
         function onErrorOccurred(msg) {
             pubError = msg
             // 获取帖子过程中出错 → 跳过这个失败的帖子，继续等待剩余的

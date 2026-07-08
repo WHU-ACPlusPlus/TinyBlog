@@ -1285,6 +1285,64 @@ def get_post(body: Get_Post):
         "media": [dict(m) for m in media]
     }
 
+class Get_User_Posts_Req(BaseModel):
+    cookie: str
+    publisher_id: int
+
+@app.post("/get-user-posts")
+def get_user_posts(body: Get_User_Posts_Req):
+    user_id = get_user_id(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    posts = db_fetchall(
+        "SELECT id FROM posts WHERE publisher_id = ? ORDER BY created_at DESC LIMIT 100",
+        (body.publisher_id,)
+    )
+    log_api("POST /get-user-posts", user_id,
+            f"publisher_id={body.publisher_id}", f"count={len(posts)}")
+    return {"post_ids": [p["id"] for p in posts]}
+
+class Get_User_Posts_Detail_Req(BaseModel):
+    cookie: str
+    publisher_id: int
+
+@app.post("/get-user-posts-detail")
+def get_user_posts_detail(body: Get_User_Posts_Detail_Req):
+    user_id = get_user_id(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    posts = db_fetchall(
+        "SELECT p.*, u.username, u.nickname FROM posts p "
+        "JOIN users u ON u.id = p.publisher_id "
+        "WHERE p.publisher_id = ? ORDER BY p.created_at DESC LIMIT 100",
+        (body.publisher_id,)
+    )
+    result = []
+    for post in posts:
+        media = db_fetchall(
+            "SELECT offset, content FROM post_media WHERE post_id = ? ORDER BY offset",
+            (post["id"],)
+        )
+        liked = db_fetchone(
+            "SELECT 1 FROM liking_users WHERE post_id = ? AND liker_id = ?",
+            (post["id"], user_id)
+        )
+        result.append({
+            "id": post["id"],
+            "publisher_id": post["publisher_id"],
+            "username": post["username"],
+            "nickname": post["nickname"],
+            "content": post["content"],
+            "like_num": post["like_num"],
+            "liked": liked is not None,
+            "created_at": post["created_at"],
+            "repost_id": post["repost_id"],
+            "media": [dict(m) for m in media]
+        })
+    log_api("POST /get-user-posts-detail", user_id,
+            f"publisher_id={body.publisher_id}", f"count={len(result)}")
+    return {"posts": result}
+
 class Create_Group_Req(BaseModel):
     cookie: str
     name: str

@@ -15,6 +15,55 @@ Rectangle {
     property string newAvatarMime: "image/png"
     property string newSignature: ""
 
+    // ── 子页面导航 ──
+    property string subPage: "profile"  // "profile" | "posts" | "followers" | "following"
+    property var myPosts: []       // 帖子数据列表
+    property var myFollowers: []
+    property var myFollowees: []
+
+    // ── 进入某个子页面 ──
+    function showSubPage(page) {
+        subPage = page
+        if (page === "posts") {
+            loadMyPosts()
+        } else if (page === "followers") {
+            api.fetchFollowList()
+        } else if (page === "following") {
+            api.fetchFollowList()
+        }
+    }
+
+    // 返回个人主页
+    function backToProfile() {
+        subPage = "profile"
+    }
+
+    // ── 加载我的帖子 ──
+    function loadMyPosts() {
+        var uid = root.profileData.user_id
+        if (!uid) return
+        api.fetchMyPostsDetail(uid)
+    }
+
+    // ── 格式化时间（同 SquarePage） ──
+    function formatTime(utcStr) {
+        if (!utcStr) return ""
+        var d = new Date(utcStr + "Z")
+        if (isNaN(d.getTime())) return utcStr
+        var now = new Date()
+        var diff = (now - d) / 1000
+        if (diff < 60) return qsTr("刚刚")
+        if (diff < 3600) return Math.floor(diff / 60) + qsTr("分钟前")
+        if (diff < 86400) return Math.floor(diff / 3600) + qsTr("小时前")
+        var y = d.getFullYear()
+        var m = String(d.getMonth() + 1).padStart(2, "0")
+        var day = String(d.getDate()).padStart(2, "0")
+        var h = String(d.getHours()).padStart(2, "0")
+        var min = String(d.getMinutes()).padStart(2, "0")
+        if (y === now.getFullYear()) return m + "-" + day + " " + h + ":" + min
+        return y + "-" + m + "-" + day
+    }
+
     // 每次页面显示时刷新资料（但保存进行中时不刷新，避免竞态条件）
     onVisibleChanged: {
         if (visible && !root.saving) {
@@ -22,14 +71,12 @@ Rectangle {
         }
     }
 
-    // 监听 profileFetched 信号
+    // 监听 API 信号
     Connections {
         target: api
 
         function onProfileFetched(profile) {
-            // 如果正在保存中，忽略此次返回（可能是保存前发出的旧请求）
             if (root.saving) return
-
             root.profileData = profile
             root.newNickname = profile.nickname || ""
             root.newSignature = profile.signature || ""
@@ -38,12 +85,8 @@ Rectangle {
         }
 
         function onProfileUpdated() {
-            // 保存成功：退出编辑模式，保持本地数据
-            // 不重新拉取服务器，避免旧请求返回覆盖新数据
             root.saving = false
             root.editing = false
-
-            // 将本地修改同步到 profileData（包括新头像）
             var merged = Object.assign({}, root.profileData)
             if (root.newNickname)
                 merged.nickname = root.newNickname
@@ -52,8 +95,6 @@ Rectangle {
             if (root.newAvatar)
                 merged.avatar = root.newAvatar
             root.profileData = merged
-
-            // root.newAvatar 不清空，保持当前显示的新头像
         }
 
         function onErrorOccurred(message) {
@@ -61,17 +102,27 @@ Rectangle {
             root.editing = false
             console.log("Profile error:", message)
         }
+
+        // ── 帖子列表（一次性拉取完整数据）──
+        function onMyPostsFetched(posts) {
+            root.myPosts = posts || []
+        }
+
+        // ── 关注/粉丝列表 ──
+        function onFollowListFetchedForQml(followers, followees) {
+            root.myFollowers = followers
+            root.myFollowees = followees
+        }
     }
 
-    // 头像选择对话框
+    // ── 头像选择对话框 ──
     FileDialog {
         id: avatarPicker
         title: qsTr("选择头像")
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"]
         onAccepted: {
-            var b64 = api.readFileAsBase64(selectedFile, 1048576)  // 超过 1MB 自动压缩
+            var b64 = api.readFileAsBase64(selectedFile, 1048576)
             if (b64.length > 0) {
-                // 从文件名推断 MIME 类型
                 var mime = "image/png"
                 var path = String(selectedFile).toLowerCase()
                 if (path.endsWith(".jpg") || path.endsWith(".jpeg"))
@@ -83,21 +134,18 @@ Rectangle {
                 else if (path.endsWith(".bmp"))
                     mime = "image/bmp"
                 root.newAvatarMime = mime
-                // 把完整的 data URI 存下来（带 MIME），后续传给服务器也带 MIME
                 root.newAvatar = "data:" + mime + ";base64," + b64
             }
         }
     }
 
-    // 头像大图预览弹窗
+    // ── 头像大图预览弹窗 ──
     Popup {
         id: avatarPreview
         modal: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         anchors.centerIn: Overlay.overlay
-        background: Rectangle {
-            color: "#00000000"
-        }
+        background: Rectangle { color: "#00000000" }
 
         contentItem: Item {
             implicitWidth: Math.min(300, root.width - 40)
@@ -116,7 +164,6 @@ Rectangle {
                     fillMode: Image.PreserveAspectFit
                 }
 
-                // 关闭按钮
                 Rectangle {
                     anchors.top: parent.top
                     anchors.right: parent.right
@@ -125,14 +172,12 @@ Rectangle {
                     height: 28
                     radius: 14
                     color: "#00000066"
-
                     Text {
                         anchors.centerIn: parent
                         text: "✕"
                         color: window.bgSurface
                         font.pixelSize: 16
                     }
-
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
@@ -143,10 +188,14 @@ Rectangle {
         }
     }
 
+    // ════════════════════════════════════════════════════════════
+    // 个人主页视图（subPage === "profile"）
+    // ════════════════════════════════════════════════════════════
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
         spacing: 12
+        visible: root.subPage === "profile"
 
         // ── 顶部：头像 + 昵称/用户名 ──
         Rectangle {
@@ -160,7 +209,6 @@ Rectangle {
                 anchors.margins: 14
                 spacing: 14
 
-                // 头像
                 Item {
                     Layout.preferredWidth: 64
                     Layout.preferredHeight: 64
@@ -171,7 +219,6 @@ Rectangle {
                         color: window.textOnDark
                         radius: 32
 
-                        // 头像图片（base64 或 默认占位）
                         Rectangle {
                             id: avatarClip
                             anchors.fill: parent
@@ -187,9 +234,7 @@ Rectangle {
                                             ? root.newAvatar
                                             : (root.profileData.avatar || "")
                                     if (!av) return ""
-                                    // 新格式：已包含 "data:..." 前缀，直接使用
                                     if (av.indexOf("data:") === 0) return av
-                                    // 旧格式（向后兼容）：纯 base64，补上 MIME 前缀
                                     return "data:" + root.newAvatarMime + ";base64," + av
                                 }
                                 fillMode: Image.PreserveAspectCrop
@@ -197,7 +242,6 @@ Rectangle {
                             }
                         }
 
-                        // 无头像时的默认图标
                         Text {
                             anchors.centerIn: parent
                             text: "👤"
@@ -205,7 +249,6 @@ Rectangle {
                             visible: !avatarImg.visible
                         }
 
-                        // 点击头像：预览大图 / 编辑模式下更换
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
@@ -218,14 +261,12 @@ Rectangle {
                             }
                         }
 
-                        // 编辑模式下显示"更换"提示
                         Rectangle {
                             anchors.fill: parent
                             radius: 32
                             clip: true
                             visible: root.editing
                             color: "transparent"
-
                             Rectangle {
                                 anchors.bottom: parent.bottom
                                 anchors.left: parent.left
@@ -243,13 +284,11 @@ Rectangle {
                     }
                 }
 
-                // 昵称 + 用户名
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 4
 
-                    // 昵称（可编辑或显示模式）
                     TextField {
                         id: nicknameField
                         Layout.fillWidth: true
@@ -271,7 +310,6 @@ Rectangle {
                         }
                     }
 
-                    // 用户名（只读）
                     Text {
                         text: "@" + (root.profileData.username || qsTr("用户名"))
                         font.pixelSize: 14
@@ -281,7 +319,7 @@ Rectangle {
             }
         }
 
-        // ── 个性签名（自适应高度） ──
+        // ── 个性签名 ──
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: signatureField.implicitHeight + 24
@@ -311,7 +349,7 @@ Rectangle {
             }
         }
 
-        // ── 资料统计 ──
+        // ── 资料统计（可点击进入子页面） ──
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 60
@@ -323,26 +361,68 @@ Rectangle {
                 spacing: 0
 
                 Item { Layout.fillWidth: true }
-                ColumnLayout {
-                    Layout.alignment: Qt.AlignCenter
-                    spacing: 2
-                    Text { text: root.profileData.post_count || "---"; font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                    Text { text: qsTr("帖子"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+
+                // 帖子数（可点击）
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
+                        Text { text: (root.profileData.post_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("帖子"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.showSubPage("posts")
+                    }
                 }
+
                 Item { Layout.fillWidth: true }
-                ColumnLayout {
-                    Layout.alignment: Qt.AlignCenter
-                    spacing: 2
-                    Text { text: root.profileData.follower_count || "---"; font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                    Text { text: qsTr("粉丝"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+
+                // 粉丝数（可点击）
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
+                        Text { text: (root.profileData.follower_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("粉丝"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.showSubPage("followers")
+                    }
                 }
+
                 Item { Layout.fillWidth: true }
-                ColumnLayout {
-                    Layout.alignment: Qt.AlignCenter
-                    spacing: 2
-                    Text { text: root.profileData.followee_count || "---"; font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                    Text { text: qsTr("关注"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+
+                // 关注数（可点击）
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
+                        Text { text: (root.profileData.followee_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("关注"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.showSubPage("following")
+                    }
                 }
+
                 Item { Layout.fillWidth: true }
             }
         }
@@ -356,7 +436,6 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 44
                 text: root.editing ? qsTr("保存") : qsTr("编辑资料")
-
                 contentItem: Text {
                     text: parent.text
                     color: window.bgSurface
@@ -367,19 +446,16 @@ Rectangle {
                 }
                 background: Rectangle {
                     radius: 10
-                    color: root.editing ? "#4a90d9" : "#4a90d9"
+                    color: "#4a90d9"
                 }
-
                 onClicked: {
                     if (root.editing) {
-                        // 保存修改
                         root.saving = true
                         api.updateProfile(
                             root.newNickname !== root.profileData.nickname ? root.newNickname : "",
                             root.newAvatar,
                             root.newSignature !== root.profileData.signature ? root.newSignature : ""
                         )
-                        // editing 交给 onProfileUpdated/onErrorOccurred 管理
                     } else {
                         root.editing = true
                         root.newNickname = root.profileData.nickname || ""
@@ -389,14 +465,12 @@ Rectangle {
                 }
             }
 
-            // 取消按钮（编辑模式下显示）
             Button {
                 Layout.preferredWidth: root.editing ? 80 : 0
                 Layout.preferredHeight: 44
                 text: qsTr("取消")
                 clip: true
                 visible: root.editing
-
                 contentItem: Text {
                     text: qsTr("取消")
                     color: window.textSecondary
@@ -408,7 +482,6 @@ Rectangle {
                     radius: 10
                     color: window.divider
                 }
-
                 onClicked: {
                     root.saving = false
                     root.editing = false
@@ -425,7 +498,6 @@ Rectangle {
             Layout.preferredHeight: 48
             Layout.topMargin: 8
             text: qsTr("登出")
-
             contentItem: Text {
                 text: qsTr("登出")
                 color: window.bgSurface
@@ -433,16 +505,500 @@ Rectangle {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
-
             background: Rectangle {
                 radius: 10
                 color: "#e55"
             }
-
             onClicked: api.clearAuth()
         }
 
-        // 填充剩余空间
         Item { Layout.fillHeight: true }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 子页面：帖子列表（subPage === "posts"）
+    // ════════════════════════════════════════════════════════════
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 16
+        spacing: 12
+        visible: root.subPage === "posts"
+
+        // 顶部栏：返回按钮 + 标题
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 44
+            color: "transparent"
+
+            RowLayout {
+                anchors.fill: parent
+                spacing: 8
+
+                Button {
+                    Layout.preferredWidth: 36
+                    Layout.preferredHeight: 36
+                    flat: true
+                    contentItem: Text {
+                        text: "←"
+                        font.pixelSize: 22
+                        color: window.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 18
+                        color: mouseArea.containsMouse ? window.divider : "transparent"
+                    }
+                    MouseArea {
+                        id: mouseArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.backToProfile()
+                    }
+                }
+
+                Text {
+                    text: qsTr("我的帖子")
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: window.textPrimary
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+
+        // 帖子列表
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: window.bgSurface
+            radius: 10
+            clip: true
+
+            Flickable {
+                anchors.fill: parent
+                anchors.margins: 2
+                contentWidth: width
+                contentHeight: postsColumn.implicitHeight + 20
+                boundsBehavior: Flickable.DragOverBounds
+                clip: true
+
+                Column {
+                    id: postsColumn
+                    width: parent.width
+                    spacing: 8
+                    topPadding: 10
+                    bottomPadding: 10
+
+                    // 提示
+                    Text {
+                        width: parent.width
+                        text: root.myPosts.length === 0 ? qsTr("暂无帖子") : ""
+                        color: window.textSecondary
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: text.length > 0
+                        topPadding: 20
+                    }
+
+                    // 帖子列表
+                    Repeater {
+                        model: root.myPosts
+
+                        Rectangle {
+                            required property var modelData
+                            width: parent.width
+                            height: postItemColumn.implicitHeight + 20
+                            radius: 8
+                            color: window.bgPage
+
+                            Column {
+                                id: postItemColumn
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 6
+
+                                // 发布者信息
+                                Row {
+                                    width: parent.width
+                                    spacing: 8
+
+                                    Rectangle {
+                                        width: 32
+                                        height: 32
+                                        radius: 16
+                                        color: window.border
+                                        clip: true
+                                        // 「我的帖子」都是当前用户所发，头像即当前用户头像
+                                        // （来自 fetchProfile 的 profileData.avatar）
+                                        Image {
+                                            id: postAvatarImg
+                                            anchors.fill: parent
+                                            fillMode: Image.PreserveAspectCrop
+                                            source: {
+                                                var av = root.profileData.avatar || ""
+                                                if (!av) return ""
+                                                if (av.indexOf("data:") === 0) return av
+                                                return "data:image/png;base64," + av
+                                            }
+                                            visible: status === Image.Ready
+                                        }
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "👤"
+                                            font.pixelSize: 16
+                                            visible: !postAvatarImg.visible
+                                        }
+                                    }
+
+                                    Column {
+                                        spacing: 2
+                                        Text {
+                                            text: modelData.nickname || modelData.username || qsTr("用户")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: window.textPrimary
+                                        }
+                                        Text {
+                                            text: root.formatTime(modelData.created_at || "")
+                                            font.pixelSize: 11
+                                            color: window.textSecondary
+                                        }
+                                    }
+                                }
+
+                                // 帖子正文
+                                Text {
+                                    width: parent.width
+                                    text: modelData.content || ""
+                                    font.pixelSize: 14
+                                    color: window.textPrimary
+                                    wrapMode: Text.Wrap
+                                    lineHeight: 1.4
+                                }
+
+                                // 媒体附件（如果有）
+                                Row {
+                                    spacing: 4
+                                    visible: modelData.media && modelData.media.length > 0
+                                    Repeater {
+                                        model: modelData.media || []
+                                        Rectangle {
+                                            required property var modelData
+                                            width: 120
+                                            height: 120
+                                            radius: 6
+                                            color: window.border
+                                            clip: true
+                                            Image {
+                                                  anchors.fill: parent
+                                                  fillMode: Image.PreserveAspectCrop
+                                                  source: {
+                                                      var m = modelData
+                                                      if (typeof m === "object" && m.content)
+                                                          return "data:image/jpeg;base64," + m.content
+                                                      return ""
+                                                  }
+                                                  visible: status === Image.Ready
+                                              }
+                                          }
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+      }
+
+    // ════════════════════════════════════════════════════════════
+    // 子页面：粉丝列表（subPage === "followers"）
+    // ════════════════════════════════════════════════════════════
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 16
+        spacing: 12
+        visible: root.subPage === "followers"
+
+        // 顶部栏
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 44
+            color: "transparent"
+
+            RowLayout {
+                anchors.fill: parent
+                spacing: 8
+
+                Button {
+                    Layout.preferredWidth: 36
+                    Layout.preferredHeight: 36
+                    flat: true
+                    contentItem: Text {
+                        text: "←"
+                        font.pixelSize: 22
+                        color: window.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 18
+                        color: btnMouse.containsMouse ? window.divider : "transparent"
+                    }
+                    MouseArea {
+                        id: btnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.backToProfile()
+                    }
+                }
+
+                Text {
+                    text: qsTr("粉丝")
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: window.textPrimary
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: window.bgSurface
+            radius: 10
+            clip: true
+
+            Flickable {
+                anchors.fill: parent
+                anchors.margins: 2
+                contentWidth: width
+                contentHeight: followersCol.implicitHeight + 20
+                boundsBehavior: Flickable.DragOverBounds
+                clip: true
+
+                Column {
+                    id: followersCol
+                    width: parent.width
+                    spacing: 4
+                    topPadding: 10
+                    bottomPadding: 10
+
+                    Text {
+                        width: parent.width
+                        text: root.myFollowers.length === 0 ? qsTr("暂无粉丝") : ""
+                        color: window.textSecondary
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: text.length > 0
+                        topPadding: 20
+                    }
+
+                    Repeater {
+                        model: root.myFollowers
+
+                        Rectangle {
+                            required property var modelData
+                            width: parent.width
+                            height: 48
+                            color: "transparent"
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
+
+                                Rectangle {
+                                    Layout.preferredWidth: 32
+                                    Layout.preferredHeight: 32
+                                    radius: 16
+                                    color: window.border
+                                    Image {
+                                        anchors.fill: parent
+                                        fillMode: Image.PreserveAspectCrop
+                                        source: modelData.avatar
+                                                 ? "data:image/jpeg;base64," + modelData.avatar
+                                                 : ""
+                                        visible: status === Image.Ready
+                                    }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "👤"
+                                        font.pixelSize: 16
+                                        visible: !parent.children[0].visible
+                                    }
+                                }
+
+                                Column {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text {
+                                        text: modelData.nickname || modelData.username || qsTr("用户")
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: window.textPrimary
+                                    }
+                                    Text {
+                                        text: "@" + (modelData.username || "")
+                                        font.pixelSize: 11
+                                        color: window.textSecondary
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 子页面：关注列表（subPage === "following"）
+    // ════════════════════════════════════════════════════════════
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 16
+        spacing: 12
+        visible: root.subPage === "following"
+
+        // 顶部栏
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 44
+            color: "transparent"
+
+            RowLayout {
+                anchors.fill: parent
+                spacing: 8
+
+                Button {
+                    Layout.preferredWidth: 36
+                    Layout.preferredHeight: 36
+                    flat: true
+                    contentItem: Text {
+                        text: "←"
+                        font.pixelSize: 22
+                        color: window.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 18
+                        color: followingBtnMouse.containsMouse ? window.divider : "transparent"
+                    }
+                    MouseArea {
+                        id: followingBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.backToProfile()
+                    }
+                }
+
+                Text {
+                    text: qsTr("关注")
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: window.textPrimary
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: window.bgSurface
+            radius: 10
+            clip: true
+
+            Flickable {
+                anchors.fill: parent
+                anchors.margins: 2
+                contentWidth: width
+                contentHeight: followingCol.implicitHeight + 20
+                boundsBehavior: Flickable.DragOverBounds
+                clip: true
+
+                Column {
+                    id: followingCol
+                    width: parent.width
+                    spacing: 4
+                    topPadding: 10
+                    bottomPadding: 10
+
+                    Text {
+                        width: parent.width
+                        text: root.myFollowees.length === 0 ? qsTr("暂未关注任何人") : ""
+                        color: window.textSecondary
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: text.length > 0
+                        topPadding: 20
+                    }
+
+                    Repeater {
+                        model: root.myFollowees
+
+                        Rectangle {
+                            required property var modelData
+                            width: parent.width
+                            height: 48
+                            color: "transparent"
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 10
+
+                                Rectangle {
+                                    Layout.preferredWidth: 32
+                                    Layout.preferredHeight: 32
+                                    radius: 16
+                                    color: window.border
+                                    Image {
+                                        anchors.fill: parent
+                                        fillMode: Image.PreserveAspectCrop
+                                        source: modelData.avatar
+                                                 ? "data:image/jpeg;base64," + modelData.avatar
+                                                 : ""
+                                        visible: status === Image.Ready
+                                    }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "👤"
+                                        font.pixelSize: 16
+                                        visible: !parent.children[0].visible
+                                    }
+                                }
+
+                                Column {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text {
+                                        text: modelData.nickname || modelData.username || qsTr("用户")
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: window.textPrimary
+                                    }
+                                    Text {
+                                        text: "@" + (modelData.username || "")
+                                        font.pixelSize: 11
+                                        color: window.textSecondary
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
