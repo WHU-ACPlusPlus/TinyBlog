@@ -5,8 +5,15 @@ import QtQuick.Dialogs
 
 Rectangle {
     id: root
-    color: window.bgPage
+    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : window.bgPage)
 
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : window.textPrimary)
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : window.textSecondary)
+    property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : window.textSecondary)
     property var profileData: ({})
     property bool editing: false
     property bool saving: false
@@ -15,7 +22,6 @@ Rectangle {
     property string newAvatarMime: "image/png"
     property string newSignature: ""
 
-<<<<<<< HEAD
     // ── 子页面导航 ──
     property string subPage: "profile"  // "profile" | "posts" | "followers" | "following"
     property var myPosts: []       // 帖子数据列表
@@ -63,7 +69,8 @@ Rectangle {
         var min = String(d.getMinutes()).padStart(2, "0")
         if (y === now.getFullYear()) return m + "-" + day + " " + h + ":" + min
         return y + "-" + m + "-" + day
-=======
+    }
+
     // 从 base64 前几个字符推断 MIME 类型
     function detectMime(b64) {
         if (!b64 || b64.length < 4) return "image/png"
@@ -73,7 +80,6 @@ Rectangle {
         if (s.startsWith("UklGR")) return "image/webp"
         if (s.startsWith("Qk")) return "image/bmp"
         return "image/png"  // 默认 PNG / 或未知
->>>>>>> 3767e6a007c211ca0c41be73d0749e7cf2bde82d
     }
 
     // 每次页面显示时刷新资料（但保存进行中时不刷新，避免竞态条件）
@@ -149,6 +155,20 @@ Rectangle {
                 root.newAvatarMime = mime
                 root.newAvatar = "data:" + mime + ";base64," + b64
             }
+        }
+    }
+
+    // ── 壁纸选择对话框 ──
+    FileDialog {
+        id: wallpaperPicker
+        title: qsTr("选择聊天壁纸")
+        nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"]
+        onAccepted: {
+            // 将本地文件路径转为 file:// URL
+            var filePath = String(selectedFile)
+            // Qt 的 selectedFile 已经是 file:// URL 格式
+            api.setWallpaperPath(filePath)
+            console.log("[ProfilePage] 壁纸已设置: " + filePath)
         }
     }
 
@@ -257,8 +277,8 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "●"
-                            font.pixelSize: 30
+                            text: "👤"
+                            font.pixelSize: 32
                             visible: !avatarImg.visible
                         }
 
@@ -383,8 +403,8 @@ Rectangle {
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 2
-                        Text { text: (root.profileData.post_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                        Text { text: qsTr("帖子"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: (root.profileData.post_count ?? "---"); font.bold: true; font.pixelSize: 18; color: root.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("帖子"); font.pixelSize: 13; color: root.textTertiary; Layout.alignment: Qt.AlignHCenter }
                     }
 
                     MouseArea {
@@ -404,8 +424,8 @@ Rectangle {
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 2
-                        Text { text: (root.profileData.follower_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                        Text { text: qsTr("粉丝"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: (root.profileData.follower_count ?? "---"); font.bold: true; font.pixelSize: 18; color: root.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("粉丝"); font.pixelSize: 13; color: root.textTertiary; Layout.alignment: Qt.AlignHCenter }
                     }
 
                     MouseArea {
@@ -425,8 +445,8 @@ Rectangle {
                     ColumnLayout {
                         anchors.centerIn: parent
                         spacing: 2
-                        Text { text: (root.profileData.followee_count ?? "---"); font.bold: true; font.pixelSize: 18; color: window.textPrimary; Layout.alignment: Qt.AlignHCenter }
-                        Text { text: qsTr("关注"); font.pixelSize: 13; color: window.textSecondary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: (root.profileData.followee_count ?? "---"); font.bold: true; font.pixelSize: 18; color: root.textPrimary; Layout.alignment: Qt.AlignHCenter }
+                        Text { text: qsTr("关注"); font.pixelSize: 13; color: root.textTertiary; Layout.alignment: Qt.AlignHCenter }
                     }
 
                     MouseArea {
@@ -437,6 +457,107 @@ Rectangle {
                 }
 
                 Item { Layout.fillWidth: true }
+            }
+        }
+
+        // ── 壁纸设置 ──
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 80
+            color: window.bgSurface
+            radius: 10
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 12
+
+                // 壁纸预览缩略图
+                Rectangle {
+                    Layout.preferredWidth: 56
+                    Layout.preferredHeight: 56
+                    radius: 8
+                    color: window.divider
+                    clip: true
+
+                    Image {
+                        id: wallpaperPreview
+                        anchors.fill: parent
+                        source: api.wallpaperPath
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "🖼️"
+                        font.pixelSize: 24
+                        visible: api.wallpaperPath.length === 0 || wallpaperPreview.status === Image.Error
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        text: qsTr("聊天壁纸")
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: root.textPrimary
+                    }
+                    Text {
+                        text: api.wallpaperPath.length > 0
+                              ? qsTr("已设置自定义壁纸")
+                              : qsTr("未设置，使用默认背景")
+                        font.pixelSize: 12
+                        color: root.textTertiary
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // 清除壁纸按钮（仅在有壁纸时显示）
+                Button {
+                    Layout.preferredWidth: 60
+                    Layout.preferredHeight: 32
+                    visible: api.wallpaperPath.length > 0
+                    text: qsTr("清除")
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#e55"
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 6
+                        color: "transparent"
+                        border.color: "#e55"
+                        border.width: 1
+                    }
+                    onClicked: api.clearWallpaper()
+                }
+
+                // 选择壁纸按钮
+                Button {
+                    Layout.preferredWidth: 60
+                    Layout.preferredHeight: 32
+                    text: qsTr("选择")
+                    contentItem: Text {
+                        text: parent.text
+                        color: window.bgSurface
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 6
+                        color: "#4a90d9"
+                    }
+                    onClicked: wallpaperPicker.open()
+                }
             }
         }
 

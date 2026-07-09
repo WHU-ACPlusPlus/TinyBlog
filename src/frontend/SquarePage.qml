@@ -6,7 +6,23 @@ import QtMultimedia
 
 Rectangle {
     id: root
-    color: window.bgPage
+    color: {
+        if (softUIMode) return "#e8edf2"
+        if (glassMode) return "transparent"
+        if (window.darkMode) return Qt.rgba(0.08, 0.08, 0.08, 0.88)
+        if (api.wallpaperPath.length > 0) return Qt.rgba(0.96, 0.96, 0.96, 0.60)
+        return Qt.rgba(0.96, 0.96, 0.96, 0.82)
+    }
+
+    // ── 风格模式（由 MainPage 传入）──
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : window.textPrimary)
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : window.textSecondary)
+    property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : window.textSecondary)
+    property color textAccent:    "#4a8cf7"
 
     // ── 状态：normal / publishing ──
     property bool publishing: false
@@ -157,7 +173,7 @@ Rectangle {
         id: normalView
         anchors.fill: parent
         visible: !publishing
-        color: window.bgPage
+        color: "transparent"
 
         // ── 辅助刷新函数 ──
         function doRefresh() {
@@ -175,13 +191,15 @@ Rectangle {
             api.fetchTimeline(20)
         }
 
-        // 顶栏
+        // 顶栏 — 磨砂玻璃
         Rectangle {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
             height: 48
-            color: window.bgSurface
+            color: window.darkMode
+                ? Qt.rgba(1, 1, 1, 0.05)
+                : Qt.rgba(1, 1, 1, 0.55)
             z: 1
 
             Row {
@@ -203,29 +221,41 @@ Rectangle {
                             text: qsTr("广场")
                             font.pixelSize: 18
                             font.bold: true
-                            color: window.textPrimary
+                            color: root.textPrimary
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: root._refreshHint
                             font.pixelSize: 11
-                            color: window.accent
+                            color: root.textAccent
                             visible: text.length > 0
                         }
 
                     }
                 }
 
-                // 刷新按钮
+                // 刷新按钮 — 磨砂玻璃
                 Rectangle {
-                    width: 48
-                    height: 48
-                    color: "transparent"
+                    width: 40
+                    height: 40
+                    radius: 10
+                    color: root.glassMode
+                        ? Qt.rgba(1, 1, 1, 0.12)
+                        : (window.darkMode
+                            ? Qt.rgba(1, 1, 1, 0.06)
+                            : Qt.rgba(0, 0, 0, 0.04))
+                    border.color: root.glassMode
+                        ? Qt.rgba(1, 1, 1, 0.20)
+                        : (window.darkMode
+                            ? Qt.rgba(1, 1, 1, 0.10)
+                            : Qt.rgba(0, 0, 0, 0.06))
+                    border.width: root.glassMode ? 1 : 0.5
 
                     Text {
                         anchors.centerIn: parent
                         text: "↻"
-                        font.pixelSize: 20
+                        font.pixelSize: 18
+                        color: root.textSecondary
                     }
 
                     MouseArea {
@@ -290,7 +320,7 @@ Rectangle {
                         text: parent.parent._pullOffset >= parent.parent._pullThreshold
                               ? qsTr("释放刷新") : qsTr("下拉刷新")
                         font.pixelSize: 13
-                        color: window.textSecondary
+                        color: root.textSecondary
                     }
                 }
 
@@ -309,7 +339,13 @@ Rectangle {
                             width: parent.width
                             height: postColumn.implicitHeight + 20
                             radius: 10
-                            color: window.bgSurface
+                            color: window.darkMode
+                                ? Qt.rgba(1, 1, 1, 0.04)
+                                : Qt.rgba(1, 1, 1, 0.65)
+                            border.color: window.darkMode
+                                ? Qt.rgba(1, 1, 1, 0.08)
+                                : Qt.rgba(0, 0, 0, 0.05)
+                            border.width: 0.5
 
                             Column {
                                 id: postColumn
@@ -327,16 +363,7 @@ Rectangle {
                                         width: 40
                                         height: 40
                                         radius: 20
-                                        color: window.border
-
-                                        Image {
-                                            anchors.fill: parent
-                                            fillMode: Image.PreserveAspectCrop
-                                            source: modelData.avatar
-                                                     ? "data:image/jpeg;base64," + modelData.avatar
-                                                     : ""
-                                            visible: status === Image.Ready
-                                        }
+                                        color: window.divider
 
                                         Image {
                                             anchors.fill: parent
@@ -351,7 +378,7 @@ Rectangle {
                                             anchors.centerIn: parent
                                             text: modelData.nickname[0]
                                             font.pixelSize: 18
-                                            color: window.textSecondary
+                                            color: root.textSecondary
                                             visible: !modelData.avatar
                                         }
                                     }
@@ -364,12 +391,12 @@ Rectangle {
                                             text: modelData.nickname
                                             font.pixelSize: 16
                                             font.bold: true
-                                            color: window.textPrimary
+                                            color: root.textPrimary
                                         }
                                         Text {
                                             text: "@" + modelData.username
                                             font.pixelSize: 12
-                                            color: window.textSecondary
+                                            color: root.textSecondary
                                         }
                                     }
                                 }
@@ -379,7 +406,7 @@ Rectangle {
                                     width: parent.width
                                     text: modelData.content
                                     font.pixelSize: 15
-                                    color: window.textPrimary
+                                    color: root.textPrimary
                                     wrapMode: Text.Wrap
                                 }
 
@@ -416,7 +443,7 @@ Rectangle {
                                                 anchors.centerIn: parent
                                                 text: "▣"
                                                 font.pixelSize: 18
-                                                color: window.textSecondary
+                                                color: root.textSecondary
                                                 visible: !modelData.source || modelData.source.length === 0
                                             }
 
@@ -452,19 +479,6 @@ Rectangle {
                                                     mediaViewer.visible = true
                                                 }
                                             }
-
-                                            // 点击查看大图
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                visible: modelData.source && modelData.source.length > 0
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    mediaViewer.viewerSource = modelData.source
-                                                    mediaViewer.viewerIsVideo = modelData.isVideo || false
-                                                    mediaViewer.viewerContent = modelData.isVideo ? (modelData.content || "") : ""
-                                                    mediaViewer.visible = true
-                                                }
-                                            }
                                         }
                                     }
                                 }
@@ -479,7 +493,7 @@ Rectangle {
                 root._timeTick;  // bind to tick so it refreshes
                 return root.formatTime(modelData.created_at)}
                                         font.pixelSize: 12
-                                        color: window.textSecondary
+                                        color: root.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
 
@@ -508,7 +522,7 @@ Rectangle {
                                     Text {
                                         text: String(modelData.like_num || 0)
                                         font.pixelSize: 13
-                                        color: window.textSecondary
+                                        color: root.textSecondary
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
@@ -519,7 +533,9 @@ Rectangle {
                                     width: parent.width
                                     height: commentsCol.implicitHeight + 16
                                     radius: 8
-                                    color: window.bgCard
+                                    color: window.darkMode
+                                        ? Qt.rgba(1, 1, 1, 0.03)
+                                        : Qt.rgba(1, 1, 1, 0.50)
 
                                     Column {
                                         id: commentsCol
@@ -539,7 +555,7 @@ Rectangle {
                                                 height: 32
                                                 radius: 6
                                                 color: window.bgSurface
-                                                border.color: window.textOnDark
+                                                border.color: glassMode ? Qt.rgba(1,1,1,0.3) : window.border
                                                 border.width: 1
 
                                                 TextInput {
@@ -549,7 +565,7 @@ Rectangle {
                                                     anchors.rightMargin: 8
                                                     verticalAlignment: Text.AlignVCenter
                                                     font.pixelSize: 13
-                                                    color: window.textPrimary
+                                                    color: root.textPrimary
                                                 }
 
                                                 Text {
@@ -558,7 +574,7 @@ Rectangle {
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     text: qsTr("写评论...")
                                                     font.pixelSize: 13
-                                                    color: window.textSecondary
+                                                    color: root.textSecondary
                                                     visible: commentInput.text.length === 0
                                                 }
                                             }
@@ -567,7 +583,7 @@ Rectangle {
                                                 width: 40
                                                 height: 32
                                                 radius: 6
-                                                color: window.accent
+                                                color: root.textAccent
 
                                                 Text {
                                                     anchors.centerIn: parent
@@ -583,8 +599,6 @@ Rectangle {
                                                         if (!txt) return
                                                         commentInput.text = ""
                                                         var postId = modelData.id
-                                                        // 在 root.posts 数组中按 ID 设置标记，
-                                                        // 因为 Repeater 的 modelData 可能是副本
                                                         for (var pi = 0; pi < root.posts.length; pi++) {
                                                             if (root.posts[pi].id === postId) {
                                                                 root.posts[pi]._pendingCommentRefresh = true
@@ -602,9 +616,9 @@ Rectangle {
                                         Text {
                                             text: modelData.comments && modelData.comments.length > 0
                                                    ? "🧵 %1 条评论".arg(modelData.comments.length)
-                                                   : "加载评论"
+                                                   : qsTr("加载评论")
                                             font.pixelSize: 12
-                                            color: window.accent
+                                            color: root.textAccent
                                             visible: !modelData._commentsLoading
 
                                             MouseArea {
@@ -637,7 +651,7 @@ Rectangle {
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     text: "<b>" + modelData.nickname + "</b> " + modelData.content
                                                     font.pixelSize: 12
-                                                    color: window.textPrimary
+                                                    color: root.textPrimary
                                                     elide: Text.ElideRight
                                                     width: parent.width
                                                     wrapMode: Text.Wrap
@@ -664,7 +678,7 @@ Rectangle {
             width: 52
             height: 52
             radius: 26
-            color: window.accent
+            color: root.textAccent
             z: 2
 
             Text {
@@ -691,11 +705,13 @@ Rectangle {
         spacing: 0
         visible: publishing
 
-        // 顶栏（固定，不随滚动移动）
+        // 顶栏 — 磨砂玻璃
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
-            color: window.bgSurface
+            color: window.darkMode
+                ? Qt.rgba(1, 1, 1, 0.05)
+                : Qt.rgba(1, 1, 1, 0.55)
 
             RowLayout {
                 anchors.fill: parent
@@ -711,7 +727,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: "←"
                         font.pixelSize: 22
-                        color: window.accent
+                        color: root.textAccent
                     }
 
                     MouseArea {
@@ -728,7 +744,7 @@ Rectangle {
                     text: qsTr("发布帖子")
                     font.pixelSize: 18
                     font.bold: true
-                    color: window.textPrimary
+                    color: root.textPrimary
                 }
 
                 // 错误提示
@@ -748,7 +764,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.rightMargin: 12
                     radius: 6
-                    color: window.accent
+                    color: root.textAccent
 
                     Text {
                         anchors.centerIn: parent
@@ -781,6 +797,18 @@ Rectangle {
                                     console.log("[SquarePage]   readFileAsBase64[" + i + "] =",
                                         b64 ? b64.substring(0, 40) + "...(" + b64.length + " chars)" : "(empty/null)")
                                 }
+                                // 对过大图片压缩（超过 3MB base64 自动压缩，最长边 ≤1920px）
+                                if (b64 && b64.length > 3145728) {
+                                    var compressed = api.compressImageBase64(b64)
+                                    if (compressed) {
+                                        console.log("[SquarePage]   compressed[" + i + "]:", b64.length, "→", compressed.length, "chars")
+                                        b64 = compressed
+                                    } else {
+                                        pubError = "图片 \"" + (selectedMedia[i] ? selectedMedia[i].toString().split("/").pop() : "第" + (i+1) + "张") + "\" 压缩后仍然过大，无法发布"
+                                        publishing = false
+                                        return
+                                    }
+                                }
                                 b64List.push(b64)
                             }
                             api.publishPost(textInput.text, b64List)
@@ -802,26 +830,30 @@ Rectangle {
                 width: publishScroll.availableWidth
                 spacing: 0
 
-                // ── 文本输入区 ──
+                // ── 文本输入区 — 磨砂玻璃 ──
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 200
                     Layout.leftMargin: 12
                     Layout.rightMargin: 12
                     Layout.topMargin: 10
-                    color: window.bgSurface
+                    color: window.darkMode
+                        ? Qt.rgba(1, 1, 1, 0.04)
+                        : Qt.rgba(1, 1, 1, 0.55)
                     radius: 8
-                    border.color: window.border
-                    border.width: 1
+                    border.color: window.darkMode
+                        ? Qt.rgba(1, 1, 1, 0.10)
+                        : Qt.rgba(0, 0, 0, 0.08)
+                    border.width: 0.5
 
                     TextArea {
                         id: textInput
                         anchors.fill: parent
                         anchors.margins: 12
                         placeholderText: qsTr("分享你的想法……")
-                        placeholderTextColor: window.textSecondary
+                        placeholderTextColor: root.textSecondary
                         font.pixelSize: 16
-                        color: window.textPrimary
+                        color: root.textPrimary
                         wrapMode: TextEdit.Wrap
                         focus: false
                     }
@@ -933,7 +965,7 @@ Rectangle {
                                     text: "+"
                                     font.pixelSize: 28
                                     font.bold: true
-                                    color: window.textSecondary
+                                    color: root.textSecondary
                                 }
 
                                 MouseArea {
@@ -1058,8 +1090,6 @@ Rectangle {
             // 用户修改昵称/头像后，更新广场中该用户的所有帖子
             var uid = profile.user_id
             if (!uid) return
-            // profile.avatar 是完整 data URI（如 data:image/png;base64,XXXX）
-            // SquarePage 渲染时自己会加 "data:image/jpeg;base64," 前缀，所以需要纯 base64
             var rawAvatar = ""
             var av = profile.avatar || ""
             if (av.indexOf("base64,") >= 0)
@@ -1088,7 +1118,6 @@ Rectangle {
         }
 
         function onProfileUpdated() {
-            // 用户保存了个人资料，拉取最新数据更新广场帖子
             if (root.posts.length > 0) {
                 api.fetchProfile()
             }
@@ -1096,7 +1125,6 @@ Rectangle {
 
         function onErrorOccurred(msg) {
             pubError = msg
-            // 获取帖子过程中出错 → 跳过这个失败的帖子，继续等待剩余的
             if (isFetching && pendingPostCount > 0) {
                 pendingPostCount--
                 if (pendingPostCount <= 0) {
@@ -1106,7 +1134,6 @@ Rectangle {
         }
 
         function onTimelineFetched(postIds, count) {
-            // 只拉取尚未加载的帖子
             var existingIds = {}
             for (var i = 0; i < posts.length; i++)
                 existingIds[posts[i].id] = true
@@ -1129,12 +1156,10 @@ Rectangle {
         }
 
         function onPostFetched(post) {
-            // 跳过过时响应
             if (!isFetching) {
                 return
             }
 
-            // post 是 QVariantMap → QML 中为 JS 对象
             var entry = {
                 id: post.id,
                 publisher_id: post.publisher_id,
@@ -1150,8 +1175,6 @@ Rectangle {
                 _commentsLoading: false,
                 _pendingCommentRefresh: false
             }
-            // 暂存到映射中，等待全部获取完毕后按序合并到列表顶部
-            // 拉取发帖人头像
             api.fetchAvatar(post.publisher_id)
             _newPostsMap[post.id] = entry
             if (pendingPostCount > 0)
@@ -1162,7 +1185,6 @@ Rectangle {
         }
 
         function onAvatarFetched(userId, avatar, signature) {
-            // 遍历所有帖子，更新该用户的头像
             for (var i = 0; i < posts.length; i++) {
                 if (posts[i].publisher_id === userId && posts[i].avatar !== avatar) {
                     var updated = Object.assign({}, posts[i], {avatar: avatar})
@@ -1181,7 +1203,6 @@ Rectangle {
             }
             posts = ordered.concat(posts)
 
-            // 为所有视频异步提取缩略图
             for (var pi = 0; pi < ordered.length; pi++) {
                 var postEntry = ordered[pi]
                 if (postEntry.media) {
@@ -1208,13 +1229,8 @@ Rectangle {
             _newPostsMap = ({})
         }
 
-        function onPostLiked() {
-            // 乐观更新已完成，无需额外操作
-        }
-
-        function onPostUnliked() {
-            // 乐观更新已完成
-        }
+        function onPostLiked() {}
+        function onPostUnliked() {}
 
         function onCommentPosted() {
             for (var i = 0; i < posts.length; i++) {
@@ -1252,7 +1268,6 @@ Rectangle {
 
         function onLoggedInChanged() {
             if (!api.isLoggedIn) {
-                // 登出后清空所有用户数据，防止不同用户串台
                 posts = []
                 _newPostIds = []
                 _newPostsMap = ({})
@@ -1292,25 +1307,20 @@ Rectangle {
 
         property string viewerSource: ""
         property bool viewerIsVideo: false
-        property string viewerContent: ""   // 视频 base64 原始数据
+        property string viewerContent: ""
         property real zoomLevel: 1.0
-        property string viewerTempFile: ""  // 视频临时文件路径
+        property string viewerTempFile: ""
 
-        // Esc 关闭
         Keys.onEscapePressed: visible = false
 
-        // 打开时处理视频
         onVisibleChanged: {
             if (!visible) {
-                // 关闭时清理
                 if (videoPlayer.playbackState !== MediaPlayer.StoppedState)
                     videoPlayer.stop()
                 if (viewerTempFile) {
-                    // QML 无法直接删文件，交给下次打开覆盖
                     viewerTempFile = ""
                 }
             } else if (viewerIsVideo && viewerContent) {
-                // 打开视频时保存并开始播放
                 var url = api.saveBase64ToTempFile(viewerContent, "mp4")
                 if (url) {
                     viewerTempFile = url
@@ -1321,7 +1331,6 @@ Rectangle {
             }
         }
 
-        // 点击空白区关闭（图片支持缩放，视频不缩放）
         MouseArea {
             id: viewerBg
             anchors.fill: parent
@@ -1359,7 +1368,6 @@ Rectangle {
             }
         }
 
-        // 关闭按钮
         Rectangle {
             anchors.top: parent.top
             anchors.right: parent.right
@@ -1383,7 +1391,6 @@ Rectangle {
             }
         }
 
-        // ── 图片查看模式 ──
         Item {
             id: viewerContainer
             anchors.fill: parent
@@ -1453,7 +1460,6 @@ Rectangle {
             }
         }
 
-        // ── 视频播放模式 ──
         Item {
             id: videoContainer
             anchors.fill: parent
@@ -1467,7 +1473,6 @@ Rectangle {
                 fillMode: VideoOutput.PreserveAspectFit
             }
 
-            // 单击视频切换暂停/播放
             MouseArea {
                 anchors.fill: parent
                 onClicked: {
@@ -1478,7 +1483,6 @@ Rectangle {
                 }
             }
 
-            // 底部控制栏
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
@@ -1492,19 +1496,11 @@ Rectangle {
                     anchors.rightMargin: 12
                     spacing: 8
 
-                    // 暂停/播放
-                    Rectangle {
-                        Layout.preferredWidth: 32
-                        Layout.preferredHeight: 32
+                    Text {
                         Layout.alignment: Qt.AlignVCenter
-                        radius: 16
-                        color: window.bgSurface
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: videoPlayer.playbackState === MediaPlayer.PlayingState ? "⏸" : "▶"
-                            font.pixelSize: 16
-                        }
+                        text: videoPlayer.playbackState === MediaPlayer.PlayingState ? "⏸" : "▶"
+                        font.pixelSize: 22
+                        color: "white"
 
                         MouseArea {
                             anchors.fill: parent
@@ -1517,25 +1513,6 @@ Rectangle {
                         }
                     }
 
-                    // 播放进度文字
-                    Text {
-                        Layout.preferredWidth: 110
-                        Layout.alignment: Qt.AlignVCenter
-                        font.pixelSize: 12
-                        font.family: "monospace"
-                        color: window.bgSurface
-                        text: {
-                            var p = Math.floor((videoPlayer.position || 0) / 1000)
-                            var d = Math.floor((videoPlayer.duration || 0) / 1000)
-                            var pm = Math.floor(p / 60), ps = p % 60
-                            var dm = Math.floor(d / 60), ds = d % 60
-                            return (pm < 10 ? "0" : "") + pm + ":" + (ps < 10 ? "0" : "") + ps
-                                 + " / "
-                                 + (dm < 10 ? "0" : "") + dm + ":" + (ds < 10 ? "0" : "") + ds
-                        }
-                    }
-
-                    // 进度条
                     Slider {
                         id: progressSlider
                         Layout.fillWidth: true
@@ -1572,7 +1549,6 @@ Rectangle {
                         }
                     }
 
-                    // 静音按钮
                     Text {
                         Layout.alignment: Qt.AlignVCenter
                         text: "M"
@@ -1588,7 +1564,6 @@ Rectangle {
                         }
                     }
 
-                    // 音量滑块
                     Slider {
                         id: volumeSlider
                         Layout.preferredWidth: 80
@@ -1628,7 +1603,6 @@ Rectangle {
             }
         }
 
-        // ── 媒体播放器（全局唯一，视频模式才激活）──
         MediaPlayer {
             id: videoPlayer
             videoOutput: videoOutput
