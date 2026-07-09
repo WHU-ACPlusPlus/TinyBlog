@@ -7,6 +7,11 @@
 import os, re, base64, io, random, sqlite3, bcrypt, secrets, threading, logging, sys
 from datetime import datetime, timezone, timedelta
 
+# ── Social 模块 ──
+import social.social as social_mod
+import social.search as social_search
+import social.notification as social_notify
+
 # ── 日志系统配置 ──
 # 北京时间 (UTC+8)
 TZ_BEIJING = timezone(timedelta(hours=8))
