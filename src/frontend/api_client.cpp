@@ -70,6 +70,8 @@ ApiClient::ApiClient(QObject* parent)
     QString savedUrl = settings.value("auth/baseUrl").toString();
     if (!savedUrl.isEmpty())
         m_baseUrl = savedUrl;
+    // 加载壁纸路径
+    m_wallpaperPath = settings.value("app/wallpaperPath").toString();
 
     // Cookie 存在时异步验证服务器端是否仍然有效
     if (!m_cookie.isEmpty())
@@ -110,6 +112,25 @@ void ApiClient::clearAuth() {
 
 void ApiClient::setQmlEngine(QQmlEngine* engine) {
     m_engine = engine;
+}
+
+// ─── 壁纸 ───
+
+void ApiClient::setWallpaperPath(const QString& path) {
+    if (m_wallpaperPath == path) return;
+    m_wallpaperPath = path;
+    QSettings settings;
+    if (path.isEmpty())
+        settings.remove("app/wallpaperPath");
+    else
+        settings.setValue("app/wallpaperPath", path);
+    emit wallpaperPathChanged();
+}
+
+QString ApiClient::wallpaperPath() const { return m_wallpaperPath; }
+
+void ApiClient::clearWallpaper() {
+    setWallpaperPath(QString());
 }
 
 void ApiClient::setLanguage(const QString& locale) {

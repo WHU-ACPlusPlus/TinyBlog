@@ -1,0 +1,1484 @@
+[
+    {
+        "classes": [
+            {
+                "className": "ApiClient",
+                "lineNumber": 30,
+                "methods": [
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "token",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 98,
+                        "lineNumber": 43,
+                        "name": "setCookie",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 99,
+                        "lineNumber": 46,
+                        "name": "clearAuth",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "locale",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 100,
+                        "lineNumber": 47,
+                        "name": "setLanguage",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "fileUrl",
+                                "type": "QUrl"
+                            },
+                            {
+                                "name": "maxSizeBytes",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 101,
+                        "lineNumber": 49,
+                        "name": "readFileAsBase64",
+                        "returnType": "QString"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "fileUrl",
+                                "type": "QUrl"
+                            }
+                        ],
+                        "index": 102,
+                        "isCloned": true,
+                        "lineNumber": 49,
+                        "name": "readFileAsBase64",
+                        "returnType": "QString"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "videoUrl",
+                                "type": "QUrl"
+                            }
+                        ],
+                        "index": 103,
+                        "lineNumber": 50,
+                        "name": "generateVideoThumbnail",
+                        "returnType": "QUrl"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "b64",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 104,
+                        "lineNumber": 51,
+                        "name": "videoThumbnailFromBase64",
+                        "returnType": "QString"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "b64",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "ext",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 105,
+                        "lineNumber": 52,
+                        "name": "saveBase64ToTempFile",
+                        "returnType": "QString"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "postId",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "mediaIndex",
+                                "type": "int"
+                            },
+                            {
+                                "name": "b64",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 106,
+                        "lineNumber": 53,
+                        "name": "extractVideoThumbnailAsync",
+                        "returnType": "void"
+                    }
+                ],
+                "object": true,
+                "properties": [
+                    {
+                        "constant": false,
+                        "designable": true,
+                        "final": false,
+                        "index": 0,
+                        "lineNumber": 37,
+                        "name": "isLoggedIn",
+                        "notify": "loggedInChanged",
+                        "override": false,
+                        "read": "isLoggedIn",
+                        "required": false,
+                        "scriptable": true,
+                        "stored": true,
+                        "type": "bool",
+                        "user": false,
+                        "virtual": false
+                    },
+                    {
+                        "constant": false,
+                        "designable": true,
+                        "final": false,
+                        "index": 1,
+                        "lineNumber": 38,
+                        "name": "baseUrl",
+                        "notify": "baseUrlChanged",
+                        "override": false,
+                        "read": "baseUrl",
+                        "required": false,
+                        "scriptable": true,
+                        "stored": true,
+                        "type": "QString",
+                        "user": false,
+                        "virtual": false,
+                        "write": "setBaseUrl"
+                    },
+                    {
+                        "constant": true,
+                        "designable": true,
+                        "final": false,
+                        "index": 2,
+                        "lineNumber": 39,
+                        "name": "isAndroid",
+                        "override": false,
+                        "read": "isAndroid",
+                        "required": false,
+                        "scriptable": true,
+                        "stored": true,
+                        "type": "bool",
+                        "user": false,
+                        "virtual": false
+                    }
+                ],
+                "qualifiedClassName": "ApiClient",
+                "signals": [
+                    {
+                        "access": "public",
+                        "index": 0,
+                        "lineNumber": 57,
+                        "name": "loggedInChanged",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 1,
+                        "lineNumber": 58,
+                        "name": "baseUrlChanged",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 2,
+                        "lineNumber": 59,
+                        "name": "languageChanged",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "message",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 3,
+                        "lineNumber": 147,
+                        "name": "errorOccurred",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 4,
+                        "lineNumber": 150,
+                        "name": "registerSuccess",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "captcha",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 5,
+                        "lineNumber": 151,
+                        "name": "registerStep1Done",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 6,
+                        "lineNumber": 152,
+                        "name": "registerStep2Done",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "needCaptcha",
+                                "type": "bool"
+                            },
+                            {
+                                "name": "needEmail",
+                                "type": "bool"
+                            },
+                            {
+                                "name": "captcha",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "email",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 7,
+                        "lineNumber": 153,
+                        "name": "loginStep1Done",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 8,
+                        "lineNumber": 155,
+                        "name": "loginStep2Done",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 9,
+                        "lineNumber": 156,
+                        "name": "loginStep3Done",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 10,
+                        "lineNumber": 157,
+                        "name": "loginSuccess",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "valid",
+                                "type": "bool"
+                            },
+                            {
+                                "name": "userId",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 11,
+                        "lineNumber": 158,
+                        "name": "cookieCheckComplete",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "followers",
+                                "type": "QList<UserInfo>"
+                            },
+                            {
+                                "name": "followees",
+                                "type": "QList<UserInfo>"
+                            }
+                        ],
+                        "index": 12,
+                        "lineNumber": 161,
+                        "name": "followListFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 13,
+                        "lineNumber": 165,
+                        "name": "postPublished",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "postIds",
+                                "type": "QList<int>"
+                            },
+                            {
+                                "name": "count",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 14,
+                        "lineNumber": 166,
+                        "name": "timelineFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "post",
+                                "type": "QVariantMap"
+                            }
+                        ],
+                        "index": 15,
+                        "lineNumber": 167,
+                        "name": "postFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 16,
+                        "lineNumber": 170,
+                        "name": "postLiked",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 17,
+                        "lineNumber": 171,
+                        "name": "postUnliked",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 18,
+                        "lineNumber": 172,
+                        "name": "commentPosted",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "comments",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 19,
+                        "lineNumber": 173,
+                        "name": "commentsFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "postId",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "mediaIndex",
+                                "type": "int"
+                            },
+                            {
+                                "name": "thumbnailB64",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 20,
+                        "lineNumber": 176,
+                        "name": "videoThumbnailExtracted",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "files",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 21,
+                        "lineNumber": 179,
+                        "name": "mediaFilesPicked",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 22,
+                        "lineNumber": 183,
+                        "name": "messageSent",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "messages",
+                                "type": "QList<MessageInfo>"
+                            }
+                        ],
+                        "index": 23,
+                        "lineNumber": 184,
+                        "name": "messagesReceived",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "profile",
+                                "type": "QVariantMap"
+                            }
+                        ],
+                        "index": 24,
+                        "lineNumber": 187,
+                        "name": "profileFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 25,
+                        "lineNumber": 188,
+                        "name": "profileUpdated",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 26,
+                        "lineNumber": 189,
+                        "name": "avatarPatched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "user_id",
+                                "type": "int"
+                            },
+                            {
+                                "name": "avatar",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "signature",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 27,
+                        "lineNumber": 190,
+                        "name": "avatarFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "group_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 28,
+                        "lineNumber": 193,
+                        "name": "groupCreated",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 29,
+                        "lineNumber": 194,
+                        "name": "groupJoined",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 30,
+                        "lineNumber": 195,
+                        "name": "groupLeft",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 31,
+                        "lineNumber": 196,
+                        "name": "groupMessageSent",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "messages",
+                                "type": "QList<GroupMessageInfo>"
+                            }
+                        ],
+                        "index": 32,
+                        "lineNumber": 197,
+                        "name": "groupMessagesReceived",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "members",
+                                "type": "QList<UserInfo>"
+                            }
+                        ],
+                        "index": 33,
+                        "lineNumber": 198,
+                        "name": "groupMembersFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "groups",
+                                "type": "QList<GroupInfo>"
+                            }
+                        ],
+                        "index": 34,
+                        "lineNumber": 199,
+                        "name": "myGroupsFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "messages",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 35,
+                        "lineNumber": 201,
+                        "name": "groupMessagesReceived",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "postIds",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 36,
+                        "lineNumber": 204,
+                        "name": "userPostsFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "posts",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 37,
+                        "lineNumber": 205,
+                        "name": "myPostsFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "followers",
+                                "type": "QVariantList"
+                            },
+                            {
+                                "name": "followees",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 38,
+                        "lineNumber": 208,
+                        "name": "followListFetchedForQml",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "conversations",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 39,
+                        "lineNumber": 212,
+                        "name": "conversationsFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "conversation_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 40,
+                        "lineNumber": 213,
+                        "name": "conversationHidden",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "messages",
+                                "type": "QVariantList"
+                            },
+                            {
+                                "name": "hasMore",
+                                "type": "bool"
+                            }
+                        ],
+                        "index": 41,
+                        "lineNumber": 214,
+                        "name": "privateMessagesFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "users",
+                                "type": "QVariantList"
+                            },
+                            {
+                                "name": "groups",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 42,
+                        "lineNumber": 215,
+                        "name": "contactsSearched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "contacts",
+                                "type": "QVariantList"
+                            },
+                            {
+                                "name": "followedOnly",
+                                "type": "QVariantList"
+                            }
+                        ],
+                        "index": 43,
+                        "lineNumber": 216,
+                        "name": "contactsFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "detail",
+                                "type": "QVariantMap"
+                            }
+                        ],
+                        "index": 44,
+                        "lineNumber": 217,
+                        "name": "userDetailFetched",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "detail",
+                                "type": "QVariantMap"
+                            }
+                        ],
+                        "index": 45,
+                        "lineNumber": 218,
+                        "name": "groupDetailFetched",
+                        "returnType": "void"
+                    }
+                ],
+                "slots": [
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "username",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "password",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "nickname",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 46,
+                        "lineNumber": 67,
+                        "name": "startRegister",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "captcha",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "email",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 47,
+                        "lineNumber": 69,
+                        "name": "verifyRegister",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "emailCode",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 48,
+                        "lineNumber": 71,
+                        "name": "completeRegister",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "username",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "password",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 49,
+                        "lineNumber": 73,
+                        "name": "startLogin",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "captcha",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 50,
+                        "lineNumber": 74,
+                        "name": "loginVerifyCaptcha",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 51,
+                        "lineNumber": 75,
+                        "name": "loginSendEmailCode",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "emailCode",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 52,
+                        "lineNumber": 76,
+                        "name": "loginVerifyEmail",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "cookie",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 53,
+                        "lineNumber": 77,
+                        "name": "completeLogin",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 54,
+                        "lineNumber": 80,
+                        "name": "checkCookie",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "followee_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 55,
+                        "lineNumber": 83,
+                        "name": "follow",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "followee_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 56,
+                        "lineNumber": 84,
+                        "name": "unfollow",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 57,
+                        "lineNumber": 85,
+                        "name": "fetchFollowList",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "text",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "media",
+                                "type": "QStringList"
+                            }
+                        ],
+                        "index": 58,
+                        "lineNumber": 88,
+                        "name": "publishPost",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "text",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 59,
+                        "isCloned": true,
+                        "lineNumber": 88,
+                        "name": "publishPost",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "count",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 60,
+                        "lineNumber": 89,
+                        "name": "fetchTimeline",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 61,
+                        "isCloned": true,
+                        "lineNumber": 89,
+                        "name": "fetchTimeline",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "post_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 62,
+                        "lineNumber": 90,
+                        "name": "getPost",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "post_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 63,
+                        "lineNumber": 93,
+                        "name": "likePost",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "post_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 64,
+                        "lineNumber": 94,
+                        "name": "unlikePost",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "post_id",
+                                "type": "int"
+                            },
+                            {
+                                "name": "content",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 65,
+                        "lineNumber": 95,
+                        "name": "comment",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "post_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 66,
+                        "lineNumber": 96,
+                        "name": "fetchComments",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "to_whom_id",
+                                "type": "int"
+                            },
+                            {
+                                "name": "content",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 67,
+                        "lineNumber": 99,
+                        "name": "sendMessage",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 68,
+                        "lineNumber": 100,
+                        "name": "receiveMessages",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 69,
+                        "lineNumber": 103,
+                        "name": "fetchProfile",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "nickname",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "avatar",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "signature",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 70,
+                        "lineNumber": 108,
+                        "name": "updateProfile",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "nickname",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "avatar",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 71,
+                        "isCloned": true,
+                        "lineNumber": 108,
+                        "name": "updateProfile",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "nickname",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 72,
+                        "isCloned": true,
+                        "lineNumber": 108,
+                        "name": "updateProfile",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 73,
+                        "isCloned": true,
+                        "lineNumber": 108,
+                        "name": "updateProfile",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "avatar",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "signature",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 74,
+                        "lineNumber": 111,
+                        "name": "patchAvatar",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "avatar",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 75,
+                        "isCloned": true,
+                        "lineNumber": 111,
+                        "name": "patchAvatar",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 76,
+                        "isCloned": true,
+                        "lineNumber": 111,
+                        "name": "patchAvatar",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "user_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 77,
+                        "lineNumber": 112,
+                        "name": "fetchAvatar",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "name",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 78,
+                        "lineNumber": 115,
+                        "name": "createGroup",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "group_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 79,
+                        "lineNumber": 116,
+                        "name": "joinGroup",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "group_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 80,
+                        "lineNumber": 117,
+                        "name": "leaveGroup",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "group_id",
+                                "type": "int"
+                            },
+                            {
+                                "name": "content",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 81,
+                        "lineNumber": 118,
+                        "name": "sendGroupMessage",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "group_id",
+                                "type": "int"
+                            },
+                            {
+                                "name": "count",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 82,
+                        "lineNumber": 119,
+                        "name": "receiveGroupMessages",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "group_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 83,
+                        "isCloned": true,
+                        "lineNumber": 119,
+                        "name": "receiveGroupMessages",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "group_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 84,
+                        "lineNumber": 120,
+                        "name": "fetchGroupMembers",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 85,
+                        "lineNumber": 121,
+                        "name": "fetchMyGroups",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 86,
+                        "lineNumber": 125,
+                        "name": "fetchConversations",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "conversation_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 87,
+                        "lineNumber": 126,
+                        "name": "hideConversation",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "with_user_id",
+                                "type": "int"
+                            },
+                            {
+                                "name": "before_id",
+                                "type": "int"
+                            },
+                            {
+                                "name": "count",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 88,
+                        "lineNumber": 129,
+                        "name": "fetchPrivateMessages",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "with_user_id",
+                                "type": "int"
+                            },
+                            {
+                                "name": "before_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 89,
+                        "isCloned": true,
+                        "lineNumber": 129,
+                        "name": "fetchPrivateMessages",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "with_user_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 90,
+                        "isCloned": true,
+                        "lineNumber": 129,
+                        "name": "fetchPrivateMessages",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "keyword",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "type",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 91,
+                        "lineNumber": 132,
+                        "name": "searchContacts",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "keyword",
+                                "type": "QString"
+                            }
+                        ],
+                        "index": 92,
+                        "isCloned": true,
+                        "lineNumber": 132,
+                        "name": "searchContacts",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "index": 93,
+                        "lineNumber": 135,
+                        "name": "fetchContacts",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "publisher_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 94,
+                        "lineNumber": 138,
+                        "name": "fetchUserPosts",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "publisher_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 95,
+                        "lineNumber": 139,
+                        "name": "fetchMyPostsDetail",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "user_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 96,
+                        "lineNumber": 142,
+                        "name": "fetchUserDetail",
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "arguments": [
+                            {
+                                "name": "group_id",
+                                "type": "int"
+                            }
+                        ],
+                        "index": 97,
+                        "lineNumber": 143,
+                        "name": "fetchGroupDetail",
+                        "returnType": "void"
+                    }
+                ],
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "QObject"
+                    }
+                ]
+            }
+        ],
+        "inputFile": "api_client.h",
+        "outputRevision": 69
+    }
+]

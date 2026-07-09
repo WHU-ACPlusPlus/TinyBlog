@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/qt/qml/frontend">
+    <file alias="qmldir">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/frontend/qmldir</file>
+  </qresource>
+</RCC>
+

@@ -66,9 +66,10 @@ Rectangle {
         Image {
             id: bgImage
             anchors.fill: parent
-            source: "qrc:/image/bg1.png"
+            source: api.wallpaperPath.length > 0 ? api.wallpaperPath : "qrc:/image/4.png"
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
+            cache: false
 
             onStatusChanged: {
                 if (status === Image.Error)
@@ -115,6 +116,41 @@ Rectangle {
         }
     }
 
+    // ═══════════════════════════════════════════
+    // 壁纸背景层（所有模式下，当用户设置了壁纸时显示）
+    // ═══════════════════════════════════════════
+    Item {
+        id: wallpaperBackground
+        anchors.fill: parent
+        visible: api.wallpaperPath.length > 0
+        z: -2
+
+        Image {
+            id: wallpaperImage
+            anchors.fill: parent
+            source: api.wallpaperPath
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            cache: false
+
+            onStatusChanged: {
+                if (status === Image.Error)
+                    console.warn("[MainPage] 壁纸加载失败: " + api.wallpaperPath)
+            }
+        }
+
+        // 暗色叠加层（保护文字可读性）
+        Rectangle {
+            anchors.fill: parent
+            color: {
+                if (root.glassMode) return Qt.rgba(0.05, 0.05, 0.15, 0.35)
+                if (root.softUIMode) return Qt.rgba(0.91, 0.93, 0.95, 0.55)
+                if (window.darkMode) return Qt.rgba(0, 0, 0, 0.55)
+                return Qt.rgba(1, 1, 1, 0.45)
+            }
+        }
+    }
+
     // ── 鼠标追踪层（不拦截事件）──
     MouseArea {
         id: mouseTracker
@@ -128,29 +164,147 @@ Rectangle {
     }
 
     // ═══════════════════════════════════════════
-    // 宽屏：左侧边栏 + 内容
+    // 宽屏：内容区（全屏）+ 侧边栏浮动层
     // ═══════════════════════════════════════════
-    RowLayout {
+    Item {
         anchors.fill: parent
-        spacing: 0
         visible: width >= 700
 
-        // 左侧边栏
+        // ── 内容区（z:1，全屏）──
+        Item {
+            anchors.fill: parent
+            z: 1
+
+            // 毛玻璃层（仅在玻璃模式下可见）
+            GlassCard {
+                anchors.fill: parent
+                anchors.margins: root.glassMode ? 8 : 0
+                backgroundSource: root.glassMode ? glassBackground : null
+                blurRadius: 28
+                cardRadius: root.glassMode ? 16 : 0
+                glassColor: Qt.rgba(1, 1, 1, 0.06)
+                showBorder: root.glassMode
+                showShadow: root.glassMode || root.softUIMode
+                visible: root.glassMode
+            }
+
+            StackLayout {
+                id: wideContentStack
+                anchors.fill: parent
+                anchors.margins: root.glassMode ? 8 : 0
+                currentIndex: root.currentIndex
+
+                // 广场页：左边距60px避开侧边栏
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    SquarePage {
+                        anchors.fill: parent
+                        anchors.leftMargin: 74
+                        glassMode: root.glassMode
+                        softUIMode: root.softUIMode
+                    }
+                }
+
+                // 消息页：无左边距，延伸到侧边栏下方（供会话列表面板滑入用）
+                MessagesPage {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    glassMode: root.glassMode
+                    softUIMode: root.softUIMode
+                }
+
+                // 我的页：左边距60px避开侧边栏
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    ProfilePage {
+                        anchors.fill: parent
+                        anchors.leftMargin: 74
+                        glassMode: root.glassMode
+                        softUIMode: root.softUIMode
+                    }
+                }
+            }
+        }
+
+        // ── 侧边栏浮动层（z:2，遮挡下方内容）──
         Rectangle {
-            Layout.preferredWidth: 60
-            Layout.fillHeight: true
+            id: sidebarRect
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 70
+            z: 2
             color: {
-                if (softUIMode) return Qt.rgba(0.84, 0.89, 0.93, 0.90)
-                if (glassMode)  return Qt.rgba(0.12, 0.12, 0.18, 0.75)
-                return window.bgSidebar
+                if (softUIMode) return Qt.rgba(0.84, 0.89, 0.93, 0.92)
+                if (glassMode) return "transparent"
+                if (window.darkMode) return "#1a1a1a"
+                if (api.wallpaperPath.length > 0) return Qt.rgba(0.96, 0.96, 0.96, 0.80)
+                return "#f5f5f5"
+            }
+
+            // ═══════════════════════════════════════
+            // 导航图标组 — 磨砂玻璃底框
+            // ═══════════════════════════════════════
+            Rectangle {
+                id: navGlassCard
+                width: 48
+                height: 156    // 3×44 + 2×8 + 12 padding
+                x: 16
+                y: 14
+                radius: 16
+                z: -1
+                color: window.darkMode
+                    ? Qt.rgba(1, 1, 1, 0.06)
+                    : Qt.rgba(0, 0, 0, 0.04)
+                border.color: window.darkMode
+                    ? Qt.rgba(1, 1, 1, 0.10)
+                    : Qt.rgba(0, 0, 0, 0.06)
+                border.width: 0.5
+            }
+
+            // ═══════════════════════════════════════
+            // 液态玻璃滑动指示器
+            // ═══════════════════════════════════════
+            Rectangle {
+                id: navIndicator
+                width: 44
+                height: 44
+                radius: 14
+                x: 18            // 18 + (48-44)/2  居中于玻璃底框
+                y: 21 + currentIndex * 52   // topMargin + index × (44+8)
+                z: 0
+
+                color: {
+                    if (glassMode) return Qt.rgba(1, 1, 1, 0.18)
+                    if (softUIMode) return Qt.rgba(0.48, 0.53, 0.66, 0.28)
+                    return window.selectedBg
+                }
+
+                // ── 弹簧滑动动画（2x加速）──
+                Behavior on y {
+                    SpringAnimation {
+                        spring: 5.5
+                        damping: 0.80
+                        epsilon: 0.25
+                    }
+                }
             }
 
             ColumnLayout {
-                anchors.fill: parent
-                anchors.topMargin: 20
-                anchors.bottomMargin: 12
+                anchors.left: parent.left
+                anchors.leftMargin: 16
+                anchors.top: parent.top
+                anchors.topMargin: 21
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 10
+                width: 48
                 spacing: 8
 
+                // ═══════════════════════════════════════
+                // 导航图标
+                // ═══════════════════════════════════════
                 Repeater {
                     model: [
                         { icon: "▪", tip: qsTr("广场") },
@@ -159,20 +313,29 @@ Rectangle {
                     ]
 
                     Rectangle {
-                        Layout.preferredWidth: 48
-                        Layout.preferredHeight: 48
+                        id: navItem
+                        Layout.preferredWidth: 44
+                        Layout.preferredHeight: 44
                         Layout.alignment: Qt.AlignHCenter
-                        color: currentIndex === index
-                                ? (glassMode ? Qt.rgba(1, 1, 1, 0.20)
-                                   : softUIMode ? Qt.rgba(0.48, 0.53, 0.66, 0.30)
-                                   : window.selectedBg)
-                                : "transparent"
-                        radius: 12
+                        color: "transparent"
+                        radius: 14
+                        z: 1
 
                         Text {
+                            id: navIcon
                             anchors.centerIn: parent
                             text: modelData.icon
-                            font.pixelSize: 22
+                            font.pixelSize: 20
+                            color: currentIndex === index
+                                    ? (glassMode ? "#ffffff"
+                                       : softUIMode ? "#2d3436"
+                                       : window.bgSurface)
+                                    : (glassMode ? Qt.rgba(1,1,1,0.45)
+                                       : softUIMode ? "#888888"
+                                       : window.textSecondary)
+                            Behavior on color {
+                                ColorAnimation { duration: 200 }
+                            }
                         }
 
                         MouseArea {
@@ -191,12 +354,12 @@ Rectangle {
 
                 // ── 深色模式切换按钮（仅普通模式下可见）──
                 Rectangle {
-                    Layout.preferredWidth: 48
-                    Layout.preferredHeight: 48
+                    Layout.preferredWidth: 44
+                    Layout.preferredHeight: 44
                     Layout.alignment: Qt.AlignHCenter
                     color: window.darkModeFollowSystem !== 0
                             ? window.selectedBg : "transparent"
-                    radius: 12
+                    radius: 14
                     visible: root.styleMode === 0
 
                     Text {
@@ -221,22 +384,26 @@ Rectangle {
                     HoverHandler { id: darkTip }
                 }
 
-                // ── 风格切换按钮（始终在最底部边缘）──
+                // ═══════════════════════════════════════
+                // 风格切换按钮
+                // ═══════════════════════════════════════
                 Rectangle {
-                    Layout.preferredWidth: 48
-                    Layout.preferredHeight: 48
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 40
+                    Layout.preferredHeight: 40
+                    Layout.alignment: Qt.AlignLeft
+                    Layout.leftMargin: 2
+                    Layout.bottomMargin: 4
+                    radius: 12
                     color: root.styleMode !== 0
                             ? (softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.30)
                                : glassMode ? Qt.rgba(1, 0.6, 0.2, 0.25)
                                : window.selectedBg)
                             : "transparent"
-                    radius: 12
 
                     Text {
                         anchors.centerIn: parent
                         text: root.styleIcon(root.styleMode)
-                        font.pixelSize: 20
+                        font.pixelSize: 18
                     }
 
                     MouseArea {
@@ -245,43 +412,16 @@ Rectangle {
                     }
 
                     HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    HoverHandler { id: styleTip }
 
                     ToolTip {
                         visible: styleTip.hovered
                         text: qsTr("风格: ") + root.styleLabel(root.styleMode)
                     }
-                    HoverHandler { id: styleTip }
                 }
             }
         }
 
-        // 内容区
-        Item {
-            Layout.fillWidth: true; Layout.fillHeight: true
-
-            // 毛玻璃层（仅在玻璃模式下可见）
-            GlassCard {
-                anchors.fill: parent
-                anchors.margins: root.glassMode ? 8 : 0
-                backgroundSource: root.glassMode ? glassBackground : null
-                blurRadius: 28
-                cardRadius: root.glassMode ? 16 : 0
-                glassColor: Qt.rgba(1, 1, 1, 0.06)
-                showBorder: root.glassMode
-                showShadow: root.glassMode || root.softUIMode
-                visible: root.glassMode
-            }
-
-            StackLayout {
-                anchors.fill: parent
-                anchors.margins: root.glassMode ? 8 : 0
-                currentIndex: root.currentIndex
-
-                SquarePage    { glassMode: root.glassMode; softUIMode: root.softUIMode }
-                MessagesPage  { glassMode: root.glassMode; softUIMode: root.softUIMode }
-                ProfilePage   { glassMode: root.glassMode; softUIMode: root.softUIMode }
-            }
-        }
     }
 
     // ═══════════════════════════════════════════
