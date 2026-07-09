@@ -9,15 +9,15 @@ import QtQuick.Layouts
 // ═══════════════════════════════════════════════════════
 
 Rectangle {
-    id: root
-    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#f5f5f5")
+id: root
+    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : window.bgPage)
 
     // ── 风格模式（由 MainPage 传入）──
     property bool glassMode: false
     property bool softUIMode: false
 
     // ── 自适应文字颜色 ──
-    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : "#222222")
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : window.textPrimary)
     property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : "#666666")
     property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : "#999999")
 
@@ -364,7 +364,7 @@ Rectangle {
         Rectangle {
             Layout.preferredWidth: 0.5
             Layout.fillHeight: true
-            color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.4) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e0e0e0")
+color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.4) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e0e0e0")
         }
 
         ChatPanel {
@@ -462,206 +462,6 @@ Rectangle {
         title: qsTr("创建群聊")
         width: 300
         anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
-
-        ColumnLayout {
-            spacing: 12
-            Layout.fillWidth: true
-            Text { text: qsTr("群聊名称"); font.pixelSize: 13; color: "#555" }
-            Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 40
-                color: "#f5f5f5"; radius: 8
-                TextInput {
-                    id: groupNameInput
-                    anchors.fill: parent; anchors.margins: 10
-                    font.pixelSize: 14; color: "#333"; maximumLength: 50
-                }
-            }
-        }
-        onAccepted: {
-            var name = groupNameInput.text.trim()
-            if (name.length > 0) api.createGroup(name)
-        }
-    }
-
-    // ── 加入群聊 ──
-    Dialog {
-        id: joinGroupDialog
-        title: qsTr("加入群聊")
-        width: 300
-        anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
-
-        ColumnLayout {
-            spacing: 12
-            Layout.fillWidth: true
-            Text { text: qsTr("群号"); font.pixelSize: 13; color: "#555" }
-            Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 40
-                color: "#f5f5f5"; radius: 8
-                TextInput {
-                    id: groupIdInput
-                    anchors.fill: parent; anchors.margins: 10
-                    font.pixelSize: 14; color: "#333"
-                    inputMethodHints: Qt.ImhDigitsOnly
-                    validator: IntValidator { bottom: 1 }
-                }
-            }
-        }
-        onAccepted: {
-            var gid = parseInt(groupIdInput.text.trim())
-            if (gid > 0) api.joinGroup(gid)
-        }
-    }
-
-    // ── 添加好友 ──
-    Dialog {
-        id: addFriendDialog
-        title: qsTr("添加好友")
-        width: 300
-        anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
-
-        ColumnLayout {
-            spacing: 12
-            Layout.fillWidth: true
-            Text { text: qsTr("搜索用户名或昵称"); font.pixelSize: 13; color: "#555" }
-            Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 40
-                color: "#f5f5f5"; radius: 8
-                TextInput {
-                    id: friendSearchInput
-                    anchors.fill: parent; anchors.margins: 10
-                    font.pixelSize: 14; color: "#333"; maximumLength: 100
-                }
-            }
-        }
-        onAccepted: {
-            var kw = friendSearchInput.text.trim()
-            if (kw.length > 0) root.doSearch(kw, "user")
-        }
-    }
-
-    // ═══════════════════════════════════════════════════
-    // BUG1修复: 统一搜索弹窗（只此一个，避免双面板重复）
-    // ═══════════════════════════════════════════════════
-    Popup {
-        id: searchPopup
-        x: isNarrowMode ? 10 : 70
-        y: 60
-        width: Math.min(360, parent.width - 20)
-        height: Math.min(400, searchResultCol.implicitHeight + 16)
-        padding: 8
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-        visible: {
-            var hasUsers = root.searchResults && root.searchResults.users && root.searchResults.users.length > 0
-            var hasGroups = root.searchResults && root.searchResults.groups && root.searchResults.groups.length > 0
-            var v = hasUsers || hasGroups
-            if (v) console.log("[MessagesPage] 搜索弹窗打开: users=" + (root.searchResults.users ? root.searchResults.users.length : 0) + " groups=" + (root.searchResults.groups ? root.searchResults.groups.length : 0))
-            return v
-        }
-
-        background: Rectangle { color: "white"; radius: 8 }
-
-        ColumnLayout {
-            id: searchResultCol
-            anchors.fill: parent
-            spacing: 2
-
-            Text {
-                Layout.fillWidth: true
-                text: qsTr("搜索结果")
-                font.pixelSize: 12; font.weight: Font.DemiBold; color: "#999"
-            }
-
-            Repeater {
-                id: searchUserRepeater
-                model: root.searchResults ? (root.searchResults.users || []) : []
-
-                Rectangle {
-                    Layout.fillWidth: true; Layout.preferredHeight: 44
-                    color: srUserHover.hovered ? "#f5f5f5" : "transparent"; radius: 6
-
-                    RowLayout {
-                        anchors.fill: parent; anchors.margins: 8; spacing: 10
-                        Rectangle {
-                            Layout.preferredWidth: 32; Layout.preferredHeight: 32; radius: 16; color: "#e0e0e0"
-                            Text { anchors.centerIn: parent; text: modelData.nickname ? modelData.nickname.charAt(0) : "?"; font.pixelSize: 13; color: "#888" }
-                        }
-                        ColumnLayout { Layout.fillWidth: true; spacing: 2
-                            Text { text: modelData.nickname || modelData.username || ""; font.pixelSize: 13; color: "#333" }
-                            Text { text: "@" + (modelData.username || ""); font.pixelSize: 11; color: "#aaa" }
-                        }
-                        // P2修复: "+关注"可点击按钮
-                        Rectangle {
-                            Layout.preferredWidth: 60; Layout.preferredHeight: 28; radius: 14
-                            color: modelData.is_mutual ? "#f0f0f0" : (modelData.is_following ? "#f0f0f0" : "#e8f0fe")
-                            Text {
-                                anchors.centerIn: parent
-                                text: modelData.is_mutual ? qsTr("好友") : modelData.is_following ? qsTr("已关注") : qsTr("+关注")
-                                font.pixelSize: 12
-                                color: modelData.is_following ? "#999" : "#4a8cf7"
-                            }
-                            MouseArea {
-                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    console.log("[MessagesPage] +关注按钮点击: " + (modelData.nickname || modelData.username))
-                                    if (!modelData.is_following && !modelData.is_mutual) {
-                                        api.follow(modelData.id)
-                                        modelData.is_following = true  // P2: 乐观更新
-                                        console.log("[MessagesPage] follow已调用, 乐观更新is_following=true")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            console.log("[MessagesPage] 搜索行点击: " + (modelData.nickname || modelData.username))
-                            root.handleSearchUserClick(modelData)
-                        }
-                    }
-                    HoverHandler { id: srUserHover }
-                }
-            }
-
-            Repeater {
-                id: searchGroupRepeater
-                model: root.searchResults ? (root.searchResults.groups || []) : []
-
-                Rectangle {
-                    Layout.fillWidth: true; Layout.preferredHeight: 44
-                    color: srGroupHover.hovered ? "#f5f5f5" : "transparent"; radius: 6
-
-                    RowLayout {
-                        anchors.fill: parent; anchors.margins: 8; spacing: 10
-                        Rectangle { Layout.preferredWidth: 32; Layout.preferredHeight: 32; radius: 16; color: "#c4e0e5"
-                            Text { anchors.centerIn: parent; text: "👥"; font.pixelSize: 14 }
-                        }
-                        ColumnLayout { Layout.fillWidth: true; spacing: 2
-                            Text { text: modelData.name || ""; font.pixelSize: 13; color: "#333" }
-                            Text { text: (modelData.member_count || 0) + qsTr(" 人"); font.pixelSize: 11; color: "#aaa" }
-                        }
-                        Text {
-                            text: modelData.is_member ? qsTr("已加入") : qsTr("+加入")
-                            font.pixelSize: 12; color: modelData.is_member ? "#999" : "#4a8cf7"
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            console.log("[MessagesPage] 搜索群组点击: " + (modelData.name || ""))
-                            root.handleSearchGroupClick(modelData)
-                        }
-                    }
-                    HoverHandler { id: srGroupHover }
-                }
-            }
-        }
     }
 }
 

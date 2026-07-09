@@ -5,7 +5,7 @@ import QtQuick.Layouts
 // ═══════════════════════════════════════════════════════
 // ConversationListPanel — 会话列表面板
 // 设计风格：极简主义（style/极简主义.md）
-// 令牌：背景 #f5f5f5, 白色卡片, 圆角 8px, 间距 12px
+// 令牌：背景 bgPage, bgSurface 卡片, 圆角 8px, 间距 12px
 // ═══════════════════════════════════════════════════════
 
 Rectangle {
@@ -30,7 +30,7 @@ Rectangle {
     signal searchRequested(string keyword)
     signal refreshRequested()
 
-    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#fafafa")
+color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#fafafa")
     implicitWidth: 280
 
     // ── 日志 ──
@@ -50,7 +50,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 56
-            color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : "white")
+color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : "white")
 
             RowLayout {
                 anchors.fill: parent
@@ -61,7 +61,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
-                    color: root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#f0f0f0")
+color: root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#f0f0f0")
                     radius: 8
 
                     RowLayout {
@@ -71,7 +71,7 @@ Rectangle {
                         spacing: 6
 
                         Text {
-                            text: "🔍"
+                            text: "⌕"
                             font.pixelSize: 14
                         }
 
@@ -79,14 +79,14 @@ Rectangle {
                             id: searchInput
                             Layout.fillWidth: true
                             font.pixelSize: 13
-                            color: "#333"
+                            color: window.textPrimary
                             clip: true
 
                             Text {
                                 anchors.fill: parent
                                 text: qsTr("搜索")
                                 font.pixelSize: 13
-                                color: "#bbb"
+                                color: window.textSecondary
                                 visible: searchInput.text === "" && !searchInput.activeFocus
                             }
 
@@ -125,14 +125,14 @@ Rectangle {
                     Layout.preferredWidth: 36
                     Layout.preferredHeight: 36
                     radius: 8
-                    color: addBtnHover.hovered ? "#e8e8e8" : "#f0f0f0"
+                    color: addBtnHover.hovered ? window.divider : window.bgInput
 
                     Text {
                         anchors.centerIn: parent
                         text: "+"
                         font.pixelSize: 20
                         font.weight: Font.Light
-                        color: "#666"
+                        color: window.textSecondary
                     }
 
                     MouseArea {
@@ -163,7 +163,7 @@ Rectangle {
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             background: Rectangle {
-                color: root.softUIMode ? "#f0f2f5" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : "white")
+color: root.softUIMode ? "#f0f2f5" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : "white")
                 radius: 8
                 layer.enabled: true
                 layer.effect: null  // QtQuick.Controls.Basic uses no shadow
@@ -175,7 +175,7 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { text: qsTr("添加好友"), icon: "👤" },
+                        { text: qsTr("添加好友"), icon: "＋" },
                         { text: qsTr("创建群聊"), icon: "👥" },
                         { text: qsTr("加入群聊"), icon: "🔗" }
                     ]
@@ -183,7 +183,7 @@ Rectangle {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 36
-                        color: root.softUIMode
+color: root.softUIMode
                                ? (menuItemHover.hovered ? Qt.rgba(0.64, 0.69, 0.77, 0.2) : "transparent")
                                : root.glassMode
                                  ? (menuItemHover.hovered ? Qt.rgba(1, 1, 1, 0.10) : "transparent")
@@ -202,7 +202,7 @@ Rectangle {
                             Text {
                                 text: modelData.text
                                 font.pixelSize: 13
-                                color: "#333"
+                                color: window.textPrimary
                             }
                         }
 
@@ -247,20 +247,20 @@ Rectangle {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "💬"
+                        text: "≡"
                         font.pixelSize: 40
                     }
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: qsTr("暂无消息")
                         font.pixelSize: 15
-                        color: root.textSecondary
+color: root.textSecondary
                     }
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: qsTr("关注好友或加入群聊开始聊天")
                         font.pixelSize: 12
-                        color: root.textSecondary
+color: root.textSecondary
                     }
                 }
             }

@@ -5,7 +5,7 @@ import QtQuick.Layouts
 // ═══════════════════════════════════════════════════════
 // MessageBubble — 消息气泡组件
 // 设计风格：极简主义（style/极简主义.md）
-// 令牌：自己气泡 #4a8cf7白色文字, 对方气泡 white #333文字
+// 令牌：自己气泡 accent白色文字, 对方气泡 bgSurface textPrimary文字
 //       圆角 12px, 间距 8px/12px
 // ═══════════════════════════════════════════════════════
 
@@ -48,7 +48,7 @@ Item {
             width: 36
             height: 36
             radius: 18
-            color: "#e0e0e0"
+            color: window.divider
             anchors.verticalCenter: parent.verticalCenter
             clip: true  // R4: 裁剪圆形头像
 
@@ -62,7 +62,7 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: root.senderName ? root.senderName.charAt(0) : "?"
-                font.pixelSize: 14; color: "#888"
+                font.pixelSize: 14; color: window.textSecondary
                 visible: root.senderAvatar === ""
             }
         }
@@ -83,19 +83,19 @@ Item {
 
                 Text {
                     text: root.isMine ? (root.senderName + qsTr("(我)")) : root.senderName
-                    font.pixelSize: 11; color: "#999"
+                    font.pixelSize: 11; color: window.textSecondary
                     visible: root.senderName !== ""
                 }
                 Text {
                     text: formatSentTime(root.sentAt)
-                    font.pixelSize: 10; color: "#bbb"
+                    font.pixelSize: 10; color: window.textSecondary
                 }
                 // 已读标记
                 Text {
                     visible: root.isMine
                     text: root.isRead ? "\u2713\u2713" : "\u2713"
                     font.pixelSize: 10
-                    color: root.isRead ? "#4a8cf7" : "#ccc"
+                    color: root.isRead ? window.accent : window.textSecondary
                 }
             }
 
@@ -105,13 +105,13 @@ Item {
                 Layout.preferredWidth: Math.min(bubbleText.implicitWidth + 24, (parent ? parent.parent.width : 300) - 80)
                 Layout.preferredHeight: bubbleText.implicitHeight + 20
                 Layout.alignment: root.isMine ? Qt.AlignRight : Qt.AlignLeft
-                color: root.isMine ? "#4a8cf7" : "white"
+                color: root.isMine ? window.accent : window.bgSurface
                 radius: 12
 
                 Rectangle {
                     anchors.fill: parent; radius: 12
                     color: "transparent"
-                    border.color: root.isMine ? "transparent" : "#e8e8e8"
+                    border.color: root.isMine ? "transparent" : window.border
                     border.width: root.isMine ? 0 : 0.5
                 }
 
@@ -121,7 +121,7 @@ Item {
                     width: parent.width - 24
                     text: root.content
                     font.pixelSize: 14
-                    color: root.isMine ? "white" : "#333"
+                    color: root.isMine ? window.bgSurface : window.textPrimary
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     lineHeight: 1.4
                 }
