@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/qt/qml/frontend">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/frontend</file>
+
+  </qresource>
+</RCC>

@@ -1,0 +1,15 @@
+module frontend
+typeinfo appfrontend.qmltypes
+prefer :/qt/qml/frontend/
+Main 1.0 Main.qml
+LoginFlow 1.0 LoginFlow.qml
+MainPage 1.0 MainPage.qml
+SquarePage 1.0 SquarePage.qml
+MessagesPage 1.0 MessagesPage.qml
+ProfilePage 1.0 ProfilePage.qml
+ConversationListPanel 1.0 ConversationListPanel.qml
+ConversationItem 1.0 ConversationItem.qml
+ChatPanel 1.0 ChatPanel.qml
+MessageBubble 1.0 MessageBubble.qml
+depends QtQuick
+
