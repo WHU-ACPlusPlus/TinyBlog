@@ -37,9 +37,9 @@ Rectangle {
     property bool softUIMode: false
 
     // ── 自适应文字颜色 ──
-    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : "#222222")
-    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.60) : (softUIMode ? "#636e72" : "#555555")
-    property color textMuted:     glassMode ? Qt.rgba(1,1,1,0.35) : (softUIMode ? "#888888" : "#999999")
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : (window.darkMode ? "#e0e0e0" : "#222222"))
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.60) : (softUIMode ? "#636e72" : (window.darkMode ? "#999999" : "#555555"))
+    property color textMuted:     glassMode ? Qt.rgba(1,1,1,0.35) : (softUIMode ? "#888888" : (window.darkMode ? "#777777" : "#999999"))
 
     // ── BUG5修复: 监听群组详情变化，更新成员列表 ──
     onGroupDetailDataChanged: {
@@ -80,7 +80,13 @@ Rectangle {
         }
     }
 
-color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#f5f5f5")
+color: {
+    if (softUIMode) return "#e8edf2"
+    if (glassMode) return "transparent"
+    if (window.darkMode) return Qt.rgba(0.12, 0.12, 0.12, 0.90)
+    if (api.wallpaperPath.length > 0) return Qt.rgba(0.96, 0.96, 0.96, 0.55)
+    return "#f5f5f5"
+}
 
     // ── 日志 ──
     Component.onCompleted: {
@@ -100,7 +106,7 @@ color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : "#f5f5f5")
     // ── 无选中会话时：空状态 ──
     Rectangle {
         anchors.fill: parent
-color: root.softUIMode ? "#e8edf2" : (root.glassMode ? "transparent" : "#f5f5f5")
+color: root.softUIMode ? "#e8edf2" : (root.glassMode ? "transparent" : (window.darkMode ? "#1e1e1e" : "#f5f5f5"))
         visible: !root.currentConversation
 
         ColumnLayout {
@@ -137,7 +143,7 @@ color: root.textMuted
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 56
-color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : "white")
+color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : (window.darkMode ? "#2d2d2d" : "white"))
 
             RowLayout {
                 anchors.fill: parent
@@ -236,7 +242,7 @@ color: root.textPrimary
                 anchors.bottom: parent.bottom
                 width: parent.width
                 height: 0.5
-color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.3) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e8e8e8")
+color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.3) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : "#e8e8e8"))
             }
         }
 
@@ -328,7 +334,7 @@ color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.3) : (root.glassMode ? Qt.r
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: inputArea.implicitHeight + 16
-color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : "white")
+color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : (window.darkMode ? "#2d2d2d" : "white"))
 
             RowLayout {
                 id: inputArea
@@ -350,7 +356,7 @@ wrapMode: TextArea.Wrap
                         placeholderTextColor: root.textMuted
                         color: root.textPrimary
                         background: Rectangle {
-                            color: root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#f5f5f5")
+                            color: root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : "#f5f5f5"))
                             radius: 8
                         }
                         padding: 10
@@ -413,7 +419,7 @@ wrapMode: TextArea.Wrap
                 anchors.top: parent.top
                 width: parent.width
                 height: 0.5
-color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.3) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e8e8e8")
+color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.3) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : "#e8e8e8"))
             }
         }
     }
@@ -448,7 +454,7 @@ color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.3) : (root.glassMode ? Qt.r
         }
 
         background: Rectangle {
-color: root.softUIMode ? "#f0f2f5" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.08) : "white")
+color: root.softUIMode ? "#f0f2f5" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.08) : (window.darkMode ? "#2d2d2d" : "white"))
         }
 
         // 面板内容
@@ -460,7 +466,7 @@ color: root.softUIMode ? "#f0f2f5" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.08) : 
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
-color: root.softUIMode ? "#dce3e9" : (root.glassMode ? "transparent" : "#fafafa")
+color: root.softUIMode ? "#dce3e9" : (root.glassMode ? "transparent" : (window.darkMode ? "#1e1e1e" : "#fafafa"))
 
                 Text {
                     anchors.centerIn: parent
@@ -475,7 +481,7 @@ color: root.softUIMode ? "#dce3e9" : (root.glassMode ? "transparent" : "#fafafa"
                     anchors.bottom: parent.bottom
                     width: parent.width
                     height: 0.5
-color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e8e8e8"
+color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : "#e8e8e8")
                 }
             }
 

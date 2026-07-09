@@ -158,6 +158,20 @@ Rectangle {
         }
     }
 
+    // ── 壁纸选择对话框 ──
+    FileDialog {
+        id: wallpaperPicker
+        title: qsTr("选择聊天壁纸")
+        nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"]
+        onAccepted: {
+            // 将本地文件路径转为 file:// URL
+            var filePath = String(selectedFile)
+            // Qt 的 selectedFile 已经是 file:// URL 格式
+            api.setWallpaperPath(filePath)
+            console.log("[ProfilePage] 壁纸已设置: " + filePath)
+        }
+    }
+
     // ── 头像大图预览弹窗 ──
     Popup {
         id: avatarPreview
@@ -443,6 +457,107 @@ Rectangle {
                 }
 
                 Item { Layout.fillWidth: true }
+            }
+        }
+
+        // ── 壁纸设置 ──
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 80
+            color: window.bgSurface
+            radius: 10
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 12
+
+                // 壁纸预览缩略图
+                Rectangle {
+                    Layout.preferredWidth: 56
+                    Layout.preferredHeight: 56
+                    radius: 8
+                    color: window.divider
+                    clip: true
+
+                    Image {
+                        id: wallpaperPreview
+                        anchors.fill: parent
+                        source: api.wallpaperPath
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "🖼️"
+                        font.pixelSize: 24
+                        visible: api.wallpaperPath.length === 0 || wallpaperPreview.status === Image.Error
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        text: qsTr("聊天壁纸")
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: root.textPrimary
+                    }
+                    Text {
+                        text: api.wallpaperPath.length > 0
+                              ? qsTr("已设置自定义壁纸")
+                              : qsTr("未设置，使用默认背景")
+                        font.pixelSize: 12
+                        color: root.textTertiary
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // 清除壁纸按钮（仅在有壁纸时显示）
+                Button {
+                    Layout.preferredWidth: 60
+                    Layout.preferredHeight: 32
+                    visible: api.wallpaperPath.length > 0
+                    text: qsTr("清除")
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#e55"
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 6
+                        color: "transparent"
+                        border.color: "#e55"
+                        border.width: 1
+                    }
+                    onClicked: api.clearWallpaper()
+                }
+
+                // 选择壁纸按钮
+                Button {
+                    Layout.preferredWidth: 60
+                    Layout.preferredHeight: 32
+                    text: qsTr("选择")
+                    contentItem: Text {
+                        text: parent.text
+                        color: window.bgSurface
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 6
+                        color: "#4a90d9"
+                    }
+                    onClicked: wallpaperPicker.open()
+                }
             }
         }
 

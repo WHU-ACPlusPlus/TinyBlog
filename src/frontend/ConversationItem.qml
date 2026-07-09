@@ -27,9 +27,9 @@ Item {
     property bool softUIMode: false
 
     // ── 自适应文字颜色 ──
-    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : "#222222")
-    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.55) : (softUIMode ? "#636e72" : "#555555")
-    property color textMuted:     glassMode ? Qt.rgba(1,1,1,0.35) : (softUIMode ? "#888888" : "#999999")
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : (window.darkMode ? "#e0e0e0" : "#222222"))
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.55) : (softUIMode ? "#636e72" : (window.darkMode ? "#999999" : "#555555"))
+    property color textMuted:     glassMode ? Qt.rgba(1,1,1,0.35) : (softUIMode ? "#888888" : (window.darkMode ? "#777777" : "#999999"))
 
     implicitWidth: 280
     implicitHeight: 64
@@ -49,7 +49,9 @@ color: root.softUIMode
                ? (root.isSelected ? Qt.rgba(0.64, 0.69, 0.77, 0.25) : "#e8edf2")
                : root.glassMode
                  ? (root.isSelected ? Qt.rgba(0.5, 0.7, 1.0, 0.15) : Qt.rgba(1, 1, 1, 0.06))
-                 : (root.isSelected ? "#e8f0fe" : "white")
+                 : (root.isSelected
+                    ? (window.darkMode ? "#1e3a5c" : "#e8f0fe")
+                    : (window.darkMode ? "#252525" : "white"))
         radius: 8
 
         Behavior on color {
