@@ -10,26 +10,6 @@ from datetime import datetime, timezone
 from social.db import get_conn, transactional
 
 
-def _get_excluded_ids(user_id: int) -> tuple[list[int], list[int]]:
-    """获取屏蔽/静音 ID 列表（表不存在时返回空）。"""
-    conn = get_conn()
-    try:
-        blocked_ids = [
-            r[0] for r in
-            conn.execute("SELECT blocked_id FROM blocks WHERE user_id = ?", (user_id,))
-        ]
-    except Exception:
-        blocked_ids = []
-    try:
-        muted_ids = [
-            r[0] for r in
-            conn.execute("SELECT muted_id FROM mutes WHERE user_id = ?", (user_id,))
-        ]
-    except Exception:
-        muted_ids = []
-    return blocked_ids, muted_ids
-
-
 # ---------------------------------------------------------------------------
 # 通知查询
 # ---------------------------------------------------------------------------
@@ -44,8 +24,15 @@ def get_notifications(user_id: int, limit: int = 40, offset: int = 0,#分页参�
     conn = get_conn()
 
     # 获取当前用户屏蔽和静音的用户ID
-    blocked_ids, muted_ids = _get_excluded_ids(user_id)
-    exclude = blocked_ids + muted_ids
+    blocked_ids = [
+        r[0] for r in
+        conn.execute("SELECT blocked_id FROM blocks WHERE user_id = ?", (user_id,))
+    ]
+    muted_ids = [
+        r[0] for r in
+        conn.execute("SELECT muted_id FROM mutes WHERE user_id = ?", (user_id,))
+    ]
+
     conditions = ["n.user_id = ?"]
     params: list = [user_id]
 
@@ -208,7 +195,14 @@ def get_unread_count(user_id: int) -> int:
     conn = get_conn()
 
     # 排除被屏蔽/静音用户的
-    blocked_ids, muted_ids = _get_excluded_ids(user_id)
+    blocked_ids = [
+        r[0] for r in
+        conn.execute("SELECT blocked_id FROM blocks WHERE user_id = ?", (user_id,))
+    ]
+    muted_ids = [
+        r[0] for r in
+        conn.execute("SELECT muted_id FROM mutes WHERE user_id = ?", (user_id,))
+    ]
     exclude = blocked_ids + muted_ids
 
     if exclude:
