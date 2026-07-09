@@ -10,7 +10,22 @@ import QtQuick.Layouts
 
 Rectangle {
 id: root
-    color: window.bgPage
+    color: {
+        if (softUIMode) return "#e8edf2"
+        if (glassMode) return "transparent"
+        if (window.darkMode) return "#1a1a1a"
+        if (api.wallpaperPath.length > 0) return Qt.rgba(0.96, 0.96, 0.96, 0.75)
+        return window.bgPage
+    }
+
+    // ── 风格模式（由 MainPage 传入）──
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : (window.darkMode ? "#e0e0e0" : window.textPrimary))
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.65) : (softUIMode ? "#636e72" : (window.darkMode ? "#999999" : "#666666"))
+    property color textTertiary:  glassMode ? Qt.rgba(1,1,1,0.40) : (softUIMode ? "#888888" : (window.darkMode ? "#777777" : "#999999"))
 
     // ── 状态 ──
     property var conversations: []
@@ -30,6 +45,7 @@ id: root
     property bool _initialLoadDone: false
     property bool _fetchingConversations: false
     property var _lastFetchConversationsTime: 0
+    property int _slideInCounter: 0       // 滑入动画计数器
 
     // ── 定时轮询（30s）──
     property var pollTimer: null
@@ -96,6 +112,9 @@ id: root
         if (visible && api.isLoggedIn && root._initialLoadDone) {
             console.log("[MessagesPage] 页面变为可见, 刷新会话")
             safeFetchConversations("visible")
+        }
+        if (visible) {
+            root._slideInCounter++
         }
     }
 
@@ -327,6 +346,7 @@ id: root
     // ═══════════════════════════════════════════════════
     RowLayout {
         anchors.fill: parent
+        anchors.leftMargin: 74   // 从侧边栏右侧开始，会话列表由此滑入
         spacing: 0
         visible: !root.isNarrowMode
 
@@ -334,8 +354,11 @@ id: root
             id: convListPanelWide
             Layout.preferredWidth: 280
             Layout.fillHeight: true
+            glassMode: root.glassMode
+            softUIMode: root.softUIMode
             conversations: root.conversations
             selectedConvId: root.currentConversation ? root.currentConversation.id : -1
+            slideInTrigger: root._slideInCounter
 
             onConversationClicked: function(conv) {
                 console.log("[MessagesPage] 会话点击: id=" + conv.id + " type=" + conv.type)
@@ -347,18 +370,21 @@ id: root
             }
             onMenuAction: function(index) { handleMenuAction(index) }
             onSearchRequested: function(keyword) { root.doSearch(keyword, "all") }
+            onRefreshRequested: safeFetchConversations("manual")
         }
 
         Rectangle {
             Layout.preferredWidth: 0.5
             Layout.fillHeight: true
-            color: window.divider
+color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.4) : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "#e0e0e0")
         }
 
         ChatPanel {
             id: chatPanelWide
             Layout.fillWidth: true
             Layout.fillHeight: true
+            glassMode: root.glassMode
+            softUIMode: root.softUIMode
             currentConversation: root.currentConversation
             messages: root.currentMessages
             currentUserId: root.currentUserId
@@ -381,8 +407,11 @@ id: root
             id: convListPanelNarrow
             Layout.fillWidth: true
             Layout.fillHeight: true
+            glassMode: root.glassMode
+            softUIMode: root.softUIMode
             conversations: root.conversations
             selectedConvId: root.currentConversation ? root.currentConversation.id : -1
+            slideInTrigger: root._slideInCounter
 
             onConversationClicked: function(conv) {
                 console.log("[MessagesPage.narrow] 会话点击: id=" + conv.id)
@@ -395,12 +424,15 @@ id: root
             }
             onMenuAction: function(index) { handleMenuAction(index) }
             onSearchRequested: function(keyword) { root.doSearch(keyword, "all") }
+            onRefreshRequested: safeFetchConversations("manual")
         }
 
         ChatPanel {
             id: chatPanelNarrow
             Layout.fillWidth: true
             Layout.fillHeight: true
+            glassMode: root.glassMode
+            softUIMode: root.softUIMode
             currentConversation: root.currentConversation
             messages: root.currentMessages
             currentUserId: root.currentUserId

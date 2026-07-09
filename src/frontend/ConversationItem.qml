@@ -22,6 +22,15 @@ Item {
     property int unreadCount: 0
     property bool isSelected: false
 
+    // ── 风格模式（由 ConversationListPanel 传入）──
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : (window.darkMode ? "#e0e0e0" : "#222222"))
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.55) : (softUIMode ? "#636e72" : (window.darkMode ? "#999999" : "#555555"))
+    property color textMuted:     glassMode ? Qt.rgba(1,1,1,0.35) : (softUIMode ? "#888888" : (window.darkMode ? "#777777" : "#999999"))
+
     implicitWidth: 280
     implicitHeight: 64
 
@@ -36,7 +45,13 @@ Item {
     Rectangle {
         anchors.fill: parent
         anchors.margins: 4
-        color: root.isSelected ? window.selectedBg : window.bgSurface
+color: root.softUIMode
+               ? (root.isSelected ? Qt.rgba(0.64, 0.69, 0.77, 0.25) : "#e8edf2")
+               : root.glassMode
+                 ? (root.isSelected ? Qt.rgba(0.5, 0.7, 1.0, 0.15) : Qt.rgba(1, 1, 1, 0.06))
+                 : (root.isSelected
+                    ? (window.darkMode ? "#1e3a5c" : "#e8f0fe")
+                    : (window.darkMode ? "#252525" : "white"))
         radius: 8
 
         Behavior on color {
@@ -77,7 +92,7 @@ Item {
                     text: root.targetName || qsTr("未知")
                     font.pixelSize: 14
                     font.weight: root.unreadCount > 0 ? Font.DemiBold : Font.Normal
-                    color: window.textPrimary
+color: root.textPrimary
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -87,7 +102,7 @@ Item {
                     Layout.fillWidth: true
                     text: root.lastMessage || qsTr("暂无消息")
                     font.pixelSize: 12
-                    color: root.unreadCount > 0 ? window.textPrimary : window.textSecondary
+color: root.unreadCount > 0 ? root.textSecondary : root.textMuted
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -103,7 +118,7 @@ Item {
                     Layout.alignment: Qt.AlignRight
                     text: root.lastMessageTime ? formatTime(root.lastMessageTime) : ""
                     font.pixelSize: 11
-                    color: window.textSecondary
+color: root.textMuted
                 }
 
                 // 未读红点

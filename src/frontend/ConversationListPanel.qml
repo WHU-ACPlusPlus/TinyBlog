@@ -14,19 +14,60 @@ Rectangle {
     // ── 公开属性 ──
     property var conversations: []       // 会话数据列表
     property int selectedConvId: -1      // 当前选中会话ID
+    property int slideInTrigger: 0       // 外部递增此值来触发滑入动画
+
+    // ── 风格模式（由 MessagesPage 传入）──
+    property bool glassMode: false
+    property bool softUIMode: false
+
+    // ── 自适应文字颜色 ──
+    property color textPrimary:   glassMode ? "#ffffff" : (softUIMode ? "#2d3436" : (window.darkMode ? "#e0e0e0" : "#222222"))
+    property color textSecondary: glassMode ? Qt.rgba(1,1,1,0.60) : (softUIMode ? "#636e72" : (window.darkMode ? "#999999" : "#555555"))
 
     // ── 信号 ──
     signal conversationClicked(var conv)
     signal addButtonClicked()
     signal menuAction(int index)
     signal searchRequested(string keyword)
+    signal refreshRequested()
 
-    color: window.bgPage
+color: {
+    if (softUIMode) return "#e8edf2"
+    if (glassMode) return "transparent"
+    if (window.darkMode) return "#1e1e1e"
+    if (api.wallpaperPath.length > 0) return Qt.rgba(0.98, 0.98, 0.98, 0.70)
+    return "#fafafa"
+}
     implicitWidth: 280
 
-    // ── 日志 ──
+    // ── 从左侧滑入动画 ──
+    transform: Translate {
+        id: slideTransform
+        x: -root.width  // 初始在左侧屏幕外
+    }
+
+    // 监听 slideInTrigger 变化，每次递增触发滑入
+    onSlideInTriggerChanged: {
+        if (slideInTrigger > 0) {
+            slideAnim.start()
+        }
+    }
+
+    // 首次加载时自动滑入
     Component.onCompleted: {
         console.log("[ConversationListPanel] 面板初始化完成")
+        slideAnim.start()
+    }
+
+    // 滑入动画
+    NumberAnimation {
+        id: slideAnim
+        target: slideTransform
+        property: "x"
+        from: -root.width
+        to: 0
+        duration: 350
+        easing.type: Easing.OutCubic
     }
 
     onConversationsChanged: {
@@ -41,7 +82,7 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 56
-            color: window.bgSurface
+color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : (window.darkMode ? "#2d2d2d" : "white"))
 
             RowLayout {
                 anchors.fill: parent
@@ -52,7 +93,7 @@ Rectangle {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
-                    color: window.bgInput
+color: root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : "#f0f0f0"))
                     radius: 8
 
                     RowLayout {
@@ -154,7 +195,7 @@ Rectangle {
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             background: Rectangle {
-                color: window.bgSurface
+color: root.softUIMode ? "#f0f2f5" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : (window.darkMode ? "#2d2d2d" : "white"))
                 radius: 8
                 layer.enabled: true
                 layer.effect: null  // QtQuick.Controls.Basic uses no shadow
@@ -174,7 +215,11 @@ Rectangle {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 36
-                        color: menuItemHover.hovered ? window.divider : "transparent"
+color: root.softUIMode
+                               ? (menuItemHover.hovered ? Qt.rgba(0.64, 0.69, 0.77, 0.2) : "transparent")
+                               : root.glassMode
+                                 ? (menuItemHover.hovered ? Qt.rgba(1, 1, 1, 0.10) : "transparent")
+                                 : (menuItemHover.hovered ? "#f5f5f5" : "transparent")
                         radius: 4
 
                         RowLayout {
@@ -241,19 +286,21 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         text: qsTr("暂无消息")
                         font.pixelSize: 15
-                        color: window.textSecondary
+color: root.textSecondary
                     }
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: qsTr("关注好友或加入群聊开始聊天")
                         font.pixelSize: 12
-                        color: window.textSecondary
+color: root.textSecondary
                     }
                 }
             }
 
             delegate: ConversationItem {
                 width: conversationList.width
+                glassMode: root.glassMode
+                softUIMode: root.softUIMode
                 conversationId: modelData.id || 0
                 convType: modelData.type || "private"
                 targetId: modelData.target_id || 0
@@ -285,6 +332,55 @@ Rectangle {
 
             ScrollBar.vertical: ScrollBar {
                 policy: ScrollBar.AsNeeded
+            }
+        }
+
+        // ── 底部刷新按钮 ──
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 40
+            color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : (window.darkMode ? "#1e1e1e" : "#fafafa"))
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: refreshBtnRow.implicitWidth + 24
+                height: 32
+                radius: 6
+                color: refreshBtnHover.hovered
+                       ? (root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : (window.darkMode ? "#444444" : "#e8e8e8")))
+                       : "transparent"
+
+                Behavior on color { ColorAnimation { duration: 150 } }
+
+                RowLayout {
+                    id: refreshBtnRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    Text {
+                        text: "🔄"
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        text: qsTr("刷新")
+                        font.pixelSize: 12
+                        color: root.textSecondary
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        console.log("[ConversationListPanel] 刷新按钮被点击")
+                        root.refreshRequested()
+                    }
+                }
+
+                HoverHandler {
+                    id: refreshBtnHover
+                    cursorShape: Qt.PointingHandCursor
+                }
             }
         }
     }
