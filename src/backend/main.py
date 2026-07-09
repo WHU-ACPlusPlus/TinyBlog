@@ -4,13 +4,8 @@
 
 # Databases
 
-import base64, io, random, sqlite3, bcrypt, secrets, threading, logging, sys, os
+import os, re, base64, io, random, sqlite3, bcrypt, secrets, threading, logging, sys
 from datetime import datetime, timezone, timedelta
-
-# ── Social 模块 ──
-import social.social as social_mod
-import social.search as social_search
-import social.notification as social_notify
 
 # ── 日志系统配置 ──
 # 北京时间 (UTC+8)
@@ -68,6 +63,29 @@ def resolve_user(cookie: str):
         (cookie,)
     )
     return row["user_id"] if row else None
+
+# ── 屏蔽词库加载 ──
+_BLOCKED_WORDS = []
+_blocked_words_path = os.path.join(os.path.dirname(__file__), "blocked_words.txt")
+if os.path.exists(_blocked_words_path):
+    with open(_blocked_words_path, encoding="utf-8") as _f:
+        _BLOCKED_WORDS = [
+            _l.strip() for _l in _f
+            if _l.strip() and not _l.startswith("#")
+        ]
+    log_api("SYSTEM", None, f"loaded {len(_BLOCKED_WORDS)} blocked words", "ok")
+else:
+    log_api("SYSTEM", None, f"blocked_words.txt not found at {_blocked_words_path}", "empty")
+
+def contains_blocked(text: str) -> bool:
+    """检查文本是否包含屏蔽词，命中返回 True。"""
+    if not text or not _BLOCKED_WORDS:
+        return False
+    text_lower = text.lower()
+    for w in _BLOCKED_WORDS:
+        if w.lower() in text_lower:
+            return True
+    return False
 
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row

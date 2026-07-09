@@ -1,0 +1,150 @@
+======================================================================
+  TinyBlog 全功能压力测试与边缘测试报告
+  测试时间: 2026-07-07 10:32:49
+  目标服务器: http://127.0.0.1:18999
+======================================================================
+
+【总览】
+  测试总数: 123
+  通过: 105  (85.4%)
+  失败: 18  (14.6%)
+  覆盖端点: 43 个
+
+【分类统计】
+  ✅ 正常场景: 43/43 通过
+  ❌ 边缘测试: 55/73 通过
+  ✅ 压力测试: 1/1 通过
+  ✅ 模糊测试: 1/1 通过
+  ✅ 一致性测试: 5/5 通过
+
+【端点详细报告】
+
+  ✅ /avatar GET  (1/1 通过)
+
+  ✅ /avatar PATCH  (1/1 通过)
+
+  ✅ /bookmark  (1/1 通过)
+
+  ❌ /comment  (4/6 通过)
+    ❌ [边缘:超长评论] {'status': 'success'}
+       响应: {'status': 'success'}
+    ❌ [边缘:缺必填字段] {'detail': [{'type': 'missing', 'loc': ['body', 'content'], 'msg': 'Field required', 'input': {'cook
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'content'], 'msg': 'Field required', 'input': {'cookie': '2443ff8ebf02d985c17df20f6e6afe63e95ea959a76a
+
+  ❌ /create-group  (1/2 通过)
+    ❌ [边缘:超长群名] {'group_id': 7}
+       响应: {'group_id': 7}
+
+  ✅ /delete-comment  (1/1 通过)
+
+  ✅ /delete-post  (1/1 通过)
+
+  ❌ /edit-post  (2/3 通过)
+    ❌ [边缘:编辑空内容] {'status': 'success'}
+       响应: {'status': 'success'}
+
+  ✅ /edit-profile  (1/1 通过)
+
+  ❌ /follow  (6/7 通过)
+    ❌ [边缘:缺必填字段] {'detail': [{'type': 'missing', 'loc': ['body', 'followee_id'], 'msg': 'Field required', 'input': {'
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'followee_id'], 'msg': 'Field required', 'input': {'cookie': '2443ff8ebf02d985c17df20f6e6afe63e95ea959
+
+  ✅ /get-bookmarks  (1/1 通过)
+
+  ✅ /get-comments  (1/1 通过)
+
+  ❌ /get-follow-list  (4/6 通过)
+    ❌ [边缘:缺cookie字段] {'detail': [{'type': 'missing', 'loc': ['body', 'cookie'], 'msg': 'Field required', 'input': {}}]}
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'cookie'], 'msg': 'Field required', 'input': {}}]}
+    ❌ [边缘:cookie为null] {'detail': [{'type': 'string_type', 'loc': ['body', 'cookie'], 'msg': 'Input should be a valid strin
+       响应: {'detail': [{'type': 'string_type', 'loc': ['body', 'cookie'], 'msg': 'Input should be a valid string', 'input': None}]}
+
+  ✅ /get-group-members  (1/1 通过)
+
+  ✅ /get-my-groups  (1/1 通过)
+
+  ✅ /get-notifications  (1/1 通过)
+
+  ✅ /get-post  (4/4 通过)
+
+  ✅ /get-post-likers  (1/1 通过)
+
+  ✅ /get-user-posts  (1/1 通过)
+
+  ✅ /get-user-profile  (1/1 通过)
+
+  ✅ /join-group  (2/2 通过)
+
+  ❌ /leave-group  (1/2 通过)
+    ❌ [边缘:退出不存在群] {'status': 'success'}
+       响应: {'status': 'success'}
+
+  ❌ /like  (1/2 通过)
+    ❌ [边缘:缺必填字段] {'detail': [{'type': 'missing', 'loc': ['body', 'post_id'], 'msg': 'Field required', 'input': {'cook
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'post_id'], 'msg': 'Field required', 'input': {'cookie': '2443ff8ebf02d985c17df20f6e6afe63e95ea959a76a
+
+  ❌ /login-request  (6/7 通过)
+    ❌ [边缘:缺必填字段] {'detail': [{'type': 'missing', 'loc': ['body', 'password'], 'msg': 'Field required', 'input': {'use
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'password'], 'msg': 'Field required', 'input': {'username': 'x'}}]}
+
+  ✅ /logout  (2/2 通过)
+
+  ✅ /mark-notifications-read  (1/1 通过)
+
+  ❌ /ping  (1/2 通过)
+    ❌ [边缘:GET请求(期望405)] status=200
+
+  ❌ /post-fetch  (7/8 通过)
+    ❌ [边缘:超大before_id] {'_exception': 'Expecting value: line 1 column 1 (char 0)'}
+       响应: {'_exception': 'Expecting value: line 1 column 1 (char 0)'}
+
+  ❌ /pub-post  (7/8 通过)
+    ❌ [边缘:缺必填字段] {'detail': [{'type': 'missing', 'loc': ['body', 'text'], 'msg': 'Field required', 'input': {'cookie'
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'text'], 'msg': 'Field required', 'input': {'cookie': '2443ff8ebf02d985c17df20f6e6afe63e95ea959a76ad92
+
+  ✅ /recv-group-msg  (1/1 通过)
+
+  ✅ /recv-msg  (2/2 通过)
+
+  ❌ /register-request  (14/17 通过)
+    ❌ [边缘:超长密码] {'_exception': 'Expecting value: line 1 column 1 (char 0)'}
+       响应: {'_exception': 'Expecting value: line 1 column 1 (char 0)'}
+    ❌ [边缘:缺必填字段] {'detail': [{'type': 'missing', 'loc': ['body', 'password'], 'msg': 'Field required', 'input': {'use
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'password'], 'msg': 'Field required', 'input': {'username': 'x'}}, {'type': 'missing', 'loc': ['body',
+    ❌ [边缘:缺必填字段] {'detail': [{'type': 'missing', 'loc': ['body', 'username'], 'msg': 'Field required', 'input': {'pas
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'username'], 'msg': 'Field required', 'input': {'password': 'x'}}, {'type': 'missing', 'loc': ['body',
+
+  ✅ /repost  (1/1 通过)
+
+  ✅ /search  (6/6 通过)
+
+  ✅ /send-group-msg  (1/1 通过)
+
+  ❌ /send-msg  (4/6 通过)
+    ❌ [边缘:空内容] {'status': 'success'}
+       响应: {'status': 'success'}
+    ❌ [边缘:缺必填字段] {'detail': [{'type': 'missing', 'loc': ['body', 'content'], 'msg': 'Field required', 'input': {'cook
+       响应: {'detail': [{'type': 'missing', 'loc': ['body', 'content'], 'msg': 'Field required', 'input': {'cookie': '2443ff8ebf02d985c17df20f6e6afe63e95ea959a76a
+
+  ✅ /unbookmark  (1/1 通过)
+
+  ✅ /unfollow  (1/1 通过)
+
+  ✅ /unlike  (1/1 通过)
+
+  ✅ /upload-media  (3/3 通过)
+
+  ✅ CONSISTENCY  (5/5 通过)
+
+  ✅ FUZZ  (1/1 通过)
+
+  ✅ STRESS  (1/1 通过)
+
+
+【发现的风险与建议】
+  ⚠ 部分超长输入未被拦截，存在输入校验缺失
+  ⚠ SQL注入/XSS测试中部分请求未被拦截
+
+======================================================================
+  报告结束
+======================================================================
