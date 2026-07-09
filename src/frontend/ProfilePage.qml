@@ -234,8 +234,12 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 100
-            color: window.bgSurface
+            color: root.glassMode
+                ? Qt.rgba(1, 1, 1, 0.08)
+                : window.bgSurface
             radius: 12
+            border.color: root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            border.width: root.glassMode ? 0.5 : 0
 
             RowLayout {
                 anchors.fill: parent
@@ -356,8 +360,12 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: signatureField.implicitHeight + 24
-            color: window.bgSurface
+            color: root.glassMode
+                ? Qt.rgba(1, 1, 1, 0.08)
+                : window.bgSurface
             radius: 10
+            border.color: root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            border.width: root.glassMode ? 0.5 : 0
 
             TextArea {
                 id: signatureField
@@ -386,8 +394,12 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 60
-            color: window.bgSurface
+            color: root.glassMode
+                ? Qt.rgba(1, 1, 1, 0.08)
+                : window.bgSurface
             radius: 10
+            border.color: root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            border.width: root.glassMode ? 0.5 : 0
 
             RowLayout {
                 anchors.fill: parent
@@ -464,8 +476,12 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 80
-            color: window.bgSurface
+            color: root.glassMode
+                ? Qt.rgba(1, 1, 1, 0.08)
+                : window.bgSurface
             radius: 10
+            border.color: root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            border.width: root.glassMode ? 0.5 : 0
 
             RowLayout {
                 anchors.fill: parent
@@ -707,8 +723,12 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: window.bgSurface
+            color: root.glassMode
+                ? Qt.rgba(1, 1, 1, 0.06)
+                : window.bgSurface
             radius: 10
+            border.color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+            border.width: root.glassMode ? 0.5 : 0
             clip: true
 
             Flickable {
@@ -905,8 +925,12 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: window.bgSurface
+            color: root.glassMode
+                ? Qt.rgba(1, 1, 1, 0.06)
+                : window.bgSurface
             radius: 10
+            border.color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+            border.width: root.glassMode ? 0.5 : 0
             clip: true
 
             Flickable {
@@ -1049,8 +1073,12 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: window.bgSurface
+            color: root.glassMode
+                ? Qt.rgba(1, 1, 1, 0.06)
+                : window.bgSurface
             radius: 10
+            border.color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+            border.width: root.glassMode ? 0.5 : 0
             clip: true
 
             Flickable {
