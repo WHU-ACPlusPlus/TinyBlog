@@ -37,6 +37,7 @@ class ApiClient : public QObject {
     Q_PROPERTY(bool isLoggedIn READ isLoggedIn NOTIFY loggedInChanged)
     Q_PROPERTY(QString baseUrl READ baseUrl WRITE setBaseUrl NOTIFY baseUrlChanged)
     Q_PROPERTY(bool isAndroid READ isAndroid CONSTANT)
+    Q_PROPERTY(QString wallpaperPath READ wallpaperPath WRITE setWallpaperPath NOTIFY wallpaperPathChanged)
 
     void setBaseUrl(const QString& url);  // e.g. "http://becharmkon.cn:18999"
     QString baseUrl() const;
@@ -54,10 +55,16 @@ class ApiClient : public QObject {
     Q_INVOKABLE void extractVideoThumbnailAsync(const QString& postId, int mediaIndex, const QString& b64);  // 异步抽视频第一帧
     bool isAndroid() const;                                                                                     // 编译时判断是否为 Android 平台
 
+    // ── 壁纸 ──
+    Q_INVOKABLE void setWallpaperPath(const QString& path);
+    QString wallpaperPath() const;
+    Q_INVOKABLE void clearWallpaper();
+
    signals:
     void loggedInChanged();
     void baseUrlChanged();
     void languageChanged();
+    void wallpaperPathChanged();
 
    public slots:
 
@@ -231,6 +238,7 @@ class ApiClient : public QObject {
     QNetworkAccessManager* m_manager;
     QString m_baseUrl;
     QString m_cookie;
+    QString m_wallpaperPath;
     int m_checkCookieRetries = 0;
     static constexpr int kMaxCheckCookieRetries = 3;
     QTranslator* m_translator;

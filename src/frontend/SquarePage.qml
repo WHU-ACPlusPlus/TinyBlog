@@ -6,7 +6,13 @@ import QtMultimedia
 
 Rectangle {
     id: root
-    color: softUIMode ? "#e8edf2" : (glassMode ? "transparent" : window.bgPage)
+    color: {
+        if (softUIMode) return "#e8edf2"
+        if (glassMode) return "transparent"
+        if (window.darkMode) return Qt.rgba(0.08, 0.08, 0.08, 0.88)
+        if (api.wallpaperPath.length > 0) return Qt.rgba(0.96, 0.96, 0.96, 0.60)
+        return Qt.rgba(0.96, 0.96, 0.96, 0.82)
+    }
 
     // ── 风格模式（由 MainPage 传入）──
     property bool glassMode: false
@@ -167,7 +173,7 @@ Rectangle {
         id: normalView
         anchors.fill: parent
         visible: !publishing
-        color: window.bgPage
+        color: "transparent"
 
         // ── 辅助刷新函数 ──
         function doRefresh() {
@@ -185,13 +191,15 @@ Rectangle {
             api.fetchTimeline(20)
         }
 
-        // 顶栏
+        // 顶栏 — 磨砂玻璃
         Rectangle {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
             height: 48
-            color: window.bgSurface
+            color: window.darkMode
+                ? Qt.rgba(1, 1, 1, 0.05)
+                : Qt.rgba(1, 1, 1, 0.55)
             z: 1
 
             Row {
@@ -226,16 +234,27 @@ Rectangle {
                     }
                 }
 
-                // 刷新按钮
+                // 刷新按钮 — 磨砂玻璃
                 Rectangle {
-                    width: 48
-                    height: 48
-                    color: "transparent"
+                    width: 40
+                    height: 40
+                    radius: 10
+                    color: root.glassMode
+                        ? Qt.rgba(1, 1, 1, 0.12)
+                        : (window.darkMode
+                            ? Qt.rgba(1, 1, 1, 0.06)
+                            : Qt.rgba(0, 0, 0, 0.04))
+                    border.color: root.glassMode
+                        ? Qt.rgba(1, 1, 1, 0.20)
+                        : (window.darkMode
+                            ? Qt.rgba(1, 1, 1, 0.10)
+                            : Qt.rgba(0, 0, 0, 0.06))
+                    border.width: root.glassMode ? 1 : 0.5
 
                     Text {
                         anchors.centerIn: parent
                         text: "↻"
-                        font.pixelSize: 20
+                        font.pixelSize: 18
                         color: root.textSecondary
                     }
 
@@ -320,7 +339,13 @@ Rectangle {
                             width: parent.width
                             height: postColumn.implicitHeight + 20
                             radius: 10
-                            color: window.bgSurface
+                            color: window.darkMode
+                                ? Qt.rgba(1, 1, 1, 0.04)
+                                : Qt.rgba(1, 1, 1, 0.65)
+                            border.color: window.darkMode
+                                ? Qt.rgba(1, 1, 1, 0.08)
+                                : Qt.rgba(0, 0, 0, 0.05)
+                            border.width: 0.5
 
                             Column {
                                 id: postColumn
@@ -508,7 +533,9 @@ Rectangle {
                                     width: parent.width
                                     height: commentsCol.implicitHeight + 16
                                     radius: 8
-                                    color: window.bgCard
+                                    color: window.darkMode
+                                        ? Qt.rgba(1, 1, 1, 0.03)
+                                        : Qt.rgba(1, 1, 1, 0.50)
 
                                     Column {
                                         id: commentsCol
@@ -678,11 +705,13 @@ Rectangle {
         spacing: 0
         visible: publishing
 
-        // 顶栏（固定，不随滚动移动）
+        // 顶栏 — 磨砂玻璃
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
-            color: window.bgSurface
+            color: window.darkMode
+                ? Qt.rgba(1, 1, 1, 0.05)
+                : Qt.rgba(1, 1, 1, 0.55)
 
             RowLayout {
                 anchors.fill: parent
@@ -801,17 +830,21 @@ Rectangle {
                 width: publishScroll.availableWidth
                 spacing: 0
 
-                // ── 文本输入区 ──
+                // ── 文本输入区 — 磨砂玻璃 ──
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 200
                     Layout.leftMargin: 12
                     Layout.rightMargin: 12
                     Layout.topMargin: 10
-                    color: window.bgSurface
+                    color: window.darkMode
+                        ? Qt.rgba(1, 1, 1, 0.04)
+                        : Qt.rgba(1, 1, 1, 0.55)
                     radius: 8
-                    border.color: window.border
-                    border.width: 1
+                    border.color: window.darkMode
+                        ? Qt.rgba(1, 1, 1, 0.10)
+                        : Qt.rgba(0, 0, 0, 0.08)
+                    border.width: 0.5
 
                     TextArea {
                         id: textInput

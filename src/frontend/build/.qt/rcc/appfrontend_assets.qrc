@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="assets/icon.png">C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/assets/icon.png</file>
+  </qresource>
+</RCC>
+
