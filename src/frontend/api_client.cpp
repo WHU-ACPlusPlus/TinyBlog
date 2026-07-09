@@ -63,13 +63,15 @@ static QString trBackendError(const QString& msg) {
 // ─── 构造与基础设置 ───
 
 ApiClient::ApiClient(QObject* parent)
-    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("http://127.0.0.1:18999"), m_translator(nullptr), m_engine(nullptr), m_currentLocale() {
+    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("https://api.becharmkon.cn"), m_translator(nullptr), m_engine(nullptr), m_currentLocale() {
     // 启动时从本地存储加载 cookie
     QSettings settings;
     m_cookie = settings.value("auth/cookie").toString();
     QString savedUrl = settings.value("auth/baseUrl").toString();
     if (!savedUrl.isEmpty())
         m_baseUrl = savedUrl;
+    // 加载壁纸路径
+    m_wallpaperPath = settings.value("app/wallpaperPath").toString();
 
     // Cookie 存在时异步验证服务器端是否仍然有效
     if (!m_cookie.isEmpty())
@@ -112,6 +114,25 @@ void ApiClient::setQmlEngine(QQmlEngine* engine) {
     m_engine = engine;
 }
 
+// ─── 壁纸 ───
+
+void ApiClient::setWallpaperPath(const QString& path) {
+    if (m_wallpaperPath == path) return;
+    m_wallpaperPath = path;
+    QSettings settings;
+    if (path.isEmpty())
+        settings.remove("app/wallpaperPath");
+    else
+        settings.setValue("app/wallpaperPath", path);
+    emit wallpaperPathChanged();
+}
+
+QString ApiClient::wallpaperPath() const { return m_wallpaperPath; }
+
+void ApiClient::clearWallpaper() {
+    setWallpaperPath(QString());
+}
+
 void ApiClient::setLanguage(const QString& locale) {
     if (locale == m_currentLocale) return;
     m_currentLocale = locale;
@@ -151,11 +172,11 @@ void ApiClient::setLanguage(const QString& locale) {
 }
 
 QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
-    QString uriStr = fileUrl.toString();
     QByteArray data;
     QString localPath;
 
 #ifdef Q_OS_ANDROID
+    QString uriStr = fileUrl.toString();
     qDebug() << "[readFileAsBase64] URI:" << uriStr;
 
     // Android: 统一走 ContentResolver 读取（兼容 content:// 和 file:// URI）
@@ -265,6 +286,63 @@ QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
     }
 
     return QString::fromLatin1(data.toBase64());
+}
+
+QString ApiClient::compressImageBase64(const QString& base64Input, int maxSizeBytes, int maxDimension) {
+    if (base64Input.isEmpty())
+        return {};
+
+    // 如果输入已经小于最大大小，直接返回
+    if (base64Input.size() <= maxSizeBytes)
+        return base64Input;
+
+    QByteArray rawData = QByteArray::fromBase64(base64Input.toLatin1());
+    QImage img;
+    if (!img.loadFromData(rawData)) {
+        qWarning() << "[compressImageBase64] Failed to decode image, returning original";
+        return base64Input;
+    }
+
+    qDebug() << "[compressImageBase64] Input image:" << img.width() << "x" << img.height()
+             << "raw=" << rawData.size() << "b64=" << base64Input.size();
+
+    // 计算缩放：先按尺寸比例，再保守一点确保反复压缩不超限
+    double scale = 1.0;
+    if (img.width() > maxDimension || img.height() > maxDimension) {
+        double dimScale = static_cast<double>(maxDimension) / std::max(img.width(), img.height());
+        scale = dimScale;
+    }
+    // 再按文件大小调整（面积比 ≈ 文件大小比）
+    double sizeScale = std::sqrt(static_cast<double>(maxSizeBytes) / base64Input.size());
+    scale = qMin(scale, sizeScale);
+
+    int newW = qMax(1, static_cast<int>(img.width() * scale));
+    int newH = qMax(1, static_cast<int>(img.height() * scale));
+
+    QImage scaled = img.scaled(newW, newH,
+                               Qt::KeepAspectRatio,
+                               Qt::SmoothTransformation);
+
+    // 先尝试 JPEG（对照片更高效），quality 从 90 逐步降到 50
+    QByteArray compressed;
+    for (int quality = 90; quality >= 50; quality -= 10) {
+        compressed.clear();
+        QBuffer buf(&compressed);
+        buf.open(QIODevice::WriteOnly);
+        scaled.save(&buf, "JPEG", quality);
+        buf.close();
+
+        QString resultB64 = QString::fromLatin1(compressed.toBase64());
+        if (resultB64.size() <= maxSizeBytes) {
+            qDebug() << "[compressImageBase64] Compressed to" << newW << "x" << newH
+                     << "quality=" << quality << "b64=" << resultB64.size();
+            return resultB64;
+        }
+    }
+
+    // 如果 JPEG 50 仍然超限，放弃（返回空字符串让调用方反馈错误）
+    qWarning() << "[compressImageBase64] Cannot compress to target size, giving up";
+    return {};
 }
 
 bool ApiClient::isAndroid() const {
@@ -714,10 +792,20 @@ void ApiClient::checkCookie() {
     QNetworkReply* reply = postJson("/check-cookie", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            emit errorOccurred(tr("网络错误: %1").arg(reply->errorString()));
             reply->deleteLater();
+            m_checkCookieRetries++;
+            if (m_checkCookieRetries >= kMaxCheckCookieRetries) {
+                // 连续多次失败，放弃本次认证（QSettings 中的 cookie 保留，下次启动重试）
+                emit errorOccurred(tr("无法连接服务器，请检查网络和服务器地址"));
+                m_cookie.clear();
+                emit loggedInChanged();
+                emit cookieCheckComplete(false, 0);
+            }
             return;
         }
+        // 成功收到响应，重置重试计数
+        m_checkCookieRetries = 0;
+
         QByteArray data = reply->readAll();
         reply->deleteLater();
 
@@ -741,8 +829,6 @@ void ApiClient::checkCookie() {
             // Cookie 在服务器端已失效，清除本地认证状态
             clearAuth();
             emit cookieCheckComplete(false, 0);
-
-            // 检查过程中可能已经有过网络错误提示，覆盖为更友好的消息
             emit errorOccurred("登录已过期，请重新登录");
         }
     });

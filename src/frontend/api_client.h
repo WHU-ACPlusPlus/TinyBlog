@@ -37,6 +37,7 @@ class ApiClient : public QObject {
     Q_PROPERTY(bool isLoggedIn READ isLoggedIn NOTIFY loggedInChanged)
     Q_PROPERTY(QString baseUrl READ baseUrl WRITE setBaseUrl NOTIFY baseUrlChanged)
     Q_PROPERTY(bool isAndroid READ isAndroid CONSTANT)
+    Q_PROPERTY(QString wallpaperPath READ wallpaperPath WRITE setWallpaperPath NOTIFY wallpaperPathChanged)
 
     void setBaseUrl(const QString& url);  // e.g. "http://becharmkon.cn:18999"
     QString baseUrl() const;
@@ -47,16 +48,23 @@ class ApiClient : public QObject {
     Q_INVOKABLE void setLanguage(const QString& locale);
     void setQmlEngine(QQmlEngine* engine);                                                                   // 清除 cookie + QSettings
     Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes = 0);                         // 读取文件内容为 base64（可指定最大字节数，超限自动压缩）
+    Q_INVOKABLE QString compressImageBase64(const QString& base64Input, int maxSizeBytes = 3145728, int maxDimension = 1920);  // 压缩 base64 图片（目标 ≤3MB base64，最长边 ≤1920px）
     Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl& videoUrl);                                           // 用 ffmpeg 抽视频第一帧
     Q_INVOKABLE QString videoThumbnailFromBase64(const QString& b64);                                        // 从 base64 视频数据提取缩略图
     Q_INVOKABLE QString saveBase64ToTempFile(const QString& b64, const QString& ext);                        // base64 → 临时文件 → file:// URL
     Q_INVOKABLE void extractVideoThumbnailAsync(const QString& postId, int mediaIndex, const QString& b64);  // 异步抽视频第一帧
     bool isAndroid() const;                                                                                     // 编译时判断是否为 Android 平台
 
+    // ── 壁纸 ──
+    Q_INVOKABLE void setWallpaperPath(const QString& path);
+    QString wallpaperPath() const;
+    Q_INVOKABLE void clearWallpaper();
+
    signals:
     void loggedInChanged();
     void baseUrlChanged();
     void languageChanged();
+    void wallpaperPathChanged();
 
    public slots:
 
@@ -230,6 +238,9 @@ class ApiClient : public QObject {
     QNetworkAccessManager* m_manager;
     QString m_baseUrl;
     QString m_cookie;
+    QString m_wallpaperPath;
+    int m_checkCookieRetries = 0;
+    static constexpr int kMaxCheckCookieRetries = 3;
     QTranslator* m_translator;
     QQmlEngine* m_engine;
     QString m_currentLocale;
