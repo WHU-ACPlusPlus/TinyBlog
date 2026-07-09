@@ -1,7 +1,9 @@
 #include "api_client.h"
 
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 #include <QHash>
 #include <QImage>
@@ -11,39 +13,49 @@
 #include <QMediaPlayer>
 #include <QNetworkRequest>
 #include <QProcess>
+#include <QQmlEngine>
 #include <QStandardPaths>
+#include <QTranslator>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QUuid>
 #include <QVideoFrame>
 #include <QVideoFrameFormat>
 #include <QVideoSink>
+#include <cmath>
+
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#include <QJniEnvironment>
+#include <QtCore/private/qandroidextras_p.h>
+#endif
 
 // ─── 后端英文错误 → 中文翻译 ───
 static QString trBackendError(const QString& msg) {
     static const QHash<QString, QString> map = {
-        {QStringLiteral("Bad username."),          QStringLiteral("无效的用户名")},
-        {QStringLiteral("Bad nickname."),          QStringLiteral("无效的昵称")},
-        {QStringLiteral("Bad password."),          QStringLiteral("无效的密码")},
-        {QStringLiteral("Username occupied."),     QStringLiteral("用户名已被占用")},
-        {QStringLiteral("User not exist."),        QStringLiteral("用户不存在")},
-        {QStringLiteral("Incorrect password."),    QStringLiteral("密码错误")},
-        {QStringLiteral("Empty post not allowed."),   QStringLiteral("内容不能为空")},
-        {QStringLiteral("Too many media."),        QStringLiteral("媒体文件过多")},
-        {QStringLiteral("Media cannot be larger than 16MiB."), QStringLiteral("媒体文件不能超过 16MiB")},
-        {QStringLiteral("Post not exist."),        QStringLiteral("帖子不存在")},
-        {QStringLiteral("Post not found."),        QStringLiteral("帖子不存在")},
-        {QStringLiteral("Empty comment not allowed."), QStringLiteral("评论不能为空")},
-        {QStringLiteral("Cannot follow yourself."),    QStringLiteral("不能关注自己")},
-        {QStringLiteral("Not your post."),         QStringLiteral("不能删除他人的帖子")},
-        {QStringLiteral("Not your comment."),      QStringLiteral("不能删除他人的评论")},
-        {QStringLiteral("Cannot repost your own post."), QStringLiteral("不能转发自己的帖子")},
-        {QStringLiteral("Group name cannot be empty."),  QStringLiteral("群组名称不能为空")},
-        {QStringLiteral("Group not exist."),       QStringLiteral("群组不存在")},
-        {QStringLiteral("You are not in this group."),   QStringLiteral("你不在该群组中")},
-        {QStringLiteral("Empty message not allowed."),   QStringLiteral("消息不能为空")},
-        {QStringLiteral("You are already in this group."), QStringLiteral("你已在该群组中")},
-        {QStringLiteral("Bad `to_whom_id`"),       QStringLiteral("无效的收信人")},
+        {QStringLiteral("Bad cookie."), ApiClient::tr("登录已过期，请重新登录")},
+        {QStringLiteral("Bad username."), ApiClient::tr("无效的用户名")},
+        {QStringLiteral("Bad nickname."), ApiClient::tr("无效的昵称")},
+        {QStringLiteral("Bad password."), ApiClient::tr("无效的密码")},
+        {QStringLiteral("Username occupied."), ApiClient::tr("用户名已被占用")},
+        {QStringLiteral("User not exist."), ApiClient::tr("用户不存在")},
+        {QStringLiteral("Incorrect password."), ApiClient::tr("密码错误")},
+        {QStringLiteral("Empty post not allowed."), ApiClient::tr("内容不能为空")},
+        {QStringLiteral("Too many media."), ApiClient::tr("媒体文件过多")},
+        {QStringLiteral("Media cannot be larger than 16MiB."), ApiClient::tr("媒体文件不能超过 16MiB")},
+        {QStringLiteral("Post not exist."), ApiClient::tr("帖子不存在")},
+        {QStringLiteral("Post not found."), ApiClient::tr("帖子不存在")},
+        {QStringLiteral("Empty comment not allowed."), ApiClient::tr("评论不能为空")},
+        {QStringLiteral("Cannot follow yourself."), ApiClient::tr("不能关注自己")},
+        {QStringLiteral("Not your post."), ApiClient::tr("不能删除他人的帖子")},
+        {QStringLiteral("Not your comment."), ApiClient::tr("不能删除他人的评论")},
+        {QStringLiteral("Cannot repost your own post."), ApiClient::tr("不能转发自己的帖子")},
+        {QStringLiteral("Group name cannot be empty."), ApiClient::tr("群组名称不能为空")},
+        {QStringLiteral("Group not exist."), ApiClient::tr("群组不存在")},
+        {QStringLiteral("You are not in this group."), ApiClient::tr("你不在该群组中")},
+        {QStringLiteral("Empty message not allowed."), ApiClient::tr("消息不能为空")},
+        {QStringLiteral("You are already in this group."), ApiClient::tr("你已在该群组中")},
+        {QStringLiteral("Bad `to_whom_id`"), ApiClient::tr("无效的收信人")},
     };
     return map.value(msg, msg);
 }
@@ -51,7 +63,7 @@ static QString trBackendError(const QString& msg) {
 // ─── 构造与基础设置 ───
 
 ApiClient::ApiClient(QObject* parent)
-    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("http://127.0.0.1:18999") {
+    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("https://api.becharmkon.cn"), m_translator(nullptr), m_engine(nullptr), m_currentLocale() {
     // 启动时从本地存储加载 cookie
     QSettings settings;
     m_cookie = settings.value("auth/cookie").toString();
@@ -66,6 +78,9 @@ ApiClient::ApiClient(QObject* parent)
 
 void ApiClient::setBaseUrl(const QString& url) {
     m_baseUrl = url;
+    // 未指明协议时默认为 http
+    if (!m_baseUrl.startsWith("http://") && !m_baseUrl.startsWith("https://"))
+        m_baseUrl.prepend("http://");
     while (m_baseUrl.endsWith('/'))
         m_baseUrl.chop(1);
     QSettings settings;
@@ -93,27 +108,401 @@ void ApiClient::clearAuth() {
     emit loggedInChanged();
 }
 
-QString ApiClient::readFileAsBase64(const QUrl& fileUrl) {
+void ApiClient::setQmlEngine(QQmlEngine* engine) {
+    m_engine = engine;
+}
+
+void ApiClient::setLanguage(const QString& locale) {
+    if (locale == m_currentLocale) return;
+    m_currentLocale = locale;
+
+    if (m_translator) {
+        QCoreApplication::removeTranslator(m_translator);
+        delete m_translator;
+        m_translator = nullptr;
+    }
+
+    // Don't install translator for zh_CN (source language)
+    if (locale != "zh_CN") {
+        m_translator = new QTranslator(this);
+        QStringList searchPaths = {
+            QCoreApplication::applicationDirPath() + "/appfrontend_" + locale + ".qm",               // dev: build/
+            QCoreApplication::applicationDirPath() + "/translations/appfrontend_" + locale + ".qm",  // installed
+        };
+        bool loaded = false;
+        for (const auto& path : searchPaths) {
+            if (m_translator->load(path)) {
+                loaded = true;
+                break;
+            }
+        }
+        if (!loaded) {
+            delete m_translator;
+            m_translator = nullptr;
+            emit errorOccurred(QStringLiteral("Failed to load translation: %1").arg(locale));
+            return;
+        }
+        QCoreApplication::installTranslator(m_translator);
+    }
+
+    if (m_engine)
+        m_engine->retranslate();
+    emit languageChanged();
+}
+
+QString ApiClient::readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes) {
+    QByteArray data;
     QString localPath;
 
 #ifdef Q_OS_ANDROID
-    // Android content:// URI → Qt 6 的 QFile 可以直接打开
-    localPath = fileUrl.toString();
-#else
-    localPath = fileUrl.toLocalFile();
-#endif
+    QString uriStr = fileUrl.toString();
+    qDebug() << "[readFileAsBase64] URI:" << uriStr;
 
-    QFile file(localPath);
+    // Android: 统一走 ContentResolver 读取（兼容 content:// 和 file:// URI）
+    QJniObject contentUri = QJniObject::fromString(uriStr);
+    QJniObject uri = QJniObject::callStaticObjectMethod(
+        "android/net/Uri", "parse",
+        "(Ljava/lang/String;)Landroid/net/Uri;",
+        contentUri.object<jstring>());
+    QJniObject context = QNativeInterface::QAndroidApplication::context();
+    qDebug() << "[readFileAsBase64] context valid:" << context.isValid();
+    QJniObject resolver = context.callObjectMethod(
+        "getContentResolver", "()Landroid/content/ContentResolver;");
+    qDebug() << "[readFileAsBase64] resolver valid:" << resolver.isValid();
+    QJniObject inputStream = resolver.callObjectMethod(
+        "openInputStream", "(Landroid/net/Uri;)Ljava/io/InputStream;",
+        uri.object());
+    qDebug() << "[readFileAsBase64] inputStream valid:" << inputStream.isValid();
+
+    if (inputStream.isValid()) {
+        QJniEnvironment jniEnv;
+        jbyteArray buffer = jniEnv->NewByteArray(4096);
+        jmethodID readMethod = jniEnv->GetMethodID(
+            jniEnv->GetObjectClass(inputStream.object<jobject>()),
+            "read", "([B)I");
+        jint bytesRead;
+        int totalRead = 0;
+        while ((bytesRead = jniEnv->CallIntMethod(
+            inputStream.object<jobject>(), readMethod, buffer)) > 0) {
+            jbyte *elements = jniEnv->GetByteArrayElements(buffer, nullptr);
+            if (elements) {
+                data.append(reinterpret_cast<const char*>(elements), bytesRead);
+                totalRead += bytesRead;
+            }
+            jniEnv->ReleaseByteArrayElements(buffer, elements, JNI_ABORT);
+        }
+        jniEnv->DeleteLocalRef(buffer);
+        qDebug() << "[readFileAsBase64] total bytes read:" << totalRead;
+
+        jmethodID closeMethod = jniEnv->GetMethodID(
+            jniEnv->GetObjectClass(inputStream.object<jobject>()),
+            "close", "()V");
+        jniEnv->CallVoidMethod(inputStream.object<jobject>(), closeMethod);
+    } else {
+        qWarning() << "[readFileAsBase64] ContentResolver openInputStream failed, falling back to QFile";
+        // 回退到 QFile（部分 file:// URI 可直接读）
+        QString localPath = fileUrl.toLocalFile();
+        qDebug() << "[readFileAsBase64] QFile fallback path:" << localPath;
+        QFile file(localPath);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qWarning() << "[readFileAsBase64] QFile open failed:" << file.errorString();
+            emit errorOccurred(QStringLiteral("无法打开文件: %1").arg(file.errorString()));
+            return {};
+        }
+        data = file.readAll();
+        qDebug() << "[readFileAsBase64] QFile read:" << data.size() << "bytes";
+        file.close();
+    }
+#else
+    // 桌面端：直接读本地文件
+    QFile file(fileUrl.toLocalFile());
     if (!file.open(QIODevice::ReadOnly)) {
         emit errorOccurred(QStringLiteral("无法打开文件: %1").arg(file.errorString()));
         return {};
     }
-
-    QByteArray data = file.readAll();
+    data = file.readAll();
     file.close();
+#endif
+
+    // 如果指定了最大大小且文件超过限制，自动压缩
+    if (maxSizeBytes > 0 && data.size() > maxSizeBytes) {
+        QImage img;
+        if (img.loadFromData(data)) {
+            // 计算缩放比例：面积比例 ≈ 目标文件大小 / 实际文件大小
+            double scale = std::sqrt(static_cast<double>(maxSizeBytes) / data.size());
+            // 同时限制最大边长不超过 1024px（头像不需要太大）
+            int maxDim = 1024;
+            if (img.width() > maxDim || img.height() > maxDim) {
+                double dimScale = static_cast<double>(maxDim) / std::max(img.width(), img.height());
+                scale = std::min(scale, dimScale);
+            }
+
+            int newW = qMax(1, static_cast<int>(img.width() * scale));
+            int newH = qMax(1, static_cast<int>(img.height() * scale));
+
+            QImage scaled = img.scaled(newW, newH,
+                                       Qt::KeepAspectRatio,
+                                       Qt::SmoothTransformation);
+
+            QByteArray compressed;
+            QBuffer buf(&compressed);
+            buf.open(QIODevice::WriteOnly);
+            // 先尝试 PNG 无损压缩
+            scaled.save(&buf, "PNG");
+            buf.close();
+
+            // 如果 PNG 仍然超限，改用 JPEG（更小但会有质量损失）
+            if (compressed.size() > maxSizeBytes) {
+                compressed.clear();
+                buf.open(QIODevice::WriteOnly);
+                scaled.save(&buf, "JPEG", 85);
+                buf.close();
+            }
+
+            return QString::fromLatin1(compressed.toBase64());
+        }
+        // 图片加载失败，回退到原始数据
+    }
 
     return QString::fromLatin1(data.toBase64());
 }
+
+QString ApiClient::compressImageBase64(const QString& base64Input, int maxSizeBytes, int maxDimension) {
+    if (base64Input.isEmpty())
+        return {};
+
+    // 如果输入已经小于最大大小，直接返回
+    if (base64Input.size() <= maxSizeBytes)
+        return base64Input;
+
+    QByteArray rawData = QByteArray::fromBase64(base64Input.toLatin1());
+    QImage img;
+    if (!img.loadFromData(rawData)) {
+        qWarning() << "[compressImageBase64] Failed to decode image, returning original";
+        return base64Input;
+    }
+
+    qDebug() << "[compressImageBase64] Input image:" << img.width() << "x" << img.height()
+             << "raw=" << rawData.size() << "b64=" << base64Input.size();
+
+    // 计算缩放：先按尺寸比例，再保守一点确保反复压缩不超限
+    double scale = 1.0;
+    if (img.width() > maxDimension || img.height() > maxDimension) {
+        double dimScale = static_cast<double>(maxDimension) / std::max(img.width(), img.height());
+        scale = dimScale;
+    }
+    // 再按文件大小调整（面积比 ≈ 文件大小比）
+    double sizeScale = std::sqrt(static_cast<double>(maxSizeBytes) / base64Input.size());
+    scale = qMin(scale, sizeScale);
+
+    int newW = qMax(1, static_cast<int>(img.width() * scale));
+    int newH = qMax(1, static_cast<int>(img.height() * scale));
+
+    QImage scaled = img.scaled(newW, newH,
+                               Qt::KeepAspectRatio,
+                               Qt::SmoothTransformation);
+
+    // 先尝试 JPEG（对照片更高效），quality 从 90 逐步降到 50
+    QByteArray compressed;
+    for (int quality = 90; quality >= 50; quality -= 10) {
+        compressed.clear();
+        QBuffer buf(&compressed);
+        buf.open(QIODevice::WriteOnly);
+        scaled.save(&buf, "JPEG", quality);
+        buf.close();
+
+        QString resultB64 = QString::fromLatin1(compressed.toBase64());
+        if (resultB64.size() <= maxSizeBytes) {
+            qDebug() << "[compressImageBase64] Compressed to" << newW << "x" << newH
+                     << "quality=" << quality << "b64=" << resultB64.size();
+            return resultB64;
+        }
+    }
+
+    // 如果 JPEG 50 仍然超限，放弃（返回空字符串让调用方反馈错误）
+    qWarning() << "[compressImageBase64] Cannot compress to target size, giving up";
+    return {};
+}
+
+bool ApiClient::isAndroid() const {
+#ifdef Q_OS_ANDROID
+    return true;
+#else
+    return false;
+#endif
+}
+
+#ifdef Q_OS_ANDROID
+bool ApiClient::pickMediaFiles() {
+    qDebug() << "[pickMediaFiles] Launching Android SAF file picker...";
+
+    QJniObject intent("android/content/Intent");
+    if (!intent.isValid()) {
+        qWarning() << "[pickMediaFiles] Failed to create Intent";
+        return false;
+    }
+
+    // ACTION_OPEN_DOCUMENT
+    intent.callObjectMethod("setAction",
+        "(Ljava/lang/String;)Landroid/content/Intent;",
+        QJniObject::fromString("android.intent.action.OPEN_DOCUMENT").object<jstring>());
+
+    // Allow multiple selection
+    intent.callObjectMethod("putExtra",
+        "(Ljava/lang/String;Z)Landroid/content/Intent;",
+        QJniObject::fromString("android.intent.extra.ALLOW_MULTIPLE").object<jstring>(),
+        jboolean(true));
+
+    // Set type to */* so SAF shows gallery
+    intent.callObjectMethod("setType", "(Ljava/lang/String;)Landroid/content/Intent;",
+        QJniObject::fromString("*/*").object<jstring>());
+
+    // Set MIME type filter (image/* + video/*)
+    {
+        QJniEnvironment jniEnv;
+        jclass stringClass = jniEnv->FindClass("java/lang/String");
+        jobjectArray mimeArray = jniEnv->NewObjectArray(2, stringClass, nullptr);
+        jniEnv->SetObjectArrayElement(mimeArray, 0,
+            QJniObject::fromString("image/*").object<jstring>());
+        jniEnv->SetObjectArrayElement(mimeArray, 1,
+            QJniObject::fromString("video/*").object<jstring>());
+
+        intent.callObjectMethod("putExtra",
+            "(Ljava/lang/String;[Ljava/lang/String;)Landroid/content/Intent;",
+            QJniObject::fromString("android.intent.extra.MIME_TYPES").object<jstring>(),
+            mimeArray);
+    }
+
+    // Add category OPENABLE so only browsable files are shown
+    intent.callObjectMethod("addCategory",
+        "(Ljava/lang/String;)Landroid/content/Intent;",
+        QJniObject::fromString("android.intent.category.OPENABLE").object<jstring>());
+
+    int requestCode = 9001;
+    QtAndroidPrivate::startActivity(intent, requestCode,
+        [this](int reqCode, int resultCode, const QJniObject &data) {
+            Q_UNUSED(reqCode);
+            qDebug() << "[pickMediaFiles] callback: resultCode=" << resultCode;
+            handleMediaPickerResult(resultCode, data);
+        });
+
+    return true;
+}
+
+void ApiClient::handleMediaPickerResult(int resultCode, const QJniObject &intentData) {
+    if (resultCode != -1) {  // RESULT_OK = -1
+        qDebug() << "[handleMediaPickerResult] cancelled or failed";
+        emit mediaFilesPicked({});
+        return;
+    }
+
+    if (!intentData.isValid()) {
+        qWarning() << "[handleMediaPickerResult] intentData is null";
+        emit mediaFilesPicked({});
+        return;
+    }
+
+    QVariantList files;
+
+    // Try clipData first (multiple selection)
+    QJniObject clipData = intentData.callObjectMethod("getClipData",
+        "()Landroid/content/ClipData;");
+
+    if (clipData.isValid()) {
+        jint count = clipData.callMethod<jint>("getItemCount");
+        qDebug() << "[handleMediaPickerResult] clipData items:" << count;
+
+        for (jint i = 0; i < count; ++i) {
+            QJniObject item = clipData.callObjectMethod("getItemAt",
+                "(I)Landroid/content/ClipData$Item;", i);
+            QJniObject uri = item.callObjectMethod("getUri",
+                "()Landroid/net/Uri;");
+            QVariantMap info = readUriInfo(uri);
+            if (!info.isEmpty())
+                files.append(info);
+        }
+    } else {
+        // Single selection via getData()
+        QJniObject uri = intentData.callObjectMethod("getData",
+            "()Landroid/net/Uri;");
+        if (uri.isValid()) {
+            QVariantMap info = readUriInfo(uri);
+            if (!info.isEmpty())
+                files.append(info);
+        }
+    }
+
+    qDebug() << "[handleMediaPickerResult] returning" << files.size() << "files";
+    emit mediaFilesPicked(files);
+}
+
+QVariantMap ApiClient::readUriInfo(const QJniObject &uri) {
+    QVariantMap info;
+    if (!uri.isValid()) return info;
+
+    // Get URI string
+    QJniObject uriStr = uri.callObjectMethod("toString", "()Ljava/lang/String;");
+    QString uriString = uriStr.toString();
+    info["url"] = uriString;
+    qDebug() << "[readUriInfo] URI:" << uriString;
+
+    // Get content type via ContentResolver.getType()
+    QJniObject context = QNativeInterface::QAndroidApplication::context();
+    QJniObject resolver = context.callObjectMethod(
+        "getContentResolver", "()Landroid/content/ContentResolver;");
+
+    QJniObject mimeType = resolver.callObjectMethod(
+        "getType", "(Landroid/net/Uri;)Ljava/lang/String;",
+        uri.object());
+    QString mimeStr = mimeType.toString();
+    info["mime"] = mimeStr;
+    qDebug() << "[readUriInfo] MIME:" << mimeStr;
+
+    // Open InputStream and read all bytes
+    QJniObject inputStream = resolver.callObjectMethod(
+        "openInputStream", "(Landroid/net/Uri;)Ljava/io/InputStream;",
+        uri.object());
+
+    if (!inputStream.isValid()) {
+        qWarning() << "[readUriInfo] Failed to open InputStream";
+        return info;
+    }
+
+    QByteArray data;
+    {
+        QJniEnvironment jniEnv;
+        jbyteArray buffer = jniEnv->NewByteArray(64 * 1024);  // 64KB buffer
+        jmethodID readMethod = jniEnv->GetMethodID(
+            jniEnv->GetObjectClass(inputStream.object<jobject>()),
+            "read", "([B)I");
+        jint bytesRead;
+        while ((bytesRead = jniEnv->CallIntMethod(
+            inputStream.object<jobject>(), readMethod, buffer)) > 0) {
+            jbyte *elements = jniEnv->GetByteArrayElements(buffer, nullptr);
+            if (elements) {
+                data.append(reinterpret_cast<const char*>(elements), bytesRead);
+            }
+            jniEnv->ReleaseByteArrayElements(buffer, elements, JNI_ABORT);
+        }
+        jniEnv->DeleteLocalRef(buffer);
+    }
+
+    // Close stream
+    {
+        QJniEnvironment jniEnv;
+        jmethodID closeMethod = jniEnv->GetMethodID(
+            jniEnv->GetObjectClass(inputStream.object<jobject>()),
+            "close", "()V");
+        jniEnv->CallVoidMethod(inputStream.object<jobject>(), closeMethod);
+    }
+
+    info["b64"] = QString::fromLatin1(data.toBase64());
+    info["size"] = static_cast<qint64>(data.size());
+    qDebug() << "[readUriInfo] read" << data.size() << "bytes";
+
+    return info;
+}
+#endif  // Q_OS_ANDROID
 
 QUrl ApiClient::generateVideoThumbnail(const QUrl& videoUrl) {
     QString localPath = videoUrl.toLocalFile();
@@ -330,7 +719,7 @@ QNetworkReply* ApiClient::postJson(const QString& endpoint,
                                    const QJsonObject& body) {
     QNetworkRequest req(QUrl(m_baseUrl + endpoint));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    req.setTransferTimeout(15000);  // 15s 超时
+    req.setTransferTimeout(60000);  // 60s 超时（上传媒体需要更长时间）
 
     QJsonDocument doc(body);
     QByteArray json = doc.toJson(QJsonDocument::Compact);
@@ -360,7 +749,12 @@ bool ApiClient::checkReply(QNetworkReply* reply, QJsonObject& out) {
 
     // 检查服务端返回的错误
     if (out.contains("error")) {
-        emit errorOccurred(trBackendError(out["error"].toString()));
+        QString errMsg = out["error"].toString();
+        // 检测到 cookie 失效 → 清除本地认证状态，UI 自动切回登录页
+        if (errMsg == "Bad cookie.") {
+            clearAuth();
+        }
+        emit errorOccurred(trBackendError(errMsg));
         return false;
     }
 
@@ -377,10 +771,20 @@ void ApiClient::checkCookie() {
     QNetworkReply* reply = postJson("/check-cookie", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
-            emit errorOccurred(tr("网络错误: %1").arg(reply->errorString()));
             reply->deleteLater();
+            m_checkCookieRetries++;
+            if (m_checkCookieRetries >= kMaxCheckCookieRetries) {
+                // 连续多次失败，放弃本次认证（QSettings 中的 cookie 保留，下次启动重试）
+                emit errorOccurred(tr("无法连接服务器，请检查网络和服务器地址"));
+                m_cookie.clear();
+                emit loggedInChanged();
+                emit cookieCheckComplete(false, 0);
+            }
             return;
         }
+        // 成功收到响应，重置重试计数
+        m_checkCookieRetries = 0;
+
         QByteArray data = reply->readAll();
         reply->deleteLater();
 
@@ -404,15 +808,13 @@ void ApiClient::checkCookie() {
             // Cookie 在服务器端已失效，清除本地认证状态
             clearAuth();
             emit cookieCheckComplete(false, 0);
-
-            // 检查过程中可能已经有过网络错误提示，覆盖为更友好的消息
             emit errorOccurred("登录已过期，请重新登录");
         }
     });
 }
 
-void ApiClient::registerUser(const QString& username, const QString& password,
-                             const QString& nickname) {
+void ApiClient::startRegister(const QString& username, const QString& password,
+                              const QString& nickname) {
     QJsonObject body{{"username", username},
                      {"password", password},
                      {"nickname", nickname}};
@@ -422,15 +824,95 @@ void ApiClient::registerUser(const QString& username, const QString& password,
         QJsonObject obj;
         if (!checkReply(reply, obj))
             return;
+        emit registerStep1Done(
+            obj["cookie"].toString(),
+            obj["captcha"].toString());
+    });
+}
+
+void ApiClient::verifyRegister(const QString& cookie, const QString& captcha,
+                               const QString& email) {
+    QJsonObject body{{"cookie", cookie},
+                     {"captcha", captcha},
+                     {"email", email}};
+
+    QNetworkReply* reply = postJson("/register-verify", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit registerStep2Done();
+    });
+}
+
+void ApiClient::completeRegister(const QString& cookie, const QString& emailCode) {
+    QJsonObject body{{"cookie", cookie},
+                     {"email_code", emailCode}};
+
+    QNetworkReply* reply = postJson("/register-finish", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
         setCookie(obj["cookie"].toString());
         emit registerSuccess(m_cookie);
     });
 }
 
-void ApiClient::login(const QString& username, const QString& password) {
+void ApiClient::startLogin(const QString& username, const QString& password) {
     QJsonObject body{{"username", username}, {"password", password}};
 
     QNetworkReply* reply = postJson("/login-request", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        // 如有 error 字段由 checkReply 处理
+        emit loginStep1Done(
+            obj["cookie"].toString(),
+            obj["need_captcha"].toBool(),
+            obj["need_email"].toBool(),
+            obj["captcha"].toString(),
+            obj["email"].toString());
+    });
+}
+
+void ApiClient::loginVerifyCaptcha(const QString& cookie, const QString& captcha) {
+    QJsonObject body{{"cookie", cookie}, {"captcha", captcha}};
+    QNetworkReply* reply = postJson("/login-verify-captcha", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit loginStep2Done();
+    });
+}
+
+void ApiClient::loginSendEmailCode(const QString& cookie) {
+    QJsonObject body{{"cookie", cookie}};
+    QNetworkReply* reply = postJson("/login-send-email-code", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit loginStep3Done();
+    });
+}
+
+void ApiClient::loginVerifyEmail(const QString& cookie, const QString& emailCode) {
+    QJsonObject body{{"cookie", cookie}, {"email_code", emailCode}};
+    QNetworkReply* reply = postJson("/login-verify-email", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit loginStep3Done();
+    });
+}
+
+void ApiClient::completeLogin(const QString& cookie) {
+    QJsonObject body{{"cookie", cookie}};
+    QNetworkReply* reply = postJson("/login-finish", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
         if (!checkReply(reply, obj))
@@ -465,6 +947,34 @@ void ApiClient::unfollow(int followee_id) {
     });
 }
 
+// ─── 用户自己的帖子 ───
+
+void ApiClient::fetchUserPosts(int publisher_id) {
+    QJsonObject body = withCookie({{"publisher_id", publisher_id}});
+    QNetworkReply* reply = postJson("/get-user-posts", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        QVariantList ids;
+        for (const auto& v : obj["post_ids"].toArray())
+            ids.append(v.toInt());
+        emit userPostsFetched(ids);
+    });
+}
+
+void ApiClient::fetchMyPostsDetail(int publisher_id) {
+    QJsonObject body = withCookie({{"publisher_id", publisher_id}});
+    QNetworkReply* reply = postJson("/get-user-posts-detail", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        QVariantList posts = obj["posts"].toArray().toVariantList();
+        emit myPostsFetched(posts);
+    });
+}
+
 void ApiClient::fetchFollowList() {
     QJsonObject body = withCookie();
     QNetworkReply* reply = postJson("/get-follow-list", body);
@@ -475,27 +985,54 @@ void ApiClient::fetchFollowList() {
 
         QList<UserInfo> followers;
         QList<UserInfo> followees;
-        for (const auto& v : obj["followers"].toArray())
-            followers.append(userFromJson(v.toObject()));
-        for (const auto& v : obj["followees"].toArray())
-            followees.append(userFromJson(v.toObject()));
+        QVariantList followersForQml;
+        QVariantList followeesForQml;
+        for (const auto& v : obj["followers"].toArray()) {
+            auto user = userFromJson(v.toObject());
+            followers.append(user);
+            followersForQml.append(QVariantMap{
+                {"id", user.id},
+                {"username", user.username},
+                {"nickname", user.nickname},
+                {"avatar", user.avatar},
+            });
+        }
+        for (const auto& v : obj["followees"].toArray()) {
+            auto user = userFromJson(v.toObject());
+            followees.append(user);
+            followeesForQml.append(QVariantMap{
+                {"id", user.id},
+                {"username", user.username},
+                {"nickname", user.nickname},
+                {"avatar", user.avatar},
+            });
+        }
 
         emit followListFetched(followers, followees);
+        emit followListFetchedForQml(followersForQml, followeesForQml);
     });
 }
 
 // ─── 帖子 ───
 
 void ApiClient::publishPost(const QString& text, const QStringList& media) {
+    qDebug() << "[publishPost] text length:" << text.length() << "media count:" << media.size();
     QJsonArray arr;
-    for (const auto& m : media)
+    for (const auto& m : media) {
+        if (m.isEmpty())
+            qWarning() << "[publishPost] media item" << arr.size() << "is EMPTY!";
         arr.append(m);
+    }
+    qDebug() << "[publishPost] JSON media array size:" << arr.size();
     QJsonObject body = withCookie({{"text", text}, {"media", arr}});
     QNetworkReply* reply = postJson("/pub-post", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;
-        if (!checkReply(reply, obj))
+        if (!checkReply(reply, obj)) {
+            qWarning() << "[publishPost] server returned error!";
             return;
+        }
+        qDebug() << "[publishPost] success!";
         emit postPublished();
     });
 }
@@ -622,18 +1159,26 @@ void ApiClient::updateProfile(const QString& nickname,
                               const QString& avatar,
                               const QString& signature) {
     auto pending = std::make_shared<int>(0);
+    auto failed = std::make_shared<bool>(false);
+
+    auto checkDone = [this, pending, failed]() {
+        if (*pending == 0 && !*failed) {
+            emit profileUpdated();
+        }
+    };
 
     // 更新昵称
     if (!nickname.isEmpty()) {
         (*pending)++;
         QJsonObject body = withCookie({{"nickname", nickname}});
         QNetworkReply* reply = postJson("/edit-profile", body);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, pending]() {
-            reply->deleteLater();
-            (*pending)--;
-            if (*pending == 0) {
-                emit profileUpdated();
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pending, failed, checkDone]() {
+            QJsonObject obj;
+            if (!checkReply(reply, obj)) {
+                *failed = true;
             }
+            (*pending)--;
+            checkDone();
         });
     }
     // 更新头像和签名
@@ -643,18 +1188,17 @@ void ApiClient::updateProfile(const QString& nickname,
         if (!avatar.isEmpty()) body["avatar"] = avatar;
         if (!signature.isEmpty()) body["signature"] = signature;
         QNetworkReply* reply = postJson("/avatar", body);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, pending]() {
-            reply->deleteLater();
-            (*pending)--;
-            if (*pending == 0) {
-                emit profileUpdated();
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pending, failed, checkDone]() {
+            QJsonObject obj;
+            if (!checkReply(reply, obj)) {
+                *failed = true;
             }
+            (*pending)--;
+            checkDone();
         });
     }
     // 没有要更新的内容
-    if (*pending == 0) {
-        emit profileUpdated();
-    }
+    checkDone();
 }
 
 void ApiClient::patchAvatar(const QString& avatar, const QString& signature) {
@@ -756,7 +1300,6 @@ void ApiClient::sendGroupMessage(int group_id, const QString& content) {
 }
 
 void ApiClient::receiveGroupMessages(int group_id, int count) {
-    qDebug() << "[ApiClient::receiveGroupMessages] group_id=" << group_id << " count=" << count;
     QJsonObject body = withCookie({{"group_id", group_id}, {"count", count}});
     QNetworkReply* reply = postJson("/recv-group-msg", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -766,22 +1309,10 @@ void ApiClient::receiveGroupMessages(int group_id, int count) {
             return;
         }
 
-        // R4修复: 改用QVariantList，QML可直接访问字段
-        QVariantList messages;
-        for (const auto& v : obj["messages"].toArray()) {
-            QJsonObject o = v.toObject();
-            QVariantMap item;
-            item["id"] = o["id"].toInt();
-            item["sender_id"] = o["sender_id"].toInt();
-            item["username"] = o["username"].toString();
-            item["nickname"] = o["nickname"].toString();
-            item["avatar"] = o["avatar"].toString();        // R4: 透传头像
-            item["content"] = o["content"].toString();
-            item["sent_at"] = o["sent_at"].toString();
-            messages.append(item);
-        }
-        qDebug() << "[ApiClient::receiveGroupMessages] 成功获取" << messages.size() << "条群消息";
-        emit groupMessagesReceived(messages);
+        QList<GroupMessageInfo> msgs;
+        for (const auto& v : obj["messages"].toArray())
+            msgs.append(groupMsgFromJson(v.toObject()));
+        emit groupMessagesReceived(msgs);
     });
 }
 
@@ -858,11 +1389,9 @@ void ApiClient::hideConversation(int conversation_id) {
 void ApiClient::fetchPrivateMessages(int with_user_id, int before_id, int count) {
     qDebug() << "[ApiClient::fetchPrivateMessages] 请求私聊历史 with_user_id=" << with_user_id
              << "before_id=" << before_id << "count=" << count;
-    QJsonObject body = withCookie({
-        {"with_user_id", with_user_id},
-        {"before_id", before_id},
-        {"count", count}
-    });
+    QJsonObject body = withCookie({{"with_user_id", with_user_id},
+                                   {"before_id", before_id},
+                                   {"count", count}});
     QNetworkReply* reply = postJson("/get-private-messages", body);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         QJsonObject obj;

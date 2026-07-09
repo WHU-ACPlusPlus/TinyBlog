@@ -6,6 +6,7 @@
 #include <QTranslator>
 #include <QLocale>
 #include <QDir>
+#include <QIcon>
 #include "api_client.h"
 
 int main(int argc, char *argv[])
@@ -16,13 +17,18 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
     // 设组织名和应用名，让 QSettings 存到可预期的路径
-    app.setOrganizationName("TinyChat");
-    app.setApplicationName("TinyChat");
+    app.setOrganizationName("TinyBlog");
+    app.setApplicationName("TinyBlog");
 
-    // 关闭 Qt 调试日志（避免在前端控制台打印 HTTP 请求体和 base64 数据）
+    // 设置窗口图标
+    app.setWindowIcon(QIcon(":/assets/icon.png"));
+
+    // ── 关闭 Qt 调试日志（避免在前端控制台打印 HTTP 请求体和 base64 数据）──
     QLoggingCategory::setFilterRules("*.debug=false");
 
     // ── 加载翻译 ──
+    // 当前系统语言，zh_CN 表示不需要翻译（源码即中文）
+    // 如需添加新语言：生成 .ts 文件 → 填写翻译 → lrelease → .qm 放 translations/ 下
     QTranslator translator;
     QString lang = QLocale::system().name();  // e.g. "en_US", "zh_CN"
     if (lang != "zh_CN" && lang != "zh") {
@@ -34,10 +40,12 @@ int main(int argc, char *argv[])
     }
 
     // 创建 API 客户端，暴露给 QML 侧使用
+    // 默认 URL 由 ApiClient 构造函数从 QSettings 加载（首次运行 = "https://api.becharmkon.cn"）
+    // 用户可在登录页手动修改并自动保存到 QSettings
     ApiClient api;
-    api.setBaseUrl("http://127.0.0.1:18999");
 
     QQmlApplicationEngine engine;
+    api.setQmlEngine(&engine);
     // 将 api 对象注入 QML 上下文，在 QML 中以 api 名称访问
     engine.rootContext()->setContextProperty("api", &api);
 

@@ -4,7 +4,7 @@ project(frontend VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
-set(QT_QML_GENERATE_QMLLS_INI ON)
+set(QT_QML_GENERATE_QMLLS_INI OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia LinguistTools)
 
@@ -17,10 +17,21 @@ qt_add_executable(appfrontend
     api_types.h
 )
 
+set(appfrontend_qrc_srcs "")
+qt6_add_resources(appfrontend_qrc_srcs ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc)
+target_sources(appfrontend PRIVATE ${appfrontend_qrc_srcs})
+
+qt_add_resources(appfrontend appfrontend_assets
+    PREFIX "/"
+    FILES
+        assets/icon.png
+)
+
 # 注册 QML 模块 —— QML 文件放到 qml/ 目录下
 qt_add_qml_module(appfrontend
     URI frontend
     VERSION 1.0
+    NO_CACHEGEN
     QML_FILES
         Main.qml
         LoginFlow.qml
@@ -33,7 +44,6 @@ qt_add_qml_module(appfrontend
         ChatPanel.qml
         MessageBubble.qml
         GlassCard.qml
-        FrostedGlassDemo.qml
 )
 
 # ── 国际化 / 翻译 ──
@@ -55,7 +65,7 @@ set_target_properties(appfrontend PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE
-    WIN32_EXECUTABLE FALSE
+    WIN32_EXECUTABLE TRUE
 )
 
 install(TARGETS appfrontend

@@ -8,33 +8,50 @@ Rectangle {
     // ── 当前页面索引 ──
     property int currentIndex: 0
 
-    // ── 风格模式：0=普通  1=毛玻璃  2=SoftUI ──
+    // ── 风格模式：0=普通（支持深色模式）  1=毛玻璃  2=SoftUI ──
     property int styleMode: 0
     property bool glassMode: styleMode === 1
     property bool softUIMode: styleMode === 2
 
-    // 根据模式自动切换背景
+    // 普通模式下跟随系统主题，其他风格使用固定色板
     color: {
-        if (softUIMode) return "#e8edf2"       // Soft UI 柔和浅灰蓝
-        if (glassMode)  return "transparent"    // 毛玻璃透明
-        return "white"                          // 普通白色
+        if (softUIMode) return "#e8edf2"
+        if (glassMode)  return "transparent"
+        return window.bgSurface
     }
 
-    // ── 鼠标位置（用于跟随光源）──
+    // 向 window 同步当前风格模式，使 window.* 颜色不受深色模式影响
+    onStyleModeChanged: {
+        window.activeStyleMode = root.styleMode
+    }
+    Component.onCompleted: {
+        window.activeStyleMode = root.styleMode
+    }
+
+    // ── 鼠标位置（用于毛玻璃跟随光源）──
     property real mouseX: width / 2
     property real mouseY: height / 2
 
-    // ── 背景图路径（Windows 本地绝对路径，可替换）──
-    property string bgImagePath: "file:///D:/SocialAppUI/TinyBlog/image/1.png"
+    // ── 深色模式图标 ──
+    function darkIcon() {
+        if (window.darkModeFollowSystem === 1) return "🌙"
+        if (window.darkModeFollowSystem === 2) return "☀️"
+        return "◐"
+    }
+    function darkLabel() {
+        if (window.darkModeFollowSystem === 1) return qsTr("深色")
+        if (window.darkModeFollowSystem === 2) return qsTr("浅色")
+        return qsTr("跟随")
+    }
 
     // ═══════════════════════════════════════════
-    // 风格图标映射
+    // 风格图标/标签映射
     // ═══════════════════════════════════════════
     function styleIcon(mode) {
         switch (mode) { case 1: return "🔮"; case 2: return "🫧"; default: return "🏠" }
     }
     function styleLabel(mode) {
-        switch (mode) { case 1: return "玻璃"; case 2: return "柔和"; default: return "普通" }
+        switch (mode) { case 1: return qsTr("玻璃"); case 2: return qsTr("柔和"); default: return qsTr("普通") }
     }
 
     // ═══════════════════════════════════════════
@@ -46,25 +63,31 @@ Rectangle {
         visible: root.glassMode
         z: -1
 
-        // ── 背景图片 ──
         Image {
             id: bgImage
             anchors.fill: parent
-            source: root.bgImagePath
+            source: "qrc:/image/bg1.png"
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
 
             onStatusChanged: {
-                if (status === Image.Ready)
-                    console.log("[MainPage] 背景图加载: " + implicitWidth + "x" + implicitHeight)
-                else if (status === Image.Error)
-                    console.warn("[MainPage] 背景图加载失败: " + root.bgImagePath)
+                if (status === Image.Error)
+                    console.warn("[MainPage] 玻璃背景图加载失败，使用纯色回退")
             }
         }
 
-        // ── 鼠标跟随光源（柔和径向暖光，仅玻璃模式）──
-        // 使用 Canvas + createRadialGradient 实现真正平滑的径向渐变
-        // Qt 6 要求 ShaderEffect 使用预编译 .qsb，Canvas 无此限制
+        // 回退渐变（图片加载失败时显示）
+        Rectangle {
+            anchors.fill: parent
+            visible: bgImage.status !== Image.Ready
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "#0f0c29" }
+                GradientStop { position: 0.5; color: "#302b63" }
+                GradientStop { position: 1.0; color: "#24243e" }
+            }
+        }
+
+        // 鼠标跟随光源
         Canvas {
             id: mouseLight
             width: 700; height: 700
@@ -75,15 +98,14 @@ Rectangle {
             onPaint: {
                 var ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
-                // 径向渐变：中心暖白 → 边缘透明
                 var gradient = ctx.createRadialGradient(
-                    width / 2, height / 2, 0,      // 内圆：中心点，半径 0
-                    width / 2, height / 2, width / 2 // 外圆：中心点，半径 250
+                    width / 2, height / 2, 0,
+                    width / 2, height / 2, width / 2
                 )
-                gradient.addColorStop(0.0, "rgba(255, 235, 209, 0.12)")  // 中心暖白 12%
-                gradient.addColorStop(0.4, "rgba(255, 242, 224, 0.06)")  // 中间过渡
-                gradient.addColorStop(0.7, "rgba(255, 245, 230, 0.02)")  // 外层微光
-                gradient.addColorStop(1.0, "transparent")                  // 边缘透明
+                gradient.addColorStop(0.0, "rgba(255, 235, 209, 0.12)")
+                gradient.addColorStop(0.4, "rgba(255, 242, 224, 0.06)")
+                gradient.addColorStop(0.7, "rgba(255, 245, 230, 0.02)")
+                gradient.addColorStop(1.0, "transparent")
                 ctx.fillStyle = gradient
                 ctx.fillRect(0, 0, width, height)
             }
@@ -93,12 +115,12 @@ Rectangle {
         }
     }
 
-    // ── 鼠标追踪层（仅追踪位置，不拦截点击/滚轮）──
+    // ── 鼠标追踪层（不拦截事件）──
     MouseArea {
         id: mouseTracker
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.NoButton  // 不消费任何按键事件，完全透传
+        acceptedButtons: Qt.NoButton
         onPositionChanged: function(mouse) {
             root.mouseX = mouse.x
             root.mouseY = mouse.y
@@ -113,13 +135,15 @@ Rectangle {
         spacing: 0
         visible: width >= 700
 
-        // ── 左侧边栏 ──
+        // 左侧边栏
         Rectangle {
             Layout.preferredWidth: 60
             Layout.fillHeight: true
-            // 毛玻璃模式：半透明深色；普通模式：实色深灰
-            color: root.glassMode
-                    ? Qt.rgba(0.12, 0.12, 0.18, 0.75) : "#2c2c2c"
+            color: {
+                if (softUIMode) return Qt.rgba(0.84, 0.89, 0.93, 0.90)
+                if (glassMode)  return Qt.rgba(0.12, 0.12, 0.18, 0.75)
+                return window.bgSidebar
+            }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -127,12 +151,11 @@ Rectangle {
                 anchors.bottomMargin: 12
                 spacing: 8
 
-                // 导航按钮
                 Repeater {
                     model: [
-                        { icon: "🗂", tip: qsTr("广场") },
-                        { icon: "💬", tip: qsTr("消息") },
-                        { icon: "👤", tip: qsTr("我的") }
+                        { icon: "▪", tip: qsTr("广场") },
+                        { icon: "≡", tip: qsTr("消息") },
+                        { icon: "●", tip: qsTr("我的") }
                     ]
 
                     Rectangle {
@@ -140,9 +163,9 @@ Rectangle {
                         Layout.preferredHeight: 48
                         Layout.alignment: Qt.AlignHCenter
                         color: currentIndex === index
-                                ? (root.glassMode
-                                    ? Qt.rgba(1, 1, 1, 0.20)
-                                    : "#4a4a4a")
+                                ? (glassMode ? Qt.rgba(1, 1, 1, 0.20)
+                                   : softUIMode ? Qt.rgba(0.48, 0.53, 0.66, 0.30)
+                                   : window.selectedBg)
                                 : "transparent"
                         radius: 12
 
@@ -163,18 +186,50 @@ Rectangle {
                     }
                 }
 
-                // 弹性空间 — 把切换按钮推到底部
+                // 弹性空间
                 Item { Layout.fillHeight: true }
 
-                // ── 风格切换按钮（点击循环：普通→玻璃→柔和）──
+                // ── 深色模式切换按钮（仅普通模式下可见）──
+                Rectangle {
+                    Layout.preferredWidth: 48
+                    Layout.preferredHeight: 48
+                    Layout.alignment: Qt.AlignHCenter
+                    color: window.darkModeFollowSystem !== 0
+                            ? window.selectedBg : "transparent"
+                    radius: 12
+                    visible: root.styleMode === 0
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.darkIcon()
+                        font.pixelSize: 20
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            window.darkModeFollowSystem = (window.darkModeFollowSystem + 1) % 3
+                        }
+                    }
+
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+
+                    ToolTip {
+                        visible: darkTip.hovered
+                        text: qsTr("主题: ") + root.darkLabel()
+                    }
+                    HoverHandler { id: darkTip }
+                }
+
+                // ── 风格切换按钮（始终在最底部边缘）──
                 Rectangle {
                     Layout.preferredWidth: 48
                     Layout.preferredHeight: 48
                     Layout.alignment: Qt.AlignHCenter
                     color: root.styleMode !== 0
-                            ? (root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.30)
-                               : root.glassMode ? Qt.rgba(1, 0.6, 0.2, 0.25)
-                               : "#4a4a4a")
+                            ? (softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.30)
+                               : glassMode ? Qt.rgba(1, 0.6, 0.2, 0.25)
+                               : window.selectedBg)
                             : "transparent"
                     radius: 12
 
@@ -192,18 +247,19 @@ Rectangle {
                     HoverHandler { cursorShape: Qt.PointingHandCursor }
 
                     ToolTip {
-                        visible: ttHover.hovered
-                        text: "风格: " + root.styleLabel(root.styleMode) + "（点击切换）"
+                        visible: styleTip.hovered
+                        text: qsTr("风格: ") + root.styleLabel(root.styleMode)
                     }
-                    HoverHandler { id: ttHover }
+                    HoverHandler { id: styleTip }
                 }
             }
         }
 
-        // ── 内容区 ──
+        // 内容区
         Item {
             Layout.fillWidth: true; Layout.fillHeight: true
 
+            // 毛玻璃层（仅在玻璃模式下可见）
             GlassCard {
                 anchors.fill: parent
                 anchors.margins: root.glassMode ? 8 : 0
@@ -232,12 +288,14 @@ Rectangle {
     // 窄屏：内容 + 底栏
     // ═══════════════════════════════════════════
     ColumnLayout {
-        anchors.fill: parent; spacing: 0
+        anchors.fill: parent
+        spacing: 0
         visible: width < 700
 
         Item {
             Layout.fillWidth: true; Layout.fillHeight: true
 
+            // 毛玻璃层（仅在玻璃模式下可见）
             GlassCard {
                 anchors.fill: parent
                 anchors.margins: root.glassMode ? 6 : 0
@@ -265,39 +323,92 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 56
             color: {
-                if (root.softUIMode) return "#dce3e9"
-                if (root.glassMode)  return Qt.rgba(0.12, 0.12, 0.18, 0.80)
-                return "#2c2c2c"
+                if (softUIMode) return "#dce3e9"
+                if (glassMode)  return Qt.rgba(0.12, 0.12, 0.18, 0.80)
+                return window.bgSidebar
             }
 
             RowLayout {
-                anchors.fill: parent; spacing: 0
+                anchors.fill: parent
+                spacing: 0
 
                 Repeater {
                     model: [
-                        { icon: "🗂", label: qsTr("广场") },
-                        { icon: "💬", label: qsTr("消息") },
-                        { icon: "👤", label: qsTr("我的") }
+                        { icon: "▪", label: qsTr("广场") },
+                        { icon: "≡", label: qsTr("消息") },
+                        { icon: "●", label: qsTr("我的") }
                     ]
+
                     Item {
-                        Layout.fillWidth: true; Layout.fillHeight: true
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
                         ColumnLayout {
-                            anchors.centerIn: parent; spacing: 2
-                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData.icon; font.pixelSize: 22 }
+                            anchors.centerIn: parent
+                            spacing: 2
+
                             Text {
-                                Layout.alignment: Qt.AlignHCenter; text: modelData.label; font.pixelSize: 11
-                                color: currentIndex === index ? "#6cf" : (root.softUIMode ? "#778" : "#aaa")
+                                Layout.alignment: Qt.AlignHCenter
+                                text: modelData.icon
+                                font.pixelSize: 22
+                            }
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: modelData.label
+                                font.pixelSize: 11
+                                color: currentIndex === index
+                                        ? window.accent
+                                        : (softUIMode ? "#778" : glassMode ? Qt.rgba(1,1,1,0.6) : window.textSecondary)
                             }
                         }
-                        MouseArea { anchors.fill: parent; onClicked: currentIndex = index }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: currentIndex = index
+                        }
                     }
                 }
 
-                // ── 风格切换（窄屏点击循环）──
+                // ── 深色模式切换（窄屏）──
                 Item {
-                    Layout.fillWidth: true; Layout.fillHeight: true
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: root.styleMode === 0
+
                     ColumnLayout {
-                        anchors.centerIn: parent; spacing: 2
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.darkIcon()
+                            font.pixelSize: 22
+                        }
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.darkLabel()
+                            font.pixelSize: 11
+                            color: window.darkModeFollowSystem !== 0 ? "#fa0" : window.textSecondary
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            window.darkModeFollowSystem = (window.darkModeFollowSystem + 1) % 3
+                        }
+                    }
+                }
+
+                // ── 风格切换（窄屏，始终在最右边缘）──
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
+
                         Text {
                             Layout.alignment: Qt.AlignHCenter
                             text: root.styleIcon(root.styleMode)
@@ -307,9 +418,10 @@ Rectangle {
                             Layout.alignment: Qt.AlignHCenter
                             text: root.styleLabel(root.styleMode)
                             font.pixelSize: 11
-                            color: root.styleMode !== 0 ? "#fa0" : (root.softUIMode ? "#778" : "#aaa")
+                            color: root.styleMode !== 0 ? "#fa0" : (softUIMode ? "#778" : window.textSecondary)
                         }
                     }
+
                     MouseArea {
                         anchors.fill: parent
                         onClicked: root.styleMode = (root.styleMode + 1) % 3
