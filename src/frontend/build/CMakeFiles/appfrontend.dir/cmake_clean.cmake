@@ -1,0 +1,42 @@
+file(REMOVE_RECURSE
+  ".qt/rcc/qrc_appfrontend_assets.cpp"
+  ".qt/rcc/qrc_appfrontend_raw_qml_0.cpp"
+  ".qt/rcc/qrc_qmake_frontend.cpp"
+  "CMakeFiles/appfrontend_autogen.dir/AutogenUsed.txt"
+  "CMakeFiles/appfrontend_autogen.dir/ParseCache.txt"
+  "appfrontend_autogen"
+  "CMakeFiles/appfrontend.dir/api_client.cpp.obj"
+  "CMakeFiles/appfrontend.dir/api_client.cpp.obj.d"
+  "CMakeFiles/appfrontend.dir/appfrontend_autogen/mocs_compilation.cpp.obj"
+  "CMakeFiles/appfrontend.dir/appfrontend_autogen/mocs_compilation.cpp.obj.d"
+  "CMakeFiles/appfrontend.dir/appfrontend_qmltyperegistrations.cpp.obj"
+  "CMakeFiles/appfrontend.dir/appfrontend_qmltyperegistrations.cpp.obj.d"
+  "CMakeFiles/appfrontend.dir/build/.qt/rcc/qrc_appfrontend_assets.cpp.obj"
+  "CMakeFiles/appfrontend.dir/build/.qt/rcc/qrc_appfrontend_assets.cpp.obj.d"
+  "CMakeFiles/appfrontend.dir/build/.qt/rcc/qrc_appfrontend_raw_qml_0.cpp.obj"
+  "CMakeFiles/appfrontend.dir/build/.qt/rcc/qrc_appfrontend_raw_qml_0.cpp.obj.d"
+  "CMakeFiles/appfrontend.dir/build/.qt/rcc/qrc_qmake_frontend.cpp.obj"
+  "CMakeFiles/appfrontend.dir/build/.qt/rcc/qrc_qmake_frontend.cpp.obj.d"
+  "CMakeFiles/appfrontend.dir/main.cpp.obj"
+  "CMakeFiles/appfrontend.dir/main.cpp.obj.d"
+  "CMakeFiles/appfrontend.dir/qrc_resources.cpp.obj"
+  "CMakeFiles/appfrontend.dir/qrc_resources.cpp.obj.d"
+  "appfrontend.exe"
+  "appfrontend.exe.manifest"
+  "appfrontend.pdb"
+  "appfrontend_autogen/mocs_compilation.cpp"
+  "appfrontend_autogen/timestamp"
+  "appfrontend_qmltyperegistrations.cpp"
+  "frontend/appfrontend.qmltypes"
+  "libappfrontend.dll.a"
+  "meta_types/appfrontend_json_file_list.txt"
+  "meta_types/appfrontend_json_file_list.txt.timestamp"
+  "meta_types/qt6appfrontend_metatypes.json"
+  "meta_types/qt6appfrontend_metatypes.json.gen"
+  "qrc_resources.cpp"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/appfrontend.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()
