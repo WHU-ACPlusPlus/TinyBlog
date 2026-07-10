@@ -570,6 +570,36 @@ color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : 
                     HoverHandler { id: privateFollowBtnHover }
                 }
 
+                // 屏蔽按钮
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 160
+                    Layout.preferredHeight: 36
+                    radius: 18
+                    color: privateBlockBtnHover.hovered ? Qt.rgba(0.9, 0.3, 0.3, 0.2) : "transparent"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("屏蔽")
+                        font.pixelSize: 13
+                        color: "#e74c3c"
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (root.currentConversation) {
+                                var targetId = root.currentConversation.target_id
+                                console.log("[ChatPanel] 屏蔽 user_id=" + targetId)
+                                api.block(targetId)
+                            }
+                        }
+                    }
+
+                    HoverHandler { id: privateBlockBtnHover }
+                }
+
                 // ── E1修复: 用户详情现在由root.userDetailData统一管理 ──
 
                 // 分隔线
