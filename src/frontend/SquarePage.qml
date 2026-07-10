@@ -458,12 +458,12 @@ Rectangle {
                                                 color: "#80000000"
                                                 visible: modelData.isVideo
 
-                                                Text {
+                                                Image {
                                                     anchors.centerIn: parent
-                                                    anchors.leftMargin: 2
-                                                    text: "▶"
-                                                    font.pixelSize: 11
-                                                    color: window.bgSurface
+                                                    source: "qrc:/emoji/25b6.png"
+                                                    sourceSize.width: 11
+                                                    sourceSize.height: 11
+                                                    fillMode: Image.PreserveAspectFit
                                                 }
                                             }
 
@@ -507,10 +507,12 @@ Rectangle {
                                         color: modelData.liked ? "#ffe0e0" : "transparent"
                                         anchors.verticalCenter: parent.verticalCenter
 
-                                        Text {
+                                        Image {
                                             anchors.centerIn: parent
-                                            text: modelData.liked ? "♥" : "♡"
-                                            font.pixelSize: 14
+                                            source: modelData.liked ? "qrc:/emoji/2665.png" : "qrc:/emoji/2661.png"
+                                            sourceSize.width: 14
+                                            sourceSize.height: 14
+                                            fillMode: Image.PreserveAspectFit
                                         }
 
                                         MouseArea {
@@ -615,8 +617,9 @@ Rectangle {
                                         // 评论加载按钮
                                         Text {
                                             text: modelData.comments && modelData.comments.length > 0
-                                                   ? "🧵 %1 条评论".arg(modelData.comments.length)
+                                                   ? "<img src='qrc:/emoji/1f9f5.png' width=12 height=12 /> %1 条评论".arg(modelData.comments.length)
                                                    : qsTr("加载评论")
+                                            textFormat: Text.RichText
                                             font.pixelSize: 12
                                             color: root.textAccent
                                             visible: !modelData._commentsLoading
@@ -908,12 +911,12 @@ Rectangle {
                                 visible: index < selectedMedia.length
                                         && isVideo(selectedMedia[index])
 
-                                Text {
+                                Image {
                                     anchors.centerIn: parent
-                                    anchors.leftMargin: 2
-                                    text: "▶"
-                                    font.pixelSize: 11
-                                    color: window.bgSurface
+                                    source: "qrc:/emoji/25b6.png"
+                                    sourceSize.width: 11
+                                    sourceSize.height: 11
+                                    fillMode: Image.PreserveAspectFit
                                 }
                             }
 
@@ -928,12 +931,12 @@ Rectangle {
                                 color: "#cc3333"
                                 visible: index < selectedMedia.length
 
-                                Text {
+                                Image {
                                     anchors.centerIn: parent
-                                    text: "✕"
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: window.bgSurface
+                                    source: "qrc:/emoji/2715.png"
+                                    sourceSize.width: 12
+                                    sourceSize.height: 12
+                                    fillMode: Image.PreserveAspectFit
                                 }
 
                                 MouseArea {
@@ -1378,11 +1381,12 @@ Rectangle {
             color: "#80000000"
             z: 10
 
-            Text {
+            Image {
                 anchors.centerIn: parent
-                text: "✕"
-                font.pixelSize: 20
-                color: window.bgSurface
+                source: "qrc:/emoji/2715.png"
+                sourceSize.width: 20
+                sourceSize.height: 20
+                fillMode: Image.PreserveAspectFit
             }
 
             MouseArea {
@@ -1496,11 +1500,17 @@ Rectangle {
                     anchors.rightMargin: 12
                     spacing: 8
 
-                    Text {
+                    Item {
                         Layout.alignment: Qt.AlignVCenter
-                        text: videoPlayer.playbackState === MediaPlayer.PlayingState ? "⏸" : "▶"
-                        font.pixelSize: 22
-                        color: "white"
+                        width: 22; height: 22
+
+                        Image {
+                            anchors.fill: parent
+                            source: videoPlayer.playbackState === MediaPlayer.PlayingState ? "qrc:/emoji/23f8.png" : "qrc:/emoji/25b6.png"
+                            sourceSize.width: 22
+                            sourceSize.height: 22
+                            fillMode: Image.PreserveAspectFit
+                        }
 
                         MouseArea {
                             anchors.fill: parent

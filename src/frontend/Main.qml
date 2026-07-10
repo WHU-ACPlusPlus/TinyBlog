@@ -100,14 +100,40 @@ ApplicationWindow {
             Rectangle {
                 width: 28; height: 28; radius: 6
                 color: maxHover.hovered ? Qt.rgba(1,1,1,0.15) : "transparent"
-                Text { anchors.centerIn: parent; text: window.visibility === Window.Maximized ? "❐" : "□"; font.pixelSize: 12; color: window.textPrimary }
+                Canvas {
+                    anchors.centerIn: parent
+                    width: 13; height: 13
+                    onPaint: {
+                        var ctx = getContext("2d");
+                        ctx.strokeStyle = window.textPrimary;
+                        ctx.lineWidth = 1.5;
+                        if (window.visibility === Window.Maximized) {
+                            ctx.strokeRect(2, 4, 9, 7);
+                            ctx.strokeRect(4, 2, 7, 9);
+                        } else {
+                            ctx.strokeRect(2, 2, 9, 9);
+                        }
+                    }
+                }
                 MouseArea { anchors.fill: parent; onClicked: winHelper.toggleMaximize() }
                 HoverHandler { id: maxHover; cursorShape: Qt.PointingHandCursor }
             }
             Rectangle {
                 width: 28; height: 28; radius: 6
                 color: closeHover.hovered ? "#e55" : "transparent"
-                Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 13; color: closeHover.hovered ? "white" : window.textPrimary }
+                Canvas {
+                    anchors.centerIn: parent
+                    width: 13; height: 13
+                    onPaint: {
+                        var ctx = getContext("2d");
+                        ctx.strokeStyle = closeHover.hovered ? "white" : window.textPrimary;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(2, 2); ctx.lineTo(11, 11);
+                        ctx.moveTo(11, 2); ctx.lineTo(2, 11);
+                        ctx.stroke();
+                    }
+                }
                 MouseArea { anchors.fill: parent; onClicked: winHelper.closeWindow() }
                 HoverHandler { id: closeHover; cursorShape: Qt.PointingHandCursor }
             }
