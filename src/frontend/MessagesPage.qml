@@ -583,7 +583,7 @@ color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.4) : (root.glassMode ? Qt.r
                         Rectangle {
                             Layout.preferredWidth: 36; Layout.preferredHeight: 36; radius: 18
                             color: window.accent
-                            Text { anchors.centerIn: parent; text: "👥"; font.pixelSize: 16 }
+                            Image { anchors.centerIn: parent; source: "qrc:/emoji/1f465.svg"; sourceSize.width: 16; sourceSize.height: 16; fillMode: Image.PreserveAspectFit }
                         }
                         ColumnLayout { Layout.fillWidth: true; spacing: 2
                             Text { text: modelData.name || qsTr("未命名"); font.pixelSize: 14; color: window.textPrimary }

@@ -1125,10 +1125,11 @@ void ApiClient::checkCookie() {
         if (valid) {
             emit cookieCheckComplete(true, obj["user_id"].toInt());
         } else {
-            // Cookie 在服务器端已失效，清除本地认证状态
+            // Cookie 在服务器端已失效，清除本地认证状态。
+            // 不需要弹错误提示 —— clearAuth() 会触发 loggedInChanged，
+            // 用户自然看到登录页。
             clearAuth();
             emit cookieCheckComplete(false, 0);
-            emit errorOccurred("登录已过期，请重新登录");
         }
     });
 }

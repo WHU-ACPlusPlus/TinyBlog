@@ -48,6 +48,7 @@ qt_add_qml_module(appfrontend
         VideoPlayerOverlay.qml
         VideoWallpaperBg.qml
         GlassCard.qml
+        EmojiIcon.qml
 )
 
 # ── 国际化 / 翻译 ──

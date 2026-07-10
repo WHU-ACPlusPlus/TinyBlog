@@ -72,12 +72,26 @@ color: root.softUIMode
                 color: root.convType === "group" ? window.accent : window.divider
 
                 // 群聊图标 / 用户头像文字
-                Text {
+                Loader {
                     anchors.centerIn: parent
-                    text: root.convType === "group" ? "👥" :
-                          (root.targetName ? root.targetName.charAt(0) : "?")
-                    font.pixelSize: root.convType === "group" ? 18 : 16
-                    color: window.textSecondary
+                    sourceComponent: root.convType === "group" ? convGroupIcon : convSingleChar
+                }
+
+                Component { id: convGroupIcon
+                    Image {
+                        source: "qrc:/emoji/1f465.svg"
+                        sourceSize.width: 18
+                        sourceSize.height: 18
+                        fillMode: Image.PreserveAspectFit
+                    }
+                }
+
+                Component { id: convSingleChar
+                    Text {
+                        text: root.targetName ? root.targetName.charAt(0) : "?"
+                        font.pixelSize: 16
+                        color: window.textSecondary
+                    }
                 }
             }
 
