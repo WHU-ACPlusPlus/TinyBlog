@@ -11,6 +11,7 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QSettings>
+#include <QTextDocument>
 #include <QTimer>
 #include <QTranslator>
 
@@ -49,6 +50,7 @@ class ApiClient : public QObject {
     void setQmlEngine(QQmlEngine* engine);                                                                   // 清除 cookie + QSettings
     Q_INVOKABLE QString readFileAsBase64(const QUrl& fileUrl, int maxSizeBytes = 0);                         // 读取文件内容为 base64（可指定最大字节数，超限自动压缩）
     Q_INVOKABLE QString compressImageBase64(const QString& base64Input, int maxSizeBytes = 3145728, int maxDimension = 1920);  // 压缩 base64 图片（目标 ≤3MB base64，最长边 ≤1920px）
+    Q_INVOKABLE QString markdownToHtml(const QString& markdown);  // Markdown → HTML 转换
     Q_INVOKABLE QUrl generateVideoThumbnail(const QUrl& videoUrl);                                           // 用 ffmpeg 抽视频第一帧
     Q_INVOKABLE QString videoThumbnailFromBase64(const QString& b64);                                        // 从 base64 视频数据提取缩略图
     Q_INVOKABLE QString saveBase64ToTempFile(const QString& b64, const QString& ext);                        // base64 → 临时文件 → file:// URL
@@ -207,11 +209,9 @@ class ApiClient : public QObject {
     void groupJoined();
     void groupLeft();
     void groupMessageSent();
-    void groupMessagesReceived(const QList<GroupMessageInfo>& messages);
+    void groupMessagesReceived(const QVariantList& messages);  // QVariantList使QML可读字段
     void groupMembersFetched(const QList<UserInfo>& members);
     void myGroupsFetched(const QList<GroupInfo>& groups);
-
-    void groupMessagesReceived(const QVariantList& messages);  // R4修复: QVariantList使QML可读字段
 
     // ── 用户帖子 ──
     void userPostsFetched(const QVariantList& postIds);  // QList<int> wrapped as QVariantList for QML
@@ -244,6 +244,7 @@ class ApiClient : public QObject {
     // 辅助：构建带 cookie 的 JSON body
     QJsonObject withCookie() const;
     QJsonObject withCookie(const QJsonObject& extra) const;
+    QString renderLatexToImg(const QString& latex, bool block);
 
     QNetworkAccessManager* m_manager;
     QString m_baseUrl;

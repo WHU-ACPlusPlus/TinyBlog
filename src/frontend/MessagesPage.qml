@@ -380,6 +380,7 @@ id: root
             onConversationClicked: function(conv) {
                 console.log("[MessagesPage] 会话点击: id=" + conv.id + " type=" + conv.type)
                 root.currentConversation = conv
+                root.currentMessages = []   // 立即清空旧消息
                 if (conv.type === "private")
                     api.fetchPrivateMessages(conv.target_id, 0, 20)
                 else
@@ -433,6 +434,7 @@ color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.4) : (root.glassMode ? Qt.r
             onConversationClicked: function(conv) {
                 console.log("[MessagesPage.narrow] 会话点击: id=" + conv.id)
                 root.currentConversation = conv
+                root.currentMessages = []   // 立即清空旧消息
                 if (conv.type === "private")
                     api.fetchPrivateMessages(conv.target_id, 0, 20)
                 else

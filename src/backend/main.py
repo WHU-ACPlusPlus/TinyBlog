@@ -621,6 +621,101 @@ def ping():
 
 from pydantic import BaseModel
 
+# ── LaTeX 渲染（本地 matplotlib.mathtext）──
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from io import BytesIO
+import urllib.parse
+import subprocess
+from fastapi.responses import Response
+
+# ── 检测系统 LaTeX ──
+_HAS_LATEX = False
+try:
+    subprocess.run(["pdflatex", "--version"], capture_output=True, timeout=5, check=True)
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}\usepackage{amssymb}'
+    _HAS_LATEX = True
+    print("[latex] 系统 LaTeX 已启用（完整渲染）")
+except:
+    print("[latex] 系统 LaTeX 未安装，使用 matplotlib mathtext 回退")
+
+_IMG_FMT = 'svg'  # SVG 矢量格式
+_IMG_MIME = 'image/svg+xml'
+
+def _render_single(latex: str):
+    """渲染单个 LaTeX 公式为 SVG bytes"""
+    fig, ax = plt.subplots(figsize=(0.01, 0.01))
+    rendered = ax.text(0.5, 0.5, f"${latex}$", fontsize=10,
+                      transform=ax.transAxes, va='center', ha='center')
+    ax.axis('off')
+    fig.canvas.draw()
+    bbox = rendered.get_window_extent(renderer=fig.canvas.get_renderer())
+    bbox = bbox.transformed(fig.dpi_scale_trans.inverted())
+    plt.close(fig)
+
+    pad = 0.04
+    w, h = max(bbox.width + pad, 1), max(bbox.height + pad, 1)
+    fig2, ax2 = plt.subplots(figsize=(w, h))
+    ax2.text(0.5, 0.5, f"${latex}$", fontsize=10,
+           transform=ax2.transAxes, va='center', ha='center', color='black')
+    ax2.axis('off')
+    fig2.patch.set_alpha(0)
+    ax2.patch.set_alpha(0)
+
+    buf = BytesIO()
+    fig2.savefig(buf, format=_IMG_FMT, transparent=True,
+                bbox_inches='tight', pad_inches=0.02)
+    plt.close(fig2)
+    buf.seek(0)
+    return buf.getvalue()
+
+@app.get("/latex-image")
+def latex_image(tex: str = ""):
+    """GET 端点：返回 LaTeX 渲染的 SVG 图片"""
+    latex = urllib.parse.unquote(tex).strip()
+    if not latex:
+        return Response(content=b"", media_type=_IMG_MIME)
+    log_api("GET /latex-image", None, f"len={len(latex)}")
+
+    try:
+        # 有完整 LaTeX 时直接渲染（支持所有环境）
+        if _HAS_LATEX:
+            img_bytes = _render_single(latex)
+            log_api("GET /latex-image", None, "", f"OK tex {len(img_bytes)} bytes")
+            return Response(content=img_bytes, media_type=_IMG_MIME)
+
+        # mathtext 回退：拆解 \begin{aligned}
+        if "\\begin{aligned}" in latex:
+            inner = latex.replace("\\begin{aligned}", "").replace("\\end{aligned}", "")
+            lines = [L.strip() for L in inner.split("\\\\") if L.strip()]
+            if lines:
+                from PIL import Image as PILImage
+                imgs = []
+                for line in lines:
+                    try:
+                        imgs.append(_render_single(line))
+                    except:
+                        imgs.append(None)
+                if any(imgs):
+                    # SVG 垂直拼接
+                    svg_parts = []
+                    for img_bytes in imgs:
+                        if img_bytes:
+                            svg_parts.append(img_bytes.decode('utf-8'))
+                    merged = '\n'.join(svg_parts)
+                    log_api("GET /latex-image", None, "", f"OK aligned {len(lines)} lines")
+                    return Response(content=merged.encode(), media_type=_IMG_MIME)
+
+        # 默认渲染
+        img_bytes = _render_single(latex)
+        log_api("GET /latex-image", None, "", f"OK {len(img_bytes)} bytes")
+        return Response(content=img_bytes, media_type=_IMG_MIME)
+    except Exception as e:
+        log_api("GET /latex-image", None, "", f"ERROR: {str(e)[:80]}")
+        return Response(content=b"", media_type=_IMG_MIME)
+
 class Reg_Req(BaseModel):
     username: str
     password: str

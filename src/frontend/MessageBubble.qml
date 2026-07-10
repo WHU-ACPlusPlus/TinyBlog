@@ -127,11 +127,13 @@ Item {
                     id: bubbleText
                     anchors.centerIn: parent
                     width: parent.width - 24
-                    text: root.content
+                    text: api.markdownToHtml(root.content)
+                    textFormat: Text.RichText
                     font.pixelSize: 14
                     color: root.isMine ? window.bgSurface : window.textPrimary
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     lineHeight: 1.4
+                    onLinkActivated: function(link) { Qt.openUrlExternally(link) }
                 }
             }
         }
