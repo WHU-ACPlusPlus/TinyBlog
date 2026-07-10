@@ -67,13 +67,16 @@ static QString trBackendError(const QString& msg) {
 // ─── 构造与基础设置 ───
 
 ApiClient::ApiClient(QObject* parent)
-    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("https://api.becharmkon.cn"), m_translator(nullptr), m_engine(nullptr), m_currentLocale() {
+    : QObject(parent), m_manager(new QNetworkAccessManager(this)), m_baseUrl("http://127.0.0.1:18999"), m_translator(nullptr), m_engine(nullptr), m_currentLocale() {
     // 启动时从本地存储加载 cookie
     QSettings settings;
     m_cookie = settings.value("auth/cookie").toString();
     QString savedUrl = settings.value("auth/baseUrl").toString();
     if (!savedUrl.isEmpty())
         m_baseUrl = savedUrl;
+    // 确保默认指向本地（首次使用或重置时）
+    if (m_baseUrl.contains("becharmkon.cn"))
+        m_baseUrl = "http://127.0.0.1:18999";
     // 加载壁纸路径
     m_wallpaperPath = settings.value("app/wallpaperPath").toString();
     m_videoWallpaperPath = settings.value("app/videoWallpaperPath").toString();

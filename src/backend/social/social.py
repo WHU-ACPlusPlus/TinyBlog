@@ -340,6 +340,7 @@ def _ensure_social_tables():
     _ensure_moderation_tables()
 
     _social_tables_created = True
+    conn.commit()
 
 
 # ---------------------------------------------------------------------------
