@@ -46,6 +46,7 @@ qt_add_qml_module(appfrontend
         ChatPanel.qml
         MessageBubble.qml
         GlassCard.qml
+        EmojiIcon.qml
 )
 
 # ── 国际化 / 翻译 ──

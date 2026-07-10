@@ -102,9 +102,11 @@ color: root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : 
                         anchors.rightMargin: 8
                         spacing: 6
 
-                        Text {
-                            text: "🔍"
-                            font.pixelSize: 14
+                        Image {
+                            source: "qrc:/emoji/1f50d.svg"
+                            sourceSize.width: 14
+                            sourceSize.height: 14
+                            fillMode: Image.PreserveAspectFit
                         }
 
                         TextInput {
@@ -208,8 +210,8 @@ color: root.softUIMode ? "#f0f2f5" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : 
                 Repeater {
                     model: [
                         { text: qsTr("添加好友"), icon: "＋" },
-                        { text: qsTr("创建群聊"), icon: "👥" },
-                        { text: qsTr("加入群聊"), icon: "🔗" }
+                        { text: qsTr("创建群聊"), icon: "emoji/1f465.svg" },
+                        { text: qsTr("加入群聊"), icon: "emoji/1f517.svg" }
                     ]
 
                     Rectangle {
@@ -225,11 +227,12 @@ color: root.softUIMode
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 12
-                            spacing: 8
-
-                            Text {
-                                text: modelData.icon
-                                font.pixelSize: 14
+                            Image {
+                                anchors.centerIn: parent
+                                source: "qrc:/" + modelData.icon
+                                sourceSize.width: 14
+                                sourceSize.height: 14
+                                fillMode: Image.PreserveAspectFit
                             }
                             Text {
                                 text: modelData.text
@@ -357,9 +360,11 @@ color: root.textSecondary
                     anchors.centerIn: parent
                     spacing: 6
 
-                    Text {
-                        text: "🔄"
-                        font.pixelSize: 14
+                    Image {
+                        source: "qrc:/emoji/1f504.svg"
+                        sourceSize.width: 14
+                        sourceSize.height: 14
+                        fillMode: Image.PreserveAspectFit
                     }
                     Text {
                         text: qsTr("刷新")

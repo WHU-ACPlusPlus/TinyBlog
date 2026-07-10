@@ -50,7 +50,8 @@ ApplicationWindow {
         Text {
             anchors.centerIn: parent
             visible: backgroundImage.status === Image.Error
-            text: "⚠ 背景图片加载失败\n请将图片放入 qrc 或替换路径\n当前使用渐变回退"
+            textFormat: Text.RichText
+            text: "<img src=\'qrc:/emoji/26a0.png\' width=12 height=12 /> 背景图片加载失败<br/>请将图片放入 qrc 或替换路径<br/>当前使用渐变回退"
             color: Qt.rgba(1, 1, 1, 0.6)
             font.pixelSize: 14
             horizontalAlignment: Text.AlignHCenter

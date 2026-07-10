@@ -1,5 +1,56 @@
 <RCC>
     <qresource prefix="/">
         <file>fonts/NotoEmoji-Regular.ttf</file>
+            <file alias="EmojiIcon.qml">EmojiIcon.qml</file>
+</qresource>
+
+        <qresource prefix="/emoji">
+        <file alias="1f310.png">emoji/1f310.png</file>
+        <file alias="1f310.svg">emoji/1f310.svg</file>
+        <file alias="1f319.png">emoji/1f319.png</file>
+        <file alias="1f319.svg">emoji/1f319.svg</file>
+        <file alias="1f3e0.png">emoji/1f3e0.png</file>
+        <file alias="1f3e0.svg">emoji/1f3e0.svg</file>
+        <file alias="1f464.png">emoji/1f464.png</file>
+        <file alias="1f464.svg">emoji/1f464.svg</file>
+        <file alias="1f465.png">emoji/1f465.png</file>
+        <file alias="1f465.svg">emoji/1f465.svg</file>
+        <file alias="1f4ac.png">emoji/1f4ac.png</file>
+        <file alias="1f4ac.svg">emoji/1f4ac.svg</file>
+        <file alias="1f504.png">emoji/1f504.png</file>
+        <file alias="1f504.svg">emoji/1f504.svg</file>
+        <file alias="1f50d.png">emoji/1f50d.png</file>
+        <file alias="1f50d.svg">emoji/1f50d.svg</file>
+        <file alias="1f517.png">emoji/1f517.png</file>
+        <file alias="1f517.svg">emoji/1f517.svg</file>
+        <file alias="1f52e.png">emoji/1f52e.png</file>
+        <file alias="1f52e.svg">emoji/1f52e.svg</file>
+        <file alias="1f5bc.png">emoji/1f5bc.png</file>
+        <file alias="1f5bc.svg">emoji/1f5bc.svg</file>
+        <file alias="1f9f5.png">emoji/1f9f5.png</file>
+        <file alias="1f9f5.svg">emoji/1f9f5.svg</file>
+        <file alias="1fae7.png">emoji/1fae7.png</file>
+        <file alias="1fae7.svg">emoji/1fae7.svg</file>
+        <file alias="23f8.png">emoji/23f8.png</file>
+        <file alias="23f8.svg">emoji/23f8.svg</file>
+        <file alias="25a1.png">emoji/25a1.png</file>
+        <file alias="25a1.svg">emoji/25a1.svg</file>
+        <file alias="25b6.png">emoji/25b6.png</file>
+        <file alias="25b6.svg">emoji/25b6.svg</file>
+        <file alias="25d0.png">emoji/25d0.png</file>
+        <file alias="25d0.svg">emoji/25d0.svg</file>
+        <file alias="2600.png">emoji/2600.png</file>
+        <file alias="2600.svg">emoji/2600.svg</file>
+        <file alias="2661.png">emoji/2661.png</file>
+        <file alias="2661.svg">emoji/2661.svg</file>
+        <file alias="2665.png">emoji/2665.png</file>
+        <file alias="2665.svg">emoji/2665.svg</file>
+        <file alias="26a0.png">emoji/26a0.png</file>
+        <file alias="26a0.svg">emoji/26a0.svg</file>
+        <file alias="2715.png">emoji/2715.png</file>
+        <file alias="2715.svg">emoji/2715.svg</file>
+        <file alias="2750.png">emoji/2750.png</file>
+        <file alias="2750.svg">emoji/2750.svg</file>
     </qresource>
-</RCC>
+  
+  </RCC>

@@ -95,6 +95,7 @@ def contains_blocked(text: str) -> bool:
 conn = sqlite3.connect("main.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
 conn.execute("PRAGMA journal_mode=WAL")
+conn.execute("PRAGMA busy_timeout=5000")
 
 # 线程锁：保护所有数据库操作，防止并发读同一连接导致段错误
 db_lock = threading.Lock()
@@ -146,6 +147,11 @@ def get_user_id(cookie):
     )
     db_commit()
     return row['user_id']
+
+# -- 让 social 模块使用同样的连接 --
+import social.db as _sdb
+_sdb.get_conn = lambda: conn
+_sdb.close_conn()  # close the connection created during social module import
 
 if __name__ == "__main__":
     db_execute("""
@@ -869,21 +875,30 @@ def log_req(body: Log_Req):
             body.password.encode(), log["password_hash"].encode()
             ):
         # 记录失败尝试
-        db_execute("INSERT INTO login_attempts (user_id) VALUES (?)", (log["id"],))
-        db_commit()
+        try:
+            db_execute("INSERT INTO login_attempts (user_id) VALUES (?)", (log["id"],))
+            db_commit()
+        except Exception:
+            pass
         return {"error": "Incorrect password."}
 
     # 记录登录尝试（成功也算一次，防止高频重登）
-    db_execute("INSERT INTO login_attempts (user_id) VALUES (?)", (log["id"],))
-    db_commit()
+    try:
+        db_execute("INSERT INTO login_attempts (user_id) VALUES (?)", (log["id"],))
+        db_commit()
+    except Exception:
+        pass
 
     # 检查：半小时内失败次数 > 3 → 需要图形验证码
-    recent_fails = db_fetchone(
-        """SELECT COUNT(*) as cnt FROM login_attempts
-           WHERE user_id = ? AND attempted_at > datetime('now', '-30 minutes')""",
-        (log["id"],)
-    )
-    need_captcha = (recent_fails["cnt"] if recent_fails else 0) > 3
+    try:
+        recent_fails = db_fetchone(
+            """SELECT COUNT(*) as cnt FROM login_attempts
+               WHERE user_id = ? AND attempted_at > datetime('now', '-30 minutes')""",
+            (log["id"],)
+        )
+        need_captcha = (recent_fails["cnt"] if recent_fails else 0) > 3
+    except Exception:
+        need_captcha = False
 
     # 检查：距上次活跃 > 72 小时 → 需要邮箱验证码
     need_email = False
@@ -898,11 +913,14 @@ def log_req(body: Log_Req):
     # 创建登录会话
     cookie = secrets.token_hex(32)
     captcha_text, captcha_b64 = generate_captcha() if need_captcha else (None, None)
-    db_execute(
-        "INSERT INTO login_sessions (cookie, user_id, captcha_answer, captcha_verified, email_verified) VALUES (?, ?, ?, ?, ?)",
-        (cookie, log["id"], captcha_text, 1 if not need_captcha else 0, 1 if not need_email else 0)
-    )
-    db_commit()
+    try:
+        db_execute(
+            "INSERT INTO login_sessions (cookie, user_id, captcha_answer, captcha_verified, email_verified) VALUES (?, ?, ?, ?, ?)",
+            (cookie, log["id"], captcha_text, 1 if not need_captcha else 0, 1 if not need_email else 0)
+        )
+        db_commit()
+    except Exception:
+        pass
 
     result = {"cookie": cookie, "need_captcha": need_captcha, "need_email": need_email}
     if need_captcha:
@@ -2977,5 +2995,6 @@ def handle_friend_request(body: Handle_Friend_Req_Req):
         log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "rejected")
     db_commit()
     return {"status": "success", "result": body.action}
+
 if __name__ == "__main__":
     uvicorn.run(app, port = 18999, access_log = False)
