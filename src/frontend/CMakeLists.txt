@@ -10,7 +10,7 @@ find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia Ling
 
 qt_standard_project_setup(REQUIRES 6.5)
 
-set(QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android)
+set(QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android CACHE PATH "Android package source directory")
 
 qt_add_executable(appfrontend
     main.cpp
@@ -73,6 +73,13 @@ set_target_properties(appfrontend PROPERTIES
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
+
+    # ── Android 发布信息 ──
+    QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
+    QT_ANDROID_VERSION_CODE 1
+    QT_ANDROID_VERSION_NAME "1.0.0"
+    QT_ANDROID_MIN_SDK_VERSION 26
+    QT_ANDROID_TARGET_SDK_VERSION 33
 )
 
 install(TARGETS appfrontend
