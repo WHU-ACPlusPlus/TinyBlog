@@ -4,6 +4,8 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
+    radius: 12
+    clip: true
 
     // ── 当前页面索引 ──
     property int currentIndex: 0
@@ -168,6 +170,7 @@ Rectangle {
     // ═══════════════════════════════════════════
     Item {
         anchors.fill: parent
+        anchors.topMargin: 32
         visible: width >= 700
 
         // ── 内容区（z:1，全屏）──
@@ -429,6 +432,7 @@ Rectangle {
     // ═══════════════════════════════════════════
     ColumnLayout {
         anchors.fill: parent
+        anchors.topMargin: 32
         spacing: 0
         visible: width < 700
 

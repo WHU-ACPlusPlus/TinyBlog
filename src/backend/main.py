@@ -545,6 +545,101 @@ def get_post_with_media(post_row) -> dict:
 # ── 请求/响应模型 ──
 from pydantic import BaseModel
 
+# ── LaTeX 渲染（本地 matplotlib.mathtext）──
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from io import BytesIO
+import urllib.parse
+import subprocess
+from fastapi.responses import Response
+
+# ── 检测系统 LaTeX ──
+_HAS_LATEX = False
+try:
+    subprocess.run(["pdflatex", "--version"], capture_output=True, timeout=5, check=True)
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}\usepackage{amssymb}'
+    _HAS_LATEX = True
+    print("[latex] 系统 LaTeX 已启用（完整渲染）")
+except:
+    print("[latex] 系统 LaTeX 未安装，使用 matplotlib mathtext 回退")
+
+_IMG_FMT = 'svg'  # SVG 矢量格式
+_IMG_MIME = 'image/svg+xml'
+
+def _render_single(latex: str):
+    """渲染单个 LaTeX 公式为 SVG bytes"""
+    fig, ax = plt.subplots(figsize=(0.01, 0.01))
+    rendered = ax.text(0.5, 0.5, f"${latex}$", fontsize=10,
+                      transform=ax.transAxes, va='center', ha='center')
+    ax.axis('off')
+    fig.canvas.draw()
+    bbox = rendered.get_window_extent(renderer=fig.canvas.get_renderer())
+    bbox = bbox.transformed(fig.dpi_scale_trans.inverted())
+    plt.close(fig)
+
+    pad = 0.04
+    w, h = max(bbox.width + pad, 1), max(bbox.height + pad, 1)
+    fig2, ax2 = plt.subplots(figsize=(w, h))
+    ax2.text(0.5, 0.5, f"${latex}$", fontsize=10,
+           transform=ax2.transAxes, va='center', ha='center', color='black')
+    ax2.axis('off')
+    fig2.patch.set_alpha(0)
+    ax2.patch.set_alpha(0)
+
+    buf = BytesIO()
+    fig2.savefig(buf, format=_IMG_FMT, transparent=True,
+                bbox_inches='tight', pad_inches=0.02)
+    plt.close(fig2)
+    buf.seek(0)
+    return buf.getvalue()
+
+@app.get("/latex-image")
+def latex_image(tex: str = ""):
+    """GET 端点：返回 LaTeX 渲染的 SVG 图片"""
+    latex = urllib.parse.unquote(tex).strip()
+    if not latex:
+        return Response(content=b"", media_type=_IMG_MIME)
+    log_api("GET /latex-image", None, f"len={len(latex)}")
+
+    try:
+        # 有完整 LaTeX 时直接渲染（支持所有环境）
+        if _HAS_LATEX:
+            img_bytes = _render_single(latex)
+            log_api("GET /latex-image", None, "", f"OK tex {len(img_bytes)} bytes")
+            return Response(content=img_bytes, media_type=_IMG_MIME)
+
+        # mathtext 回退：拆解 \begin{aligned}
+        if "\\begin{aligned}" in latex:
+            inner = latex.replace("\\begin{aligned}", "").replace("\\end{aligned}", "")
+            lines = [L.strip() for L in inner.split("\\\\") if L.strip()]
+            if lines:
+                from PIL import Image as PILImage
+                imgs = []
+                for line in lines:
+                    try:
+                        imgs.append(_render_single(line))
+                    except:
+                        imgs.append(None)
+                if any(imgs):
+                    # SVG 垂直拼接
+                    svg_parts = []
+                    for img_bytes in imgs:
+                        if img_bytes:
+                            svg_parts.append(img_bytes.decode('utf-8'))
+                    merged = '\n'.join(svg_parts)
+                    log_api("GET /latex-image", None, "", f"OK aligned {len(lines)} lines")
+                    return Response(content=merged.encode(), media_type=_IMG_MIME)
+
+        # 默认渲染
+        img_bytes = _render_single(latex)
+        log_api("GET /latex-image", None, "", f"OK {len(img_bytes)} bytes")
+        return Response(content=img_bytes, media_type=_IMG_MIME)
+    except Exception as e:
+        log_api("GET /latex-image", None, "", f"ERROR: {str(e)[:80]}")
+        return Response(content=b"", media_type=_IMG_MIME)
+
 class Reg_Req(BaseModel):
     username: str
     password: str
@@ -704,6 +799,11 @@ def unfollow(body: Follow_Req):
     db_execute("DELETE FROM follows WHERE follower_id = ? AND following_id = ?",
             (user_id, body.followee_id)
             )
+    # 同时隐藏与该用户的会话
+    db_execute(
+        "UPDATE conversations SET is_hidden = 1 WHERE user_id = ? AND type = 'private' AND target_id = ?",
+        (user_id, body.followee_id)
+    )
     db_commit()
     return {"status": "success"}
 
@@ -849,6 +949,42 @@ def send_msg(body: Send_Msg):
             )
     if not existence:
         return {"error": "Bad `to_whom_id`"}
+    # ── YFunction：空消息检查 ──
+    if not body.content:
+        log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Empty message")
+        return {"error": "Empty message not allowed."}
+    # ── YFunction：敏感词检查 ──
+    if contains_blocked(body.content):
+        log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "blocked")
+        return {"error": "消息包含不允许的内容"}
+    # ── 单向关注限制：对方未关注我且未回复 → 只能发1条 ──
+    mutual = db_fetchone("""
+        SELECT 1 FROM following f1
+        JOIN following f2 ON f1.followee = f2.follower AND f1.follower = f2.followee
+        WHERE f1.follower = ? AND f1.followee = ?
+    """, (user_id, body.to_whom_id))
+    if not mutual:
+        # 对方是否给我发过消息（即已回复）
+        replied = db_fetchone(
+            "SELECT 1 FROM offline_messages WHERE sender_id = ? AND receiver_id = ?",
+            (body.to_whom_id, user_id)
+        )
+        if not replied:
+            # 我是否已给对方发过消息
+            sent_count = db_fetchone(
+                "SELECT COUNT(*) AS cnt FROM offline_messages WHERE sender_id = ? AND receiver_id = ?",
+                (user_id, body.to_whom_id)
+            )
+            already_sent = sent_count["cnt"] if sent_count else 0
+            if already_sent >= 1:
+                log_api("POST /send-msg", user_id,
+                        f"to={body.to_whom_id} one_way_limit sent={already_sent}", "blocked: 单向限制")
+                return {"error": "对方尚未回复，只能发送一条消息。请等待对方回复后再发送。"}
+            log_api("POST /send-msg", user_id,
+                    f"to={body.to_whom_id} one_way(1st msg)", "allowed")
+        else:
+            log_api("POST /send-msg", user_id,
+                    f"to={body.to_whom_id} one_way(replied)", "allowed")
     # 双写：offline_messages（旧 TinyBlog）+ private_messages（LYC 会话系统）
     db_execute("INSERT INTO offline_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
             (user_id, body.to_whom_id, body.content,)
@@ -1272,6 +1408,11 @@ def send_group_msg(body: Send_Group_Msg_Req):
         return {"error": "You are not in this group."}
     if not body.content:
         return {"error": "Empty message not allowed."}
+    if contains_blocked(body.content):
+        log_api("POST /send-group-msg", user_id, f"group={body.group_id}", "blocked")
+        return {"error": "消息包含不允许的内容"}
+
+    # 1. 插入群消息
     db_execute("INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)",
             (body.group_id, user_id, body.content)
             )
@@ -2034,5 +2175,179 @@ def get_group_detail(body: GroupDetailReq):
         "members": member_list,
     }
 
+# ── 补充：POST /update-group（更新群名称/头像，仅群主可操作）──
+
+@app.post("/update-group")
+def update_group(body: Update_Group_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /update-group", None, f"group={body.group_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    group = db_fetchone(
+            "SELECT id, owner_id FROM groups WHERE id = ?",
+            (body.group_id,)
+            )
+    if not group:
+        log_api("POST /update-group", user_id, f"group={body.group_id}", "Group not exist")
+        return {"error": "Group not exist."}
+    if group["owner_id"] != user_id:
+        log_api("POST /update-group", user_id, f"group={body.group_id}", "Not owner")
+        return {"error": "Only group owner can update group info."}
+    changes = []
+    if body.name:
+        db_execute(
+                "UPDATE groups SET name = ? WHERE id = ?",
+                (body.name, body.group_id)
+                )
+        changes.append("name")
+    if body.avatar:
+        db_execute(
+                "UPDATE groups SET avatar = ? WHERE id = ?",
+                (body.avatar, body.group_id)
+                )
+        changes.append("avatar")
+    db_commit()
+    log_api("POST /update-group", user_id, f"group={body.group_id}", f"updated: {','.join(changes) if changes else 'nothing'}")
+    return {"status": "success"}
+
+# =============================================================================
+# 好友申请系统 (BUG 1 修复)
+# =============================================================================
+
+class Send_Friend_Req_Req(BaseModel):
+    cookie: str
+    to_user_id: int
+
+@app.post("/send-friend-request")
+def send_friend_request(body: Send_Friend_Req_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /send-friend-request", None, f"to={body.to_user_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    if user_id == body.to_user_id:
+        log_api("POST /send-friend-request", user_id, "to=self", "Cannot friend yourself")
+        return {"error": "Cannot send friend request to yourself."}
+    target = db_fetchone("SELECT id FROM users WHERE id = ?", (body.to_user_id,))
+    if not target:
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "User not exist")
+        return {"error": "User not exist."}
+    # 检查是否已是好友（双向关注）
+    mutual = db_fetchone("""
+        SELECT 1 FROM following f1
+        WHERE f1.follower = ? AND f1.followee = ?
+        INTERSECT
+        SELECT 1 FROM following f2
+        WHERE f2.follower = ? AND f2.followee = ?
+    """, (user_id, body.to_user_id, body.to_user_id, user_id))
+    if mutual:
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "Already friends")
+        return {"error": "Already friends."}
+    # 检查是否已有待处理申请
+    existing = db_fetchone(
+        "SELECT id, status FROM friend_requests WHERE from_user_id = ? AND to_user_id = ?",
+        (user_id, body.to_user_id)
+    )
+    if existing:
+        if existing["status"] == "pending":
+            log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "Request already pending")
+            return {"error": "Friend request already sent."}
+        # 之前被拒绝过，允许重新发送：更新状态
+        db_execute(
+            "UPDATE friend_requests SET status = 'pending', created_at = datetime('now') WHERE id = ?",
+            (existing["id"],)
+        )
+        db_commit()
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "request re-sent")
+        return {"status": "success", "request_id": existing["id"]}
+    db_execute(
+        "INSERT INTO friend_requests (from_user_id, to_user_id) VALUES (?, ?)",
+        (user_id, body.to_user_id)
+    )
+    db_commit()
+    log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", f"request_id={db_lastrowid()}")
+    return {"status": "success", "request_id": db_lastrowid()}
+
+class Get_Friend_Reqs_Req(BaseModel):
+    cookie: str
+
+@app.post("/get-friend-requests")
+def get_friend_requests(body: Get_Friend_Reqs_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /get-friend-requests", None, "", "Bad cookie")
+        return {"error": "Bad cookie."}
+    # 收到的申请
+    incoming = db_fetchall("""
+        SELECT fr.id, fr.from_user_id, u.username, u.nickname, u.avatar, fr.status, fr.created_at
+        FROM friend_requests fr
+        JOIN users u ON u.id = fr.from_user_id
+        WHERE fr.to_user_id = ? AND fr.status = 'pending'
+        ORDER BY fr.created_at DESC
+    """, (user_id,))
+    # 发出的申请
+    outgoing = db_fetchall("""
+        SELECT fr.id, fr.to_user_id, u.username, u.nickname, u.avatar, fr.status, fr.created_at
+        FROM friend_requests fr
+        JOIN users u ON u.id = fr.to_user_id
+        WHERE fr.from_user_id = ?
+        ORDER BY fr.created_at DESC
+    """, (user_id,))
+    log_api("POST /get-friend-requests", user_id, "",
+            f"incoming={len(incoming)} outgoing={len(outgoing)}")
+    return {
+        "incoming": [dict(r) for r in incoming],
+        "outgoing": [dict(r) for r in outgoing]
+    }
+
+class Handle_Friend_Req_Req(BaseModel):
+    cookie: str
+    request_id: int
+    action: str   # "accept" | "reject"
+
+@app.post("/handle-friend-request")
+def handle_friend_request(body: Handle_Friend_Req_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /handle-friend-request", None, f"req={body.request_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    if body.action not in ("accept", "reject"):
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", f"Bad action: {body.action}")
+        return {"error": "Action must be 'accept' or 'reject'."}
+    req = db_fetchone(
+        "SELECT id, from_user_id, to_user_id, status FROM friend_requests WHERE id = ?",
+        (body.request_id,)
+    )
+    if not req:
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "Request not found")
+        return {"error": "Friend request not found."}
+    if req["to_user_id"] != user_id:
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "Not your request")
+        return {"error": "This request is not for you."}
+    if req["status"] != "pending":
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", f"Already {req['status']}")
+        return {"error": f"Request already {req['status']}."}
+    if body.action == "accept":
+        # 双向关注 → 成为好友
+        db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
+                   (req["from_user_id"], req["to_user_id"]))
+        db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
+                   (req["to_user_id"], req["from_user_id"]))
+        db_execute("UPDATE friend_requests SET status = 'accepted' WHERE id = ?",
+                   (body.request_id,))
+        # 为双方创建会话记录
+        now = _beijing_time()
+        db_execute(
+            "INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count, is_hidden) VALUES (?, 'private', ?, '你们已成为好友', ?, 0, 0)",
+            (req["from_user_id"], req["to_user_id"], now))
+        db_execute(
+            "INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count, is_hidden) VALUES (?, 'private', ?, '你们已成为好友', ?, 0, 0)",
+            (req["to_user_id"], req["from_user_id"], now))
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "accepted")
+    else:
+        db_execute("UPDATE friend_requests SET status = 'rejected' WHERE id = ?",
+                   (body.request_id,))
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "rejected")
+    db_commit()
+    return {"status": "success", "result": body.action}
 if __name__ == "__main__":
     uvicorn.run(app, port = 18999)

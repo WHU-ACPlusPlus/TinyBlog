@@ -9,6 +9,39 @@
 #include <QIcon>
 #include "api_client.h"
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "user32.lib")
+#endif
+
+// ── 窗口操作辅助类 ──
+class WindowHelper : public QObject {
+    Q_OBJECT
+    QQuickWindow *m_window;
+public:
+    WindowHelper(QQuickWindow *w, QObject *p = nullptr) : QObject(p), m_window(w) {}
+    Q_INVOKABLE void minimize() {
+        if (m_window) {
+#ifdef Q_OS_WIN
+            ShowWindow(reinterpret_cast<HWND>(m_window->winId()), SW_MINIMIZE);
+#else
+            m_window->showMinimized();
+#endif
+        }
+    }
+    Q_INVOKABLE void toggleMaximize() {
+        if (m_window) {
+            if (m_window->visibility() == QWindow::Maximized)
+                m_window->showNormal();
+            else
+                m_window->showMaximized();
+        }
+    }
+    Q_INVOKABLE void closeWindow() { if (m_window) m_window->close(); }
+};
+
 int main(int argc, char *argv[])
 {
     // 精确分数缩放，避免高分屏下模糊
@@ -57,5 +90,28 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection);
     engine.loadFromModule("frontend", "Main");
 
+    // ── 窗口辅助：DWM 圆角 + 最小化/最大化/关闭 ──
+    {
+        const auto roots = engine.rootObjects();
+        if (!roots.isEmpty()) {
+            if (auto *window = qobject_cast<QQuickWindow*>(roots.first())) {
+#ifdef Q_OS_WIN
+                HWND hwnd = reinterpret_cast<HWND>(window->winId());
+                const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+                const int DWMWCP_ROUND = 2;
+                DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+                                      &DWMWCP_ROUND, sizeof(DWMWCP_ROUND));
+                MARGINS margins = {-1, -1, -1, -1};
+                DwmExtendFrameIntoClientArea(hwnd, &margins);
+                window->setColor(Qt::transparent);
+#endif
+                engine.rootContext()->setContextProperty("winHelper",
+                    new WindowHelper(window, &app));
+            }
+        }
+    }
+
     return QGuiApplication::exec();
 }
+
+#include "main.moc"

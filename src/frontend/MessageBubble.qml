@@ -105,13 +105,21 @@ Item {
                 Layout.preferredWidth: Math.min(bubbleText.implicitWidth + 24, (parent ? parent.parent.width : 300) - 80)
                 Layout.preferredHeight: bubbleText.implicitHeight + 20
                 Layout.alignment: root.isMine ? Qt.AlignRight : Qt.AlignLeft
-                color: root.isMine ? window.accent : window.bgSurface
+                color: root.isMine
+                    ? window.accent
+                    : (window.darkMode
+                        ? Qt.rgba(1, 1, 1, 0.08)
+                        : Qt.rgba(0, 0, 0, 0.04))
                 radius: 12
 
                 Rectangle {
                     anchors.fill: parent; radius: 12
                     color: "transparent"
-                    border.color: root.isMine ? "transparent" : window.border
+                    border.color: root.isMine
+                        ? "transparent"
+                        : (window.darkMode
+                            ? Qt.rgba(1, 1, 1, 0.12)
+                            : Qt.rgba(0, 0, 0, 0.08))
                     border.width: root.isMine ? 0 : 0.5
                 }
 
@@ -119,11 +127,13 @@ Item {
                     id: bubbleText
                     anchors.centerIn: parent
                     width: parent.width - 24
-                    text: root.content
+                    text: api.markdownToHtml(root.content)
+                    textFormat: Text.RichText
                     font.pixelSize: 14
                     color: root.isMine ? window.bgSurface : window.textPrimary
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     lineHeight: 1.4
+                    onLinkActivated: function(link) { Qt.openUrlExternally(link) }
                 }
             }
         }
