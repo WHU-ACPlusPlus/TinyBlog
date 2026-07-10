@@ -716,6 +716,54 @@ def latex_image(tex: str = ""):
         log_api("GET /latex-image", None, "", f"ERROR: {str(e)[:80]}")
         return Response(content=b"", media_type=_IMG_MIME)
 
+@app.get("/video-play-url")
+def video_play_url(bvid: str = "", cid: str = ""):
+    """GET 端点：获取 B站/视频直链 URL（内嵌播放用）"""
+    import urllib.request
+    import json as _json
+    if not bvid:
+        return {"error": "bvid required"}
+    if not cid:
+        # 没有 cid 时，先通过 view API 获取
+        view_url = f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}"
+        try:
+            vr = urllib.request.Request(view_url, headers={
+                "Referer": "https://www.bilibili.com",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            })
+            with urllib.request.urlopen(vr, timeout=5) as resp:
+                vdata = _json.loads(resp.read().decode())
+            cid = str(vdata.get("data", {}).get("cid", 0))
+        except Exception as e:
+            log_api("GET /video-play-url", None, f"bvid={bvid}", f"view API ERROR: {str(e)[:60]}")
+            return {"error": f"Failed to get cid: {e}"}
+
+    play_url = f"https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}&qn=80&fnval=1&fourk=1"
+    log_api("GET /video-play-url", None, f"bvid={bvid} cid={cid}", "")
+    try:
+        pr = urllib.request.Request(play_url, headers={
+            "Referer": "https://www.bilibili.com",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        with urllib.request.urlopen(pr, timeout=8) as resp:
+            pdata = _json.loads(resp.read().decode())
+        durl = pdata.get("data", {}).get("durl", [])
+        if durl and len(durl) > 0:
+            video_url = durl[0].get("url", "")
+            # 提取标题
+            log_api("GET /video-play-url", None, "", f"OK {len(video_url)} bytes url")
+            return {"url": video_url, "format": "flv", "bvid": bvid, "cid": cid}
+        dash = pdata.get("data", {}).get("dash", {})
+        if dash:
+            videos = dash.get("video", [])
+            if videos:
+                return {"url": videos[0].get("baseUrl", ""), "format": "mp4", "bvid": bvid, "cid": cid}
+        log_api("GET /video-play-url", None, "", f"no playable url in response")
+        return {"error": "No playable URL found"}
+    except Exception as e:
+        log_api("GET /video-play-url", None, "", f"ERROR: {str(e)[:80]}")
+        return {"error": str(e)}
+
 class Reg_Req(BaseModel):
     username: str
     password: str

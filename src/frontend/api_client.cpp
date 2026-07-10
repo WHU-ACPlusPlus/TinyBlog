@@ -142,6 +142,96 @@ QString ApiClient::markdownToHtml(const QString& markdown) {
 
     QString processed = markdown;
     QStringList latexReplacements;
+    QStringList mediaReplacements; // 图片替换
+    QStringList videoReplacements; // iframe/B站视频卡片替换
+
+    // ── 预处理: iframe 嵌入视频 → 可点击视频卡片 ──
+    {
+        static QRegularExpression iframeRe(R"(<iframe[^>]*src\s*=\s*["']([^"']+)["'][^>]*>(?:</iframe>)?)",
+            QRegularExpression::CaseInsensitiveOption);
+        int off = 0;
+        auto ifIt = iframeRe.globalMatch(processed);
+        while (ifIt.hasNext()) {
+            auto m = ifIt.next();
+            QString src = m.captured(1);
+            QString ph = QString("VIDEOPLACEHOLDER%1").arg(videoReplacements.size());
+            // 检测 B站 — 提取 bvid 和 cid
+            static QRegularExpression bvRe(R"(bilibili\.com.*/(BV[a-zA-Z0-9]+))");
+            static QRegularExpression cidRe(R"([&?]cid=(\d+))");
+            auto bvMatch = bvRe.match(src);
+            if (bvMatch.hasMatch()) {
+                QString bv = bvMatch.captured(1);
+                QString cid;
+                auto cidMatch = cidRe.match(src);
+                if (cidMatch.hasMatch()) cid = cidMatch.captured(1);
+                QString playLink = QString("bilibili://%1/%2").arg(bv, cid);
+                videoReplacements.append(
+                    QString("<a href='%1' style='text-decoration:none;color:inherit;'>"
+                            "<div style='background:#fb7299;color:#fff;padding:10px 14px;border-radius:10px;"
+                            "display:inline-block;margin:4px 0;'>"
+                            "🎬 <b>B站视频</b> %2 &nbsp;▶"
+                            "</div></a>")
+                    .arg(playLink, bv));
+            } else {
+                // 通用视频链接
+                videoReplacements.append(
+                    QString("<a href='%1' style='text-decoration:none;color:inherit;'>"
+                            "<div style='background:#4a4a4a;color:#e0e0e0;padding:10px 14px;border-radius:10px;"
+                            "display:inline-block;margin:4px 0;'>"
+                            "🎬 <b>%2</b> &nbsp;▶"
+                            "</div></a>")
+                    .arg(src,
+                         src.length() > 60 ? (src.left(57) + "...") : src));
+            }
+            processed.replace(m.capturedStart() + off, m.capturedLength(), ph);
+            off += ph.length() - m.capturedLength();
+        }
+    }
+
+    // ── 预处理: 裸 B站链接 → 视频卡片 ──
+    {
+        static QRegularExpression bilibiliUrl(R"(\bhttps?://(?:www\.)?bilibili\.com/video/(BV[a-zA-Z0-9]+)(?:\?[^\s<>]*)?\b)");
+        int off = 0;
+        auto bIt = bilibiliUrl.globalMatch(processed);
+        while (bIt.hasNext()) {
+            auto m = bIt.next();
+            QString url = m.captured(0);
+            QString bv = m.captured(1);
+            QString ph = QString("VIDEOPLACEHOLDER%1").arg(videoReplacements.size());
+            QString playLink = QString("bilibili://%1/").arg(bv);  // 无cid，后端自动获取
+            videoReplacements.append(
+                QString("<a href='%1' style='text-decoration:none;color:inherit;'>"
+                        "<div style='background:#fb7299;color:#fff;padding:10px 14px;border-radius:10px;"
+                        "display:inline-block;margin:4px 0;'>"
+                        "🎬 <b>B站视频</b> %2 &nbsp;▶"
+                        "</div></a>")
+                .arg(playLink, bv));
+            processed.replace(m.capturedStart() + off, m.capturedLength(), ph);
+            off += ph.length() - m.capturedLength();
+        }
+    }
+
+    // ── 预处理: YouTube 链接 → 视频卡片 ──
+    {
+        static QRegularExpression ytUrl(R"(\bhttps?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*)?\b)");
+        int off = 0;
+        auto yIt = ytUrl.globalMatch(processed);
+        while (yIt.hasNext()) {
+            auto m = yIt.next();
+            QString url = m.captured(0);
+            QString vid = m.captured(1);
+            QString ph = QString("VIDEOPLACEHOLDER%1").arg(videoReplacements.size());
+            videoReplacements.append(
+                QString("<a href='%1' style='text-decoration:none;color:inherit;'>"
+                        "<div style='background:#ff0000;color:#fff;padding:10px 14px;border-radius:10px;"
+                        "display:inline-block;margin:4px 0;'>"
+                        "🎬 <b>YouTube</b> %2 &nbsp;▶"
+                        "</div></a>")
+                .arg(url, vid));
+            processed.replace(m.capturedStart() + off, m.capturedLength(), ph);
+            off += ph.length() - m.capturedLength();
+        }
+    }
 
     // ── $$...$$ 块级公式 ──
     static QRegularExpression latexBlock(R"(\$\$(.+?)\$\$)",
@@ -172,15 +262,58 @@ QString ApiClient::markdownToHtml(const QString& markdown) {
         offset += ph.length() - match.capturedLength();
     }
 
+    // ── MD 图片 ![alt](url) → 下载嵌入 ──
+    static QRegularExpression mdImage(R"(!\[([^\]]*)\]\(([^)]+)\))");
+    offset = 0;
+    auto it3 = mdImage.globalMatch(processed);
+    while (it3.hasNext()) {
+        auto match = it3.next();
+        QString alt = match.captured(1);
+        QString url = match.captured(2);
+        QString ph = QString("MDIMGPLACEHOLDER%1").arg(mediaReplacements.size());
+        // 同步下载图片
+        QByteArray imgData;
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            QNetworkRequest req{QUrl(url)};
+            req.setTransferTimeout(3000);
+            QNetworkReply* reply = m_manager->get(req);
+            QEventLoop loop;
+            QTimer::singleShot(3000, &loop, &QEventLoop::quit);
+            connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+            loop.exec();
+            if (reply->error() == QNetworkReply::NoError && reply->bytesAvailable() > 100)
+                imgData = reply->readAll();
+            reply->deleteLater();
+        }
+        if (imgData.isEmpty()) {
+            mediaReplacements.append(QString("<span style='color:#888'>[%1]</span>").arg(alt.isEmpty() ? url : alt));
+        } else {
+            QString b64 = QString::fromUtf8(imgData.toBase64());
+            QString mime = "image/png";
+            if (url.endsWith(".jpg") || url.endsWith(".jpeg")) mime = "image/jpeg";
+            else if (url.endsWith(".gif")) mime = "image/gif";
+            else if (url.endsWith(".webp")) mime = "image/webp";
+            else if (url.endsWith(".svg")) mime = "image/svg+xml";
+            mediaReplacements.append(
+                QString("<img src='data:%1;base64,%2' alt='%3' style='max-width:100%;border-radius:4px'>")
+                .arg(mime, b64, alt));
+        }
+        processed.replace(match.capturedStart() + offset, match.capturedLength(), ph);
+        offset += ph.length() - match.capturedLength();
+    }
+
     // ── Markdown → HTML ──
     QTextDocument doc;
     doc.setMarkdown(processed);
     QString html = doc.toHtml();
 
-    // ── 替换占位符（纯文本不受 setMarkdown 影响）──
-    for (int i = 0; i < latexReplacements.size(); i++) {
+    // ── 替换占位符 ──
+    for (int i = 0; i < latexReplacements.size(); i++)
         html.replace(QString("LATEXPLACEHOLDER%1").arg(i), latexReplacements[i]);
-    }
+    for (int i = 0; i < mediaReplacements.size(); i++)
+        html.replace(QString("MDIMGPLACEHOLDER%1").arg(i), mediaReplacements[i]);
+    for (int i = 0; i < videoReplacements.size(); i++)
+        html.replace(QString("VIDEOPLACEHOLDER%1").arg(i), videoReplacements[i]);
 
     return html;
 }
@@ -701,6 +834,43 @@ QString ApiClient::saveBase64ToTempFile(const QString& b64, const QString& ext) 
     return QUrl::fromLocalFile(path).toString();
 }
 
+void ApiClient::fetchVideoPlayUrl(const QString& bvid, const QString& cid) {
+    if (bvid.isEmpty()) {
+        emit videoPlayUrlReady(bvid, {}, {});
+        return;
+    }
+
+    // 构造请求 URL
+    QString apiUrl = m_baseUrl + "/video-play-url?bvid=" + bvid;
+    if (!cid.isEmpty())
+        apiUrl += "&cid=" + cid;
+
+    QNetworkRequest req{QUrl(apiUrl)};
+    req.setTransferTimeout(15000);
+
+    QNetworkReply* reply = m_manager->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, bvid]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "[fetchVideoPlayUrl] network error:" << reply->errorString();
+            emit videoPlayUrlReady(bvid, {}, {});
+            return;
+        }
+        QByteArray data = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        QJsonObject obj = doc.object();
+        if (obj.contains("error")) {
+            qWarning() << "[fetchVideoPlayUrl] API error:" << obj["error"].toString();
+            emit videoPlayUrlReady(bvid, {}, {});
+            return;
+        }
+        QString url = obj["url"].toString();
+        QString fmt = obj["format"].toString();
+        qDebug() << "[fetchVideoPlayUrl] got URL for" << bvid << "format:" << fmt;
+        emit videoPlayUrlReady(bvid, url, fmt);
+    });
+}
+
 void ApiClient::extractVideoThumbnailAsync(const QString& postId, int mediaIndex, const QString& b64) {
     if (b64.isEmpty()) {
         emit videoThumbnailExtracted(postId, mediaIndex, {});
@@ -831,7 +1001,7 @@ QJsonObject ApiClient::withCookie(const QJsonObject& extra) const {
 
 QNetworkReply* ApiClient::postJson(const QString& endpoint,
                                    const QJsonObject& body) {
-    QNetworkRequest req(QUrl(m_baseUrl + endpoint));
+    QNetworkRequest req{QUrl(m_baseUrl + endpoint)};
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setTransferTimeout(60000);  // 60s 超时（上传媒体需要更长时间）
 
