@@ -1231,6 +1231,53 @@ void ApiClient::unfollow(int followee_id) {
     });
 }
 
+void ApiClient::block(int user_id) {
+    QJsonObject body = withCookie({{"blocked_id", user_id}});
+    QNetworkReply* reply = postJson("/block", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit userBlocked();
+    });
+}
+
+void ApiClient::unblock(int user_id) {
+    QJsonObject body = withCookie({{"blocked_id", user_id}});
+    QNetworkReply* reply = postJson("/unblock", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit userUnblocked();
+    });
+}
+
+void ApiClient::fetchBlocked() {
+    QJsonObject body = withCookie();
+    QNetworkReply* reply = postJson("/get-blocked", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        QVariantList blocked;
+        for (const auto& v : obj["blocked"].toArray())
+            blocked.append(v.toObject().toVariantMap());
+        emit blockedFetched(blocked);
+    });
+}
+
+void ApiClient::socialSearch(const QString& query, int limit) {
+    QJsonObject body = withCookie({{"query", query}, {"limit", limit}});
+    QNetworkReply* reply = postJson("/social/search", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj))
+            return;
+        emit socialSearchDone(obj.toVariantMap());
+    });
+}
+
 // ─── 用户自己的帖子 ───
 
 void ApiClient::fetchUserPosts(int publisher_id) {

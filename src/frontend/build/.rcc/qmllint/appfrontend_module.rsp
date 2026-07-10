@@ -1,0 +1,16 @@
+-I
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build
+-I
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/frontend
+-I
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build
+-I
+D:/ProgramFiles/Qt/6.11.1/mingw_64/qml
+--resource
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/rcc/appfrontend_assets.qrc
+--resource
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/rcc/qmake_frontend.qrc
+--resource
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/rcc/appfrontend_raw_qml_0.qrc
+--module
+frontend

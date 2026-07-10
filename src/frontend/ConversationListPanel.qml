@@ -103,7 +103,7 @@ color: root.softUIMode ? "#c8d0d8" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : 
                         spacing: 6
 
                         Text {
-                            text: "⌕"
+                            text: "🔍"
                             font.pixelSize: 14
                         }
 
