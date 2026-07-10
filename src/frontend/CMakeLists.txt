@@ -8,6 +8,32 @@ set(QT_QML_GENERATE_QMLLS_INI OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS Quick Network QuickDialogs2 Multimedia LinguistTools)
 
+# ── 修复 qmlimportscanner 路径（Android 交叉构建常见问题）──
+# Qt 内部的 tool 依赖解析可能因 QT_HOST_PATH 指向桌面版而:
+#   a) 创建了 IMPORTED 目标但 IMPORTED_LOCATION 含 -NOTFOUND
+#   b) 完全未创建目标（Qt6QmlToolsTargets.cmake 的 find_program 未命中）
+# 两种情况都导致 android 部署 JSON 中出现无效路径，触发 502/构建失败。
+find_program(_qt_qmlimportscanner_bin qmlimportscanner
+    PATHS /usr/bin /usr/lib/qt6 /usr/lib/qt6/bin
+    NO_DEFAULT_PATH)
+if(_qt_qmlimportscanner_bin)
+    if(TARGET Qt6::qmlimportscanner)
+        get_target_property(_qis_loc Qt6::qmlimportscanner IMPORTED_LOCATION)
+        if(NOT _qis_loc OR "${_qis_loc}" MATCHES "NOTFOUND$" OR NOT EXISTS "${_qis_loc}")
+            set_target_properties(Qt6::qmlimportscanner PROPERTIES
+                IMPORTED_LOCATION "${_qt_qmlimportscanner_bin}")
+            message(STATUS "✅ Qt6::qmlimportscanner path corrected: ${_qt_qmlimportscanner_bin}")
+        endif()
+    else()
+        add_executable(Qt6::qmlimportscanner IMPORTED GLOBAL)
+        set_target_properties(Qt6::qmlimportscanner PROPERTIES
+            IMPORTED_LOCATION "${_qt_qmlimportscanner_bin}")
+        message(STATUS "✅ Qt6::qmlimportscanner target created: ${_qt_qmlimportscanner_bin}")
+    endif()
+else()
+    message(WARNING "qmlimportscanner not found. Android build may fail.")
+endif()
+
 qt_standard_project_setup(REQUIRES 6.5)
 
 # ── Android 自定义资源（图标、应用名等）──
