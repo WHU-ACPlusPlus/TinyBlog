@@ -187,14 +187,28 @@ color: root.softUIMode ? "#dce3e9" : (root.glassMode ? Qt.rgba(1, 1, 1, 0.06) : 
                     color: root.currentConversation && root.currentConversation.type === "group"
                            ? window.accent : window.divider
 
-                    Text {
+                    Loader {
                         anchors.centerIn: parent
-                        text: root.currentConversation && root.currentConversation.type === "group"
-                              ? "👥" : (root.currentConversation && root.currentConversation.target_name
-                                       ? root.currentConversation.target_name.charAt(0) : "?")
-                        font.pixelSize: root.currentConversation && root.currentConversation.type === "group"
-                                       ? 16 : 14
-                        color: window.textSecondary
+                        sourceComponent: root.currentConversation && root.currentConversation.type === "group"
+                                      ? groupIcon : singleCharText
+                    }
+
+                    Component { id: groupIcon
+                        Image {
+                            source: "qrc:/emoji/1f465.svg"
+                            sourceSize.width: 16
+                            sourceSize.height: 16
+                            fillMode: Image.PreserveAspectFit
+                        }
+                    }
+
+                    Component { id: singleCharText
+                        Text {
+                            text: root.currentConversation && root.currentConversation.target_name
+                                  ? root.currentConversation.target_name.charAt(0) : "?"
+                            font.pixelSize: 14
+                            color: window.textSecondary
+                        }
                     }
                 }
 
@@ -683,10 +697,12 @@ color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : 
                     radius: 40
                     color: window.accent
 
-                    Text {
+                    Image {
                         anchors.centerIn: parent
-                        text: "👥"
-                        font.pixelSize: 32
+                        source: "qrc:/emoji/1f465.png"
+                        sourceSize.width: 32
+                        sourceSize.height: 32
+                        fillMode: Image.PreserveAspectFit
                     }
                 }
 

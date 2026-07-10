@@ -215,11 +215,12 @@ Rectangle {
                     height: 28
                     radius: 14
                     color: "#00000066"
-                    Text {
+                    Image {
                         anchors.centerIn: parent
-                        text: "✕"
-                        color: window.bgSurface
-                        font.pixelSize: 16
+                        source: "qrc:/emoji/2715.png"
+                        sourceSize.width: 16
+                        sourceSize.height: 16
+                        fillMode: Image.PreserveAspectFit
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -289,10 +290,11 @@ Rectangle {
                             }
                         }
 
-                        Text {
+                        Image {
                             anchors.centerIn: parent
-                            text: "👤"
-                            font.pixelSize: 32
+                            source: "qrc:/emoji/1f464.svg"
+                            sourceSize.width: 32
+                            sourceSize.height: 32
                             visible: !avatarImg.visible
                         }
 
@@ -515,10 +517,12 @@ Rectangle {
                         cache: false
                     }
 
-                    Text {
+                    Image {
                         anchors.centerIn: parent
-                        text: "🖼️"
-                        font.pixelSize: 24
+                        source: "qrc:/emoji/1f5bc.svg"
+                        sourceSize.width: 24
+                        sourceSize.height: 24
+                        fillMode: Image.PreserveAspectFit
                         visible: api.wallpaperPath.length === 0 || wallpaperPreview.status === Image.Error
                     }
                 }
@@ -904,10 +908,11 @@ Rectangle {
                                             }
                                             visible: status === Image.Ready
                                         }
-                                        Text {
+                                        Image {
                                             anchors.centerIn: parent
-                                            text: "👤"
-                                            font.pixelSize: 16
+                                            source: "qrc:/emoji/1f464.svg"
+                                            sourceSize.width: 16
+                                            sourceSize.height: 16
                                             visible: !postAvatarImg.visible
                                         }
                                     }
@@ -1090,10 +1095,11 @@ Rectangle {
                                                  : ""
                                         visible: status === Image.Ready
                                     }
-                                    Text {
+                                    Image {
                                         anchors.centerIn: parent
-                                        text: "👤"
-                                        font.pixelSize: 16
+                                        source: "qrc:/emoji/1f464.svg"
+                                        sourceSize.width: 16
+                                        sourceSize.height: 16
                                         visible: !parent.children[0].visible
                                     }
                                 }
@@ -1238,10 +1244,11 @@ Rectangle {
                                                  : ""
                                         visible: status === Image.Ready
                                     }
-                                    Text {
+                                    Image {
                                         anchors.centerIn: parent
-                                        text: "👤"
-                                        font.pixelSize: 16
+                                        source: "qrc:/emoji/1f464.svg"
+                                        sourceSize.width: 16
+                                        sourceSize.height: 16
                                         visible: !parent.children[0].visible
                                     }
                                 }

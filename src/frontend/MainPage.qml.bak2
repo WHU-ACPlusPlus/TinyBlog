@@ -16,9 +16,7 @@ Rectangle {
     property bool softUIMode: styleMode === 2
 
     // 普通模式下跟随系统主题，其他风格使用固定色板
-    // 视频壁纸激活时透明，让视频透过来
     color: {
-        if (api.videoWallpaperPath.length > 0) return "transparent"
         if (softUIMode) return "#e8edf2"
         if (glassMode)  return "transparent"
         return window.bgSurface
@@ -38,9 +36,9 @@ Rectangle {
 
     // ── 深色模式图标 ──
     function darkIcon() {
-        if (window.darkModeFollowSystem === 1) return "emoji/1f319.svg"
-        if (window.darkModeFollowSystem === 2) return "emoji/2600.svg"
-        return "emoji/25d0.svg"
+        if (window.darkModeFollowSystem === 1) return "🌙"
+        if (window.darkModeFollowSystem === 2) return "☀️"
+        return "◐"
     }
     function darkLabel() {
         if (window.darkModeFollowSystem === 1) return qsTr("深色")
@@ -52,7 +50,7 @@ Rectangle {
     // 风格图标/标签映射
     // ═══════════════════════════════════════════
     function styleIcon(mode) {
-        switch (mode) { case 1: return "emoji/1f52e.svg"; case 2: return "emoji/1fae7.svg"; default: return "emoji/1f3e0.svg" }
+        switch (mode) { case 1: return "🔮"; case 2: return "🫧"; default: return "🏠" }
     }
     function styleLabel(mode) {
         switch (mode) { case 1: return qsTr("玻璃"); case 2: return qsTr("柔和"); default: return qsTr("普通") }
@@ -312,9 +310,9 @@ Rectangle {
                 // ═══════════════════════════════════════
                 Repeater {
                     model: [
-                        { iconSource: "qrc:/emoji/1f310.svg", tip: qsTr("广场") },
-                        { iconSource: "qrc:/emoji/1f4ac.svg", tip: qsTr("消息") },
-                        { iconSource: "qrc:/emoji/1f464.svg", tip: qsTr("我的") }
+                        { icon: "🌐", tip: qsTr("广场") },
+                        { icon: "💬", tip: qsTr("消息") },
+                        { icon: "👤", tip: qsTr("我的") }
                     ]
 
                     Rectangle {
@@ -326,13 +324,21 @@ Rectangle {
                         radius: 14
                         z: 1
 
-                        Image {
+                        Text {
                             id: navIcon
                             anchors.centerIn: parent
-                            source: modelData.iconSource
-                            sourceSize.width: 20
-                            sourceSize.height: 20
-                            fillMode: Image.PreserveAspectFit
+                            text: modelData.icon
+                            font.pixelSize: 20
+                            color: currentIndex === index
+                                    ? (glassMode ? "#ffffff"
+                                       : softUIMode ? "#2d3436"
+                                       : window.bgSurface)
+                                    : (glassMode ? Qt.rgba(1,1,1,0.45)
+                                       : softUIMode ? "#888888"
+                                       : window.textSecondary)
+                            Behavior on color {
+                                ColorAnimation { duration: 200 }
+                            }
                         }
 
                         MouseArea {
@@ -359,12 +365,10 @@ Rectangle {
                     radius: 14
                     visible: root.styleMode === 0
 
-                    Image {
+                    Text {
                         anchors.centerIn: parent
-                        source: "qrc:/" + root.darkIcon()
-                        sourceSize.width: 20
-                        sourceSize.height: 20
-                        fillMode: Image.PreserveAspectFit
+                        text: root.darkIcon()
+                        font.pixelSize: 20
                     }
 
                     MouseArea {
@@ -399,12 +403,10 @@ Rectangle {
                                : window.selectedBg)
                             : "transparent"
 
-                    Image {
+                    Text {
                         anchors.centerIn: parent
-                        source: "qrc:/" + root.styleIcon(root.styleMode)
-                        sourceSize.width: 18
-                        sourceSize.height: 18
-                        fillMode: Image.PreserveAspectFit
+                        text: root.styleIcon(root.styleMode)
+                        font.pixelSize: 18
                     }
 
                     MouseArea {
@@ -476,9 +478,9 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { iconSource: "qrc:/emoji/1f310.svg", label: qsTr("广场") },
-                        { iconSource: "qrc:/emoji/1f4ac.svg", label: qsTr("消息") },
-                        { iconSource: "qrc:/emoji/1f464.svg", label: qsTr("我的") }
+                        { icon: "🌐", label: qsTr("广场") },
+                        { icon: "💬", label: qsTr("消息") },
+                        { icon: "👤", label: qsTr("我的") }
                     ]
 
                     Item {
@@ -489,12 +491,10 @@ Rectangle {
                             anchors.centerIn: parent
                             spacing: 2
 
-                            Image {
+                            Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                source: modelData.iconSource
-                                sourceSize.width: 22
-                                sourceSize.height: 22
-                                fillMode: Image.PreserveAspectFit
+                                text: modelData.icon
+                                font.pixelSize: 22
                             }
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
@@ -523,12 +523,10 @@ Rectangle {
                         anchors.centerIn: parent
                         spacing: 2
 
-                        Image {
+                        Text {
                             Layout.alignment: Qt.AlignHCenter
-                            source: "qrc:/" + root.darkIcon()
-                            sourceSize.width: 22
-                            sourceSize.height: 22
-                            fillMode: Image.PreserveAspectFit
+                            text: root.darkIcon()
+                            font.pixelSize: 22
                         }
                         Text {
                             Layout.alignment: Qt.AlignHCenter
@@ -555,12 +553,10 @@ Rectangle {
                         anchors.centerIn: parent
                         spacing: 2
 
-                        Image {
+                        Text {
                             Layout.alignment: Qt.AlignHCenter
-                            source: "qrc:/" + root.styleIcon(root.styleMode)
-                            sourceSize.width: 22
-                            sourceSize.height: 22
-                            fillMode: Image.PreserveAspectFit
+                            text: root.styleIcon(root.styleMode)
+                            font.pixelSize: 22
                         }
                         Text {
                             Layout.alignment: Qt.AlignHCenter
