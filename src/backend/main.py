@@ -1001,6 +1001,11 @@ def unfollow(body: Follow_Req):
     db_execute("DELETE FROM following WHERE follower = ? AND followee = ?",
             (user_id, body.followee_id)
             )
+    # 同时隐藏与该用户的会话
+    db_execute(
+        "UPDATE conversations SET is_hidden = 1 WHERE user_id = ? AND type = 'private' AND target_id = ?",
+        (user_id, body.followee_id)
+    )
     db_commit()
     return {"status": "success"}
 
@@ -1117,7 +1122,7 @@ def send_msg(body: Send_Msg):
         log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "blocked")
         return {"error": "消息包含不允许的内容"}
 
-        log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Empty message")
+    # 单向关注限制
         return {"error": "Empty message not allowed."}
     # ── 单向关注限制：对方未关注我且未回复 → 只能发1条 ──
     mutual = db_fetchone("""
@@ -1490,7 +1495,6 @@ def send_group_msg(body: Send_Group_Msg_Req):
         log_api("POST /send-group-msg", user_id, f"group={body.group_id}", "blocked")
         return {"error": "消息包含不允许的内容"}
 
-        return {"error": "Empty message not allowed."}
     # 1. 插入群消息
     db_execute("INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)",
             (body.group_id, user_id, body.content)
@@ -2442,6 +2446,14 @@ def handle_friend_request(body: Handle_Friend_Req_Req):
                    (req["to_user_id"], req["from_user_id"]))
         db_execute("UPDATE friend_requests SET status = 'accepted' WHERE id = ?",
                    (body.request_id,))
+        # 为双方创建会话记录
+        now = _beijing_time()
+        db_execute(
+            "INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count, is_hidden) VALUES (?, 'private', ?, '你们已成为好友', ?, 0, 0)",
+            (req["from_user_id"], req["to_user_id"], now))
+        db_execute(
+            "INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count, is_hidden) VALUES (?, 'private', ?, '你们已成为好友', ?, 0, 0)",
+            (req["to_user_id"], req["from_user_id"], now))
         log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "accepted")
     else:
         db_execute("UPDATE friend_requests SET status = 'rejected' WHERE id = ?",

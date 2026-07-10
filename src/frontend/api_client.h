@@ -150,6 +150,11 @@ class ApiClient : public QObject {
     void fetchUserDetail(int user_id);
     void fetchGroupDetail(int group_id);
 
+    // ── 好友申请 ──
+    void sendFriendRequest(int to_user_id);
+    void getFriendRequests();
+    void handleFriendRequest(int request_id, const QString& action);  // "accept" | "reject"
+
    signals:
     // ── 通用信号 ──
     void errorOccurred(const QString& message);
@@ -224,6 +229,11 @@ class ApiClient : public QObject {
     void contactsFetched(const QVariantList& contacts, const QVariantList& followedOnly);
     void userDetailFetched(const QVariantMap& detail);
     void groupDetailFetched(const QVariantMap& detail);
+
+    // ── 好友申请 ──
+    void friendRequestSent();
+    void friendRequestsFetched(const QVariantList& incoming, const QVariantList& outgoing);
+    void friendRequestHandled(const QString& result);
 
    private:
     // 底层工具方法
