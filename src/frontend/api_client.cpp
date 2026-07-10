@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QHash>
 #include <QImage>
@@ -14,7 +15,10 @@
 #include <QNetworkRequest>
 #include <QProcess>
 #include <QQmlEngine>
+#include <QRegularExpression>
 #include <QStandardPaths>
+#include <QTextDocument>
+#include <QTimer>
 #include <QTranslator>
 #include <QUrl>
 #include <QUrlQuery>
@@ -131,6 +135,95 @@ QString ApiClient::wallpaperPath() const { return m_wallpaperPath; }
 
 void ApiClient::clearWallpaper() {
     setWallpaperPath(QString());
+}
+
+QString ApiClient::markdownToHtml(const QString& markdown) {
+    if (markdown.isEmpty()) return "";
+
+    QString processed = markdown;
+    QStringList latexReplacements;
+
+    // ── $$...$$ 块级公式 ──
+    static QRegularExpression latexBlock(R"(\$\$(.+?)\$\$)",
+        QRegularExpression::DotMatchesEverythingOption);
+    int offset = 0;
+    auto it = latexBlock.globalMatch(processed);
+    while (it.hasNext()) {
+        auto match = it.next();
+        QString latex = match.captured(1).trimmed();
+        QString ph = QString("LATEXPLACEHOLDER%1").arg(latexReplacements.size());
+        latexReplacements.append(renderLatexToImg(latex, true));
+        processed.replace(match.capturedStart() + offset, match.capturedLength(), ph);
+        offset += ph.length() - match.capturedLength();
+    }
+
+    // ── $...$ 行内公式 ──
+    static QRegularExpression latexInline(R"(\$(.+?)\$)");
+    offset = 0;
+    auto it2 = latexInline.globalMatch(processed);
+    while (it2.hasNext()) {
+        auto match = it2.next();
+        if (match.capturedStart() > 0 && processed[match.capturedStart() + offset - 1] == '$')
+            continue;
+        QString latex = match.captured(1).trimmed();
+        QString ph = QString("LATEXPLACEHOLDER%1").arg(latexReplacements.size());
+        latexReplacements.append(renderLatexToImg(latex, false));
+        processed.replace(match.capturedStart() + offset, match.capturedLength(), ph);
+        offset += ph.length() - match.capturedLength();
+    }
+
+    // ── Markdown → HTML ──
+    QTextDocument doc;
+    doc.setMarkdown(processed);
+    QString html = doc.toHtml();
+
+    // ── 替换占位符（纯文本不受 setMarkdown 影响）──
+    for (int i = 0; i < latexReplacements.size(); i++) {
+        html.replace(QString("LATEXPLACEHOLDER%1").arg(i), latexReplacements[i]);
+    }
+
+    return html;
+}
+
+QString ApiClient::renderLatexToImg(const QString& latex, bool block) {
+    // 缓存：避免同一公式重复渲染
+    static QHash<QString, QString> cache;
+    QString cacheKey = QString("%1|%2").arg(block ? 1 : 0).arg(latex);
+    if (cache.contains(cacheKey))
+        return cache[cacheKey];
+
+    // 请求后端渲染
+    QByteArray encoded = QUrl::toPercentEncoding(latex);
+    QUrl url(QString("%1/latex-image?tex=%2").arg(m_baseUrl, QString::fromUtf8(encoded)));
+    QNetworkRequest req(url);
+    req.setTransferTimeout(1500);
+
+    QNetworkReply* reply = m_manager->get(req);
+    QEventLoop loop;
+    QTimer::singleShot(1500, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    QString result;
+    // 成功：图片 >200 字节才有效
+    if (reply->error() == QNetworkReply::NoError && reply->bytesAvailable() > 200) {
+        QByteArray imgData = reply->readAll();
+        // 检测 SVG / PNG
+        bool isSvg = imgData.startsWith("<svg") || imgData.startsWith("<?xml");
+        QString mime = isSvg ? "image/svg+xml" : "image/png";
+        QString b64 = QString::fromUtf8(imgData.toBase64());
+        result = block
+            ? QString("<div align='center'><img src='data:%1;base64,%2' style='max-width:100%;margin:2px 0'></div>").arg(mime, b64)
+            : QString("<img src='data:%1;base64,%2' style='vertical-align:middle;max-height:1.4em'>").arg(mime, b64);
+    } else {
+        // 失败 → 源码回退
+        result = block
+            ? QString("<div style='text-align:center;padding:4px;background:rgba(128,128,128,0.06);border-radius:6px;font-family:monospace;font-size:13px'>%1</div>").arg(latex.toHtmlEscaped())
+            : QString("<code style='font-family:monospace;font-size:13px'>%1</code>").arg(latex.toHtmlEscaped());
+    }
+    reply->deleteLater();
+    cache[cacheKey] = result;
+    return result;
 }
 
 void ApiClient::setLanguage(const QString& locale) {
@@ -1330,9 +1423,10 @@ void ApiClient::receiveGroupMessages(int group_id, int count) {
             return;
         }
 
-        QList<GroupMessageInfo> msgs;
+        // R4修复: 转为 QVariantList 确保 QML 可读
+        QVariantList msgs;
         for (const auto& v : obj["messages"].toArray())
-            msgs.append(groupMsgFromJson(v.toObject()));
+            msgs.append(v.toObject().toVariantMap());
         emit groupMessagesReceived(msgs);
     });
 }
@@ -1521,3 +1615,38 @@ void ApiClient::fetchGroupDetail(int group_id) {
         emit groupDetailFetched(obj.toVariantMap());
     });
 }
+
+// ─── 好友申请 ───
+
+void ApiClient::sendFriendRequest(int to_user_id) {
+    QJsonObject body = withCookie({{"to_user_id", to_user_id}});
+    QNetworkReply* reply = postJson("/send-friend-request", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) return;
+        emit friendRequestSent();
+    });
+}
+
+void ApiClient::getFriendRequests() {
+    QJsonObject body = withCookie();
+    QNetworkReply* reply = postJson("/get-friend-requests", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) return;
+        QJsonArray incoming = obj.value("incoming").toArray();
+        QJsonArray outgoing = obj.value("outgoing").toArray();
+        emit friendRequestsFetched(incoming.toVariantList(), outgoing.toVariantList());
+    });
+}
+
+void ApiClient::handleFriendRequest(int request_id, const QString& action) {
+    QJsonObject body = withCookie({{"request_id", request_id}, {"action", action}});
+    QNetworkReply* reply = postJson("/handle-friend-request", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, action]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) return;
+        emit friendRequestHandled(action);
+    });
+}
+

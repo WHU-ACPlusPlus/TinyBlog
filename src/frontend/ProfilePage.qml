@@ -766,7 +766,9 @@ Rectangle {
                             width: parent.width
                             height: postItemColumn.implicitHeight + 20
                             radius: 8
-                            color: window.bgPage
+                            color: root.glassMode
+                                ? Qt.rgba(1, 1, 1, 0.06)
+                                : window.bgPage
 
                             Column {
                                 id: postItemColumn

@@ -8,6 +8,8 @@ ApplicationWindow {
     minimumWidth: 360
     minimumHeight: 500
     visible: true
+    flags: Qt.FramelessWindowHint | Qt.Window
+    color: "transparent"
     title: Qt.locale().name.substring(0, 2) === "zh" ? "微微博" : "Tiny Blog"
 
     // ── 深色模式色板 ──
@@ -32,6 +34,85 @@ ApplicationWindow {
     readonly property color border:    (activeStyleMode !== 0) ? "#ddd"       : (darkMode ? "#444444" : "#ddd")
     readonly property color divider:   (activeStyleMode !== 0) ? "#eee"       : (darkMode ? "#3a3a3a" : "#eee")
     readonly property color selectedBg: (activeStyleMode !== 0) ? "#4a4a4a"   : (darkMode ? "#3a3a3a" : "#4a4a4a")
+
+    // ── 最小化动画 ──
+    function animateMinimize() {
+        minimizeAnim.start()
+    }
+
+    SequentialAnimation {
+        id: minimizeAnim
+        PropertyAnimation {
+            target: window
+            property: "opacity"
+            to: 0
+            duration: 150
+            easing.type: Easing.InCubic
+        }
+        ScriptAction {
+            script: {
+                window.opacity = 1   // 先恢复透明度再最小化
+                winHelper.minimize()
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // 全局标题栏（无边框窗口控制，始终可见）
+    // ═══════════════════════════════════════════
+    Rectangle {
+        id: titleBar
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 32
+        z: 100
+        color: {
+            if (window.activeStyleMode === 2) return Qt.rgba(0.84, 0.89, 0.93, 0.92)
+            if (window.activeStyleMode === 1) return Qt.rgba(1, 1, 1, 0.08)
+            if (window.darkMode) return "#1a1a1a"
+            return "transparent"
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            anchors.rightMargin: 120
+            property point lastPos: Qt.point(0, 0)
+            onPressed: function(mouse) { lastPos = Qt.point(mouse.x, mouse.y) }
+            onPositionChanged: function(mouse) {
+                if (pressed) { window.x += mouse.x - lastPos.x; window.y += mouse.y - lastPos.y }
+            }
+        }
+
+        Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 8
+            spacing: 4
+
+            Rectangle {
+                width: 28; height: 28; radius: 6
+                color: minHover.hovered ? Qt.rgba(1,1,1,0.15) : "transparent"
+                Text { anchors.centerIn: parent; text: "─"; font.pixelSize: 14; color: window.textPrimary }
+                MouseArea { anchors.fill: parent; onClicked: window.animateMinimize() }
+                HoverHandler { id: minHover; cursorShape: Qt.PointingHandCursor }
+            }
+            Rectangle {
+                width: 28; height: 28; radius: 6
+                color: maxHover.hovered ? Qt.rgba(1,1,1,0.15) : "transparent"
+                Text { anchors.centerIn: parent; text: window.visibility === Window.Maximized ? "❐" : "□"; font.pixelSize: 12; color: window.textPrimary }
+                MouseArea { anchors.fill: parent; onClicked: winHelper.toggleMaximize() }
+                HoverHandler { id: maxHover; cursorShape: Qt.PointingHandCursor }
+            }
+            Rectangle {
+                width: 28; height: 28; radius: 6
+                color: closeHover.hovered ? "#e55" : "transparent"
+                Text { anchors.centerIn: parent; text: "✕"; font.pixelSize: 13; color: closeHover.hovered ? "white" : window.textPrimary }
+                MouseArea { anchors.fill: parent; onClicked: winHelper.closeWindow() }
+                HoverHandler { id: closeHover; cursorShape: Qt.PointingHandCursor }
+            }
+        }
+    }
 
     // 主页面通过 visible 切换：没登录 → LoginFlow，已登录 → MainPage
     LoginFlow {
