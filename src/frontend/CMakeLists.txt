@@ -74,6 +74,11 @@ target_link_libraries(appfrontend
     PRIVATE Qt6::Quick Qt6::Network Qt6::QuickDialogs2 Qt6::Multimedia Qt6::Core
 )
 
+# Windows: DWM 圆角支持
+if(WIN32)
+    target_link_libraries(appfrontend PRIVATE dwmapi)
+endif()
+
 set_target_properties(appfrontend PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
