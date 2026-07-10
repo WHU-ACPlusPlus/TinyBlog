@@ -4,6 +4,7 @@ import requests, os, random, string
 
 BASE = os.environ.get("TB_BASE_URL", "http://127.0.0.1:18999")
 
+# 封装POST请求，发送JSON并返回解析后的响应
 def post(path, body):
     r = requests.post(f"{BASE}{path}", json=body, timeout=10)
     return r.json()
@@ -30,6 +31,7 @@ print(f"  A avatar set, B avatar set\n")
 passed = 0
 failed = 0
 
+# 记录测试结果并输出（通过/失败）
 def check(name, cond, detail=""):
     global passed, failed
     if cond:

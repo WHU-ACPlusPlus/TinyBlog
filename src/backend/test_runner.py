@@ -40,13 +40,13 @@ fuzz_errors = 0
 def rand_str(min_len=4, max_len=12, chars=string.ascii_lowercase) -> str:
     return ''.join(random.choices(chars, k=random.randint(min_len, max_len)))
 
+# 生成包含中文/emoji/特殊字符的随机字符串
 def rand_unicode_str(min_len=1, max_len=50) -> str:
-    """生成包含中文/emoji/特殊字符的随机字符串"""
     pool = "你好世界测试🌍🎉✨🚀\n\t\"'<>&%$#@!😀😂❤️　"
     return ''.join(random.choices(pool + string.ascii_letters + string.digits, k=random.randint(min_len, max_len)))
 
+# 生成指定KB大小的长字符串
 def rand_long_str(kb: int) -> str:
-    """生成指定KB大小的字符串"""
     return 'A' * (kb * 1024)
 
 def record(endpoint: str, case: str, passed: bool, detail: str = "", response: Any = None):
@@ -72,6 +72,7 @@ def post(path: str, json_data: dict, expect_ok: bool = True) -> tuple[bool, dict
     except Exception as e:
         return False, {"_exception": str(e)}
 
+# 封装GET请求
 def get(path: str, params: dict = None) -> tuple[bool, dict]:
     try:
         r = requests.get(f"{BASE_URL}{path}", params=params, timeout=TIMEOUT)
@@ -79,6 +80,7 @@ def get(path: str, params: dict = None) -> tuple[bool, dict]:
     except Exception as e:
         return False, {"_exception": str(e)}
 
+# 注册随机用户并返回用户信息
 def register_user() -> dict | None:
     """注册一个随机用户并返回用户信息"""
     username = f"test_{rand_str(6,10)}"
@@ -98,6 +100,7 @@ def login_user(username: str, password: str) -> str | None:
 # ═══════════════════════════════════════════════════════════
 #  第一部分：准备阶段 — 创建测试数据
 # ═══════════════════════════════════════════════════════════
+# 创建测试用户、帖子、群组等测试数据
 def prepare_test_data():
     global user_pool, post_pool, group_pool
     print("=" * 60)
@@ -148,6 +151,7 @@ def prepare_test_data():
 # ═══════════════════════════════════════════════════════════
 #  第二部分：全端点正常场景测试
 # ═══════════════════════════════════════════════════════════
+# 全端点正常场景测试
 def test_normal_scenarios():
     global user_pool, post_pool, group_pool
     print("=" * 60)
@@ -336,6 +340,7 @@ def test_normal_scenarios():
 # ═══════════════════════════════════════════════════════════
 #  第三部分：边缘/异常输入测试
 # ═══════════════════════════════════════════════════════════
+# 边缘与异常输入测试（空值、超长、SQL注入等）
 def test_edge_cases():
     global user_pool, post_pool
     print("=" * 60)
@@ -533,6 +538,7 @@ def test_edge_cases():
 # ═══════════════════════════════════════════════════════════
 #  第四部分：并发压力测试
 # ═══════════════════════════════════════════════════════════
+# 单个压力测试工作线程
 def stress_worker(round_num: int):
     """单个压力测试工作线程"""
     global stress_errors
@@ -569,6 +575,7 @@ def stress_worker(round_num: int):
             pass
         stress_errors += errors
 
+# 并发压力测试
 def test_stress():
     global stress_errors
     print("=" * 60)
@@ -594,6 +601,7 @@ def test_stress():
 # ═══════════════════════════════════════════════════════════
 #  第五部分：随机模糊测试
 # ═══════════════════════════════════════════════════════════
+# 随机模糊测试
 def test_fuzz():
     global fuzz_errors
     print("=" * 60)
@@ -720,6 +728,7 @@ def test_fuzz():
 # ═══════════════════════════════════════════════════════════
 #  第六部分：数据一致性测试
 # ═══════════════════════════════════════════════════════════
+# 数据一致性校验（点赞数、关注关系、评论数、阅后即焚等）
 def test_consistency():
     global user_pool, post_pool
     print("=" * 60)
@@ -791,6 +800,7 @@ def test_consistency():
 # ═══════════════════════════════════════════════════════════
 #  第七部分：报告生成
 # ═══════════════════════════════════════════════════════════
+# 生成测试报告并保存到文件
 def generate_report():
     total = len(test_results)
     passed = sum(1 for t in test_results if t["passed"])
@@ -921,6 +931,7 @@ def generate_report():
 # ═══════════════════════════════════════════════════════════
 #  主入口
 # ═══════════════════════════════════════════════════════════
+# 主入口函数：依次执行准备、正常测试、边缘测试、一致性测试、模糊测试、压力测试并生成报告
 def main():
     print("╔" + "═" * 58 + "╗")
     print("║  TinyBlog 全功能测试套件" + " " * 31 + "║")

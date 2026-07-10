@@ -102,28 +102,34 @@ db_lock = threading.Lock()
 # 用 conn.execute() 替代全局 cursor，每次获取新游标，线程安全
 _last_cursor = None
 
+# 执行 SQL 语句（INSERT/UPDATE/DELETE），返回游标
 def db_execute(sql, params=()):
     global _last_cursor
     with db_lock:
         _last_cursor = conn.execute(sql, params)
         return _last_cursor
 
+# 执行查询并返回单行结果
 def db_fetchone(sql, params=()):
     with db_lock:
         return conn.execute(sql, params).fetchone()
 
+# 执行查询并返回所有行结果
 def db_fetchall(sql, params=()):
     with db_lock:
         return conn.execute(sql, params).fetchall()
 
+# 提交数据库事务
 def db_commit():
     with db_lock:
         conn.commit()
 
+# 获取最后插入行的 rowid
 def db_lastrowid():
     with db_lock:
         return _last_cursor.lastrowid if _last_cursor is not None else -1
 
+# 获取上次操作影响的行数
 def db_rowcount():
     with db_lock:
         if _last_cursor is not None:
@@ -624,17 +630,20 @@ import fastapi, uvicorn
 
 app = fastapi.FastAPI(title = "Tiny Blog")
 
+# 健康检查接口（仅供测试）
 @app.get("/ping") # For testing only
 def ping():
     return {"message": "Pong!"}
 
 from pydantic import BaseModel
 
+# 注册第一步请求模型
 class Reg_Req(BaseModel):
     username: str
     password: str
     nickname: str
 
+# 注册第一步：校验用户名密码，生成图形验证码并创建注册会话
 @app.post("/register-request")
 def reg_req(body: Reg_Req):
     if not body.username:
@@ -667,11 +676,13 @@ def reg_req(body: Reg_Req):
 # POST /register-verify
 # 输入: cookie, captcha, email
 # =============================================================================
+# 注册第二步请求模型
 class Reg_Verify_Req(BaseModel):
     cookie: str
     captcha: str
     email: str
 
+# 注册第二步：校验图形验证码，发送邮箱验证码
 @app.post("/register-verify")
 def reg_verify(body: Reg_Verify_Req):
     session = db_fetchone(
@@ -711,10 +722,12 @@ def reg_verify(body: Reg_Verify_Req):
 # POST /register-finish
 # 输入: cookie, email_code
 # =============================================================================
+# 注册第三步请求模型
 class Reg_Finish_Req(BaseModel):
     cookie: str
     email_code: str
 
+# 注册第三步：校验邮箱验证码，创建用户并返回认证 cookie
 @app.post("/register-finish")
 def reg_finish(body: Reg_Finish_Req):
     session = db_fetchone(
@@ -754,10 +767,12 @@ def reg_finish(body: Reg_Finish_Req):
     db_commit()
     return {"cookie": auth_cookie}
 
+# 登录请求模型
 class Log_Req(BaseModel):
     username: str
     password: str
 
+# 登录第一步：校验用户名密码，判断是否需要图形验证码或邮箱验证
 @app.post("/login-request")
 def log_req(body: Log_Req):
     if not body.username:
@@ -820,10 +835,12 @@ def log_req(body: Log_Req):
 # 登录验证：图形验证码
 # POST /login-verify-captcha
 # =============================================================================
+# 登录图形验证码请求模型
 class Login_Verify_Captcha_Req(BaseModel):
     cookie: str
     captcha: str
 
+# 登录第二步：校验图形验证码
 @app.post("/login-verify-captcha")
 def login_verify_captcha(body: Login_Verify_Captcha_Req):
     session = db_fetchone(
@@ -847,9 +864,11 @@ def login_verify_captcha(body: Login_Verify_Captcha_Req):
 # 登录验证：发送邮箱验证码
 # POST /login-send-email-code
 # =============================================================================
+# 登录发送邮箱验证码请求模型
 class Login_Send_Email_Req(BaseModel):
     cookie: str
 
+# 登录第三步：发送邮箱验证码
 @app.post("/login-send-email-code")
 def login_send_email_code(body: Login_Send_Email_Req):
     session = db_fetchone(
@@ -880,10 +899,12 @@ def login_send_email_code(body: Login_Send_Email_Req):
 # 登录验证：校验邮箱验证码
 # POST /login-verify-email
 # =============================================================================
+# 登录邮箱验证请求模型
 class Login_Verify_Email_Req(BaseModel):
     cookie: str
     email_code: str
 
+# 登录第四步：校验邮箱验证码
 @app.post("/login-verify-email")
 def login_verify_email(body: Login_Verify_Email_Req):
     session = db_fetchone(
@@ -908,9 +929,11 @@ def login_verify_email(body: Login_Verify_Email_Req):
 # 登录完成：获得真正的 auth cookie
 # POST /login-finish
 # =============================================================================
+# 登录完成请求模型
 class Login_Finish_Req(BaseModel):
     cookie: str
 
+# 登录完成：验证通过后创建认证 cookie 并清理会话
 @app.post("/login-finish")
 def login_finish(body: Login_Finish_Req):
     session = db_fetchone(
@@ -940,9 +963,11 @@ def login_finish(body: Login_Finish_Req):
     db_commit()
     return {"cookie": auth_cookie}
 
+# 获取关注/粉丝列表请求模型
 class Get_Follower(BaseModel):
     cookie: str
 
+# 获取当前用户的关注列表和粉丝列表
 @app.post("/get-follow-list")
 def get_follow_list(body: Get_Follower):
     user_id = get_user_id(body.cookie)
@@ -971,10 +996,12 @@ def get_follow_list(body: Get_Follower):
             "followees": followees
             }
 
+# 关注/取关请求模型
 class Follow_Req(BaseModel):
     cookie: str
     followee_id: int
 
+# 关注某个用户
 @app.post("/follow")
 def follow(body: Follow_Req):
     user_id = get_user_id(body.cookie)
@@ -1001,6 +1028,7 @@ def follow(body: Follow_Req):
     log_api("POST /follow", user_id, f"to={body.followee_id}", result["status"])
     return {"status": result["status"]}
 
+# 取消关注某个用户
 @app.post("/unfollow")
 def unfollow(body: Follow_Req):
     user_id = get_user_id(body.cookie)
@@ -1009,10 +1037,12 @@ def unfollow(body: Follow_Req):
     result = social_mod.unfollow(user_id, body.followee_id)
     return result
 
+# 点赞/取消点赞请求模型
 class Like_Req(BaseModel):
     cookie: str
     post_id: int
 
+# 点赞帖子
 @app.post("/like")
 def like(body: Like_Req):
     user_id = get_user_id(body.cookie)
@@ -1035,6 +1065,7 @@ def like(body: Like_Req):
     db_commit()
     return {"status": "success"}
 
+# 取消点赞帖子
 @app.post("/unlike")
 def unlike(body: Like_Req):
     user_id = get_user_id(body.cookie)
@@ -1051,11 +1082,13 @@ def unlike(body: Like_Req):
     db_commit()
     return {"status": "success"}
 
+# 评论请求模型
 class Comment_Req(BaseModel):
     cookie: str
     post_id: int
     content: str
 
+# 发表评论
 @app.post("/comment")
 def comment(body: Comment_Req):
     user_id = get_user_id(body.cookie)
@@ -1075,10 +1108,12 @@ def comment(body: Comment_Req):
     db_commit()
     return {"status": "success"}
 
+# 获取评论列表请求模型
 class Get_Comments_Req(BaseModel):
     cookie: str
     post_id: int
 
+# 获取某个帖子的所有评论
 @app.post("/get-comments")
 def get_comments(body: Get_Comments_Req):
     user_id = get_user_id(body.cookie)
@@ -1095,11 +1130,13 @@ def get_comments(body: Get_Comments_Req):
             (body.post_id,)
             )]}
 
+# 发送私信请求模型
 class Send_Msg(BaseModel):
     cookie: str
     to_whom_id: int
     content: str
 
+# 发送私信（含单向关注限制检测）
 @app.post("/send-msg")
 def send_msg(body: Send_Msg):
     user_id = get_user_id(body.cookie)
@@ -1171,9 +1208,11 @@ def send_msg(body: Send_Msg):
     log_api("POST /send-msg", user_id, f"to={body.to_whom_id} len={len(body.content)}", "success")
     return {"status": "success"}
 
+# 接收私信请求模型
 class Recv_Msg(BaseModel):
     cookie: str
 
+# 拉取未读私信（已弃用，使用 /get-private-messages 替代）
 @app.post("/recv-msg")
 def recv_msg(body: Recv_Msg):
     user_id = get_user_id(body.cookie)
@@ -1193,11 +1232,13 @@ def recv_msg(body: Recv_Msg):
     log_api("POST /recv-msg [DEPRECATED]", user_id, "", f"{len(msgs)} msgs")
     return {"msgs": msgs}
 
+# 发布帖子请求模型
 class Pub_Post(BaseModel):
     cookie: str
     text: str
     media: list[str] = []
 
+# 发布帖子
 @app.post("/pub-post")
 def pub_post(body: Pub_Post):
     user_id = get_user_id(body.cookie)
@@ -1223,10 +1264,12 @@ def pub_post(body: Pub_Post):
     db_commit()
     return {"status": "success"}
 
+# 获取时间线帖子请求模型
 class Post_Fetch(BaseModel):
     cookie: str
     count: int = 20
 
+# 获取时间线帖子（关注 + 热门 + 最新，去重打乱）
 @app.post("/post-fetch")
 def post_fetch(body: Post_Fetch):
     user_id = get_user_id(body.cookie)
@@ -1285,10 +1328,12 @@ def post_fetch(body: Post_Fetch):
     db_commit()
     return {"posts": [p["id"] for p in result], "count": len(result)}
 
+# 获取单个帖子详情请求模型
 class Get_Post(BaseModel):
     cookie: str
     post_id: int
 
+# 获取单个帖子的完整信息（含媒体、点赞状态）
 @app.post("/get-post")
 def get_post(body: Get_Post):
     user_id = get_user_id(body.cookie)
@@ -1325,10 +1370,12 @@ def get_post(body: Get_Post):
         "media": [dict(m) for m in media]
     }
 
+# 创建群组请求模型
 class Create_Group_Req(BaseModel):
     cookie: str
     name: str
 
+# 创建群组
 @app.post("/create-group")
 def create_group(body: Create_Group_Req):
     user_id = get_user_id(body.cookie)
@@ -1354,10 +1401,12 @@ def create_group(body: Create_Group_Req):
     log_api("POST /create-group", user_id, f"name={body.name}", f"group_id={group_id}")
     return {"group_id": group_id}
 
+# 加入群组请求模型
 class Join_Group_Req(BaseModel):
     cookie: str
     group_id: int
 
+# 加入群组
 @app.post("/join-group")
 def join_group(body: Join_Group_Req):
     user_id = get_user_id(body.cookie)
@@ -1382,10 +1431,12 @@ def join_group(body: Join_Group_Req):
     log_api("POST /join-group", user_id, f"group={body.group_id}", "success")
     return {"status": "success"}
 
+# 退出群组请求模型
 class Leave_Group_Req(BaseModel):
     cookie: str
     group_id: int
 
+# 退出群组
 @app.post("/leave-group")
 def leave_group(body: Leave_Group_Req):
     user_id = get_user_id(body.cookie)
@@ -1403,11 +1454,13 @@ def leave_group(body: Leave_Group_Req):
     log_api("POST /leave-group", user_id, f"group={body.group_id}", "success")
     return {"status": "success"}
 
+# 发送群消息请求模型
 class Send_Group_Msg_Req(BaseModel):
     cookie: str
     group_id: int
     content: str
 
+# 发送群消息
 @app.post("/send-group-msg")
 def send_group_msg(body: Send_Group_Msg_Req):
     user_id = get_user_id(body.cookie)
@@ -1456,12 +1509,14 @@ def send_group_msg(body: Send_Group_Msg_Req):
     log_api("POST /send-group-msg", user_id, f"group={body.group_id} members={len(members)} len={len(body.content)}", "success")
     return {"status": "success"}
 
+# 接收群消息请求模型
 class Recv_Group_Msg_Req(BaseModel):
     cookie: str
     group_id: int
     count: int = 20
     before_id: int = 0       # 游标分页：获取id < before_id的消息，0=最新
 
+# 接收群消息（支持游标分页）
 @app.post("/recv-group-msg")
 def recv_group_msg(body: Recv_Group_Msg_Req):
     user_id = get_user_id(body.cookie)
@@ -1520,10 +1575,12 @@ def recv_group_msg(body: Recv_Group_Msg_Req):
     log_api("POST /recv-group-msg", user_id, f"group={body.group_id} {page_mode}", f"{len(messages)} msgs has_more={has_more}")
     return {"messages": [dict(m) for m in messages], "has_more": has_more}
 
+# 获取群成员列表请求模型
 class Get_Group_Members_Req(BaseModel):
     cookie: str
     group_id: int
 
+# 获取群成员列表
 @app.post("/get-group-members")
 def get_group_members(body: Get_Group_Members_Req):
     user_id = get_user_id(body.cookie)
@@ -1539,9 +1596,11 @@ def get_group_members(body: Get_Group_Members_Req):
     log_api("POST /get-group-members", user_id, f"group={body.group_id}", f"{len(members)} members")
     return {"members": [dict(m) for m in members]}
 
+# 获取我的群组列表请求模型
 class Get_My_Groups_Req(BaseModel):
     cookie: str
 
+# 获取当前用户加入的所有群组
 @app.post("/get-my-groups")
 def get_my_groups(body: Get_My_Groups_Req):
     user_id = get_user_id(body.cookie)
@@ -1565,9 +1624,11 @@ def get_my_groups(body: Get_My_Groups_Req):
 # 用户系统：检查 Cookie 有效性（返回完整个人资料）
 # POST /check-cookie
 # =============================================================================
+# 检查 Cookie 有效性请求模型
 class Check_Cookie_Req(BaseModel):
     cookie: str
 
+# 验证 Cookie 并返回用户完整资料
 @app.post("/check-cookie")
 def check_cookie(body: Check_Cookie_Req):
     if not body.cookie:
@@ -1610,9 +1671,11 @@ def check_cookie(body: Check_Cookie_Req):
 # 用户系统：查询自己的邮箱
 # POST /get-email — 输入 cookie，返回 email
 # =============================================================================
+# 获取邮箱请求模型
 class Get_Email_Req(BaseModel):
     cookie: str
 
+# 查询当前用户的邮箱地址
 @app.post("/get-email")
 def get_email(body: Get_Email_Req):
     user_id = get_user_id(body.cookie)
@@ -1626,9 +1689,11 @@ def get_email(body: Get_Email_Req):
         return {"error": "User not exist."}
     return {"email": user["email"] or ""}
 
+# 登出请求模型
 class Logout_Req(BaseModel):
     cookie: str
 
+# 登出：删除当前 token 使其立即失效
 @app.post("/logout")
 def logout(body: Logout_Req):
     db_execute(
@@ -1643,10 +1708,12 @@ def logout(body: Logout_Req):
 # POST /delete-post
 # 仅发布者本人可删，级联清理 liking_users/comments/post_media/read_posts
 # =============================================================================
+# 删除帖子请求模型
 class Del_Post_Req(BaseModel):
     cookie: str
     post_id: int
 
+# 删除帖子（仅发布者本人可删，级联清理关联数据）
 @app.post("/delete-post")
 def delete_post(body: Del_Post_Req):
     user_id = get_user_id(body.cookie)
@@ -1673,10 +1740,12 @@ def delete_post(body: Del_Post_Req):
 # 互动系统：删除评论
 # POST /delete-comment — 仅评论者本人可删
 # =============================================================================
+# 删除评论请求模型
 class Del_Comment_Req(BaseModel):
     cookie: str
     comment_id: int
 
+# 删除评论（仅评论者本人可删）
 @app.post("/delete-comment")
 def delete_comment(body: Del_Comment_Req):
     user_id = get_user_id(body.cookie)
@@ -1701,11 +1770,13 @@ def delete_comment(body: Del_Comment_Req):
 # 用户系统：编辑个人资料
 # POST /edit-profile — nickname和email_address均为可选，只更新非空字段
 # =============================================================================
+# 编辑个人资料请求模型
 class Edit_Profile_Req(BaseModel):
     cookie: str
     nickname: str = ""
     email_address: str = ""
 
+# 编辑个人资料（昵称和邮箱，可选更新）
 @app.post("/edit-profile")
 def edit_profile(body: Edit_Profile_Req):
     user_id = get_user_id(body.cookie)
@@ -1728,10 +1799,12 @@ def edit_profile(body: Edit_Profile_Req):
 # 收藏系统：收藏帖子
 # POST /bookmark — 使用 INSERT OR IGNORE 保证幂等
 # =============================================================================
+# 收藏/取消收藏请求模型
 class Bookmark_Req(BaseModel):
     cookie: str
     post_id: int
 
+# 收藏帖子
 @app.post("/bookmark")
 def bookmark(body: Bookmark_Req):
     user_id = get_user_id(body.cookie)
@@ -1754,6 +1827,7 @@ def bookmark(body: Bookmark_Req):
 # 收藏系统：取消收藏
 # POST /unbookmark — 直接删除，不存在也不报错
 # =============================================================================
+# 取消收藏帖子
 @app.post("/unbookmark")
 def unbookmark(body: Bookmark_Req):
     user_id = get_user_id(body.cookie)
@@ -1770,9 +1844,11 @@ def unbookmark(body: Bookmark_Req):
 # 收藏系统：获取收藏列表
 # POST /get-bookmarks — 返回完整帖子信息（含发布者和媒体），按收藏时间倒序
 # =============================================================================
+# 获取收藏列表请求模型
 class Get_Bookmarks_Req(BaseModel):
     cookie: str
 
+# 获取当前用户的收藏帖子列表
 @app.post("/get-bookmarks")
 def get_bookmarks(body: Get_Bookmarks_Req):
     user_id = get_user_id(body.cookie)
@@ -1811,11 +1887,13 @@ def get_bookmarks(body: Get_Bookmarks_Req):
 # POST /repost — 用自己的账户将原帖重新发布，可选附加文字
 # 原帖信息通过 repost_id 字段记录在 posts 表中
 # =============================================================================
+# 转发帖子请求模型
 class Repost_Req(BaseModel):
     cookie: str
     post_id: int          # 要转发的原帖ID
     text: str = ""         # 转发时附加的文字（可选）
 
+# 转发帖子（用自己的账户重新发布原帖）
 @app.post("/repost")
 def repost(body: Repost_Req):
     user_id = get_user_id(body.cookie)
@@ -1836,11 +1914,13 @@ def repost(body: Repost_Req):
     db_commit()
     return {"status": "success", "new_post_id": db_lastrowid()}
 
+# 更新头像/签名请求模型
 class Patch_Avatar_Req(BaseModel):
     cookie: str
     avatar: str = ""
     signature: str = ""
 
+# 更新当前用户的头像和/或签名
 @app.post("/avatar")
 def patch_avatar(body: Patch_Avatar_Req):
     user_id = get_user_id(body.cookie)
@@ -1858,6 +1938,7 @@ def patch_avatar(body: Patch_Avatar_Req):
     db_commit()
     return {"status": "success"}
 
+# 查询指定用户的头像和签名
 @app.get("/avatar")
 def get_avatar(user_id: int = 0):
     if not user_id:
@@ -1876,35 +1957,43 @@ def get_avatar(user_id: int = 0):
 
 # ── Pydantic 模型 ──
 
+# 获取会话列表请求模型
 class Fetch_Conversations_Req(BaseModel):
     cookie: str
 
+# 隐藏会话请求模型
 class Hide_Conversation_Req(BaseModel):
     cookie: str
     conversation_id: int
 
+# 获取私信消息请求模型
 class Fetch_Private_Msgs_Req(BaseModel):
     cookie: str
     with_user_id: int
     before_id: int = 0      # 游标分页：获取id < before_id的消息，0=最新
     count: int = 20
 
+# 搜索联系人请求模型
 class Search_Contacts_Req(BaseModel):
     cookie: str
     keyword: str
     type: str = "all"       # "all" | "user" | "group"
 
+# 获取联系人请求模型
 class Get_Contacts_Req(BaseModel):
     cookie: str
 
+# 获取用户详情请求模型
 class Get_User_Detail_Req(BaseModel):
     cookie: str
     user_id: int
 
+# 获取群组详情请求模型
 class Get_Group_Detail_Req(BaseModel):
     cookie: str
     group_id: int
 
+# 更新群组信息请求模型
 class Update_Group_Req(BaseModel):
     cookie: str
     group_id: int
@@ -1913,6 +2002,7 @@ class Update_Group_Req(BaseModel):
 
 # ── 2.3.1 POST /get-conversations ──
 
+# 获取会话列表（私聊和群聊统一返回）
 @app.post("/get-conversations")
 def get_conversations(body: Fetch_Conversations_Req):
     user_id = resolve_user(body.cookie)
@@ -1949,6 +2039,7 @@ def get_conversations(body: Fetch_Conversations_Req):
 
 # ── 2.3.2 POST /get-private-messages ──
 
+# 获取与某用户的私信消息（支持游标分页）
 @app.post("/get-private-messages")
 def get_private_messages(body: Fetch_Private_Msgs_Req):
     user_id = resolve_user(body.cookie)
@@ -2000,6 +2091,7 @@ def get_private_messages(body: Fetch_Private_Msgs_Req):
 
 # ── 2.3.3 POST /search-contacts ──
 
+# 搜索联系人（用户和群组）
 @app.post("/search-contacts")
 def search_contacts(body: Search_Contacts_Req):
     user_id = resolve_user(body.cookie)
@@ -2048,6 +2140,7 @@ def search_contacts(body: Search_Contacts_Req):
 
 # ── 2.3.4 POST /get-contacts ──
 
+# 获取联系人列表（好友、单向关注、待处理好友申请）
 @app.post("/get-contacts")
 def get_contacts(body: Get_Contacts_Req):
     user_id = resolve_user(body.cookie)
@@ -2089,6 +2182,7 @@ def get_contacts(body: Get_Contacts_Req):
 
 # ── 2.3.5 POST /hide-conversation ──
 
+# 隐藏会话（从会话列表中移除）
 @app.post("/hide-conversation")
 def hide_conversation(body: Hide_Conversation_Req):
     user_id = resolve_user(body.cookie)
@@ -2112,6 +2206,7 @@ def hide_conversation(body: Hide_Conversation_Req):
 
 # ── 2.3.6 POST /get-user-detail ──
 
+# 获取某个用户的详细资料
 @app.post("/get-user-detail")
 def get_user_detail(body: Get_User_Detail_Req):
     my_id = resolve_user(body.cookie)
@@ -2162,6 +2257,7 @@ def get_user_detail(body: Get_User_Detail_Req):
 
 # ── 2.3.7 POST /get-group-detail ──
 
+# 获取群组详细信息（含成员列表）
 @app.post("/get-group-detail")
 def get_group_detail(body: Get_Group_Detail_Req):
     user_id = resolve_user(body.cookie)
@@ -2201,6 +2297,7 @@ def get_group_detail(body: Get_Group_Detail_Req):
 
 # ── 补充：POST /update-group（更新群名称/头像，仅群主可操作）──
 
+# 更新群组信息（名称/头像，仅群主可操作）
 @app.post("/update-group")
 def update_group(body: Update_Group_Req):
     user_id = resolve_user(body.cookie)
@@ -2238,10 +2335,12 @@ def update_group(body: Update_Group_Req):
 # 好友申请系统 (BUG 1 修复)
 # =============================================================================
 
+# 发送好友申请请求模型
 class Send_Friend_Req_Req(BaseModel):
     cookie: str
     to_user_id: int
 
+# 发送好友申请
 @app.post("/send-friend-request")
 def send_friend_request(body: Send_Friend_Req_Req):
     user_id = resolve_user(body.cookie)
@@ -2291,9 +2390,11 @@ def send_friend_request(body: Send_Friend_Req_Req):
     log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", f"request_id={db_lastrowid()}")
     return {"status": "success", "request_id": db_lastrowid()}
 
+# 获取好友申请列表请求模型
 class Get_Friend_Reqs_Req(BaseModel):
     cookie: str
 
+# 获取好友申请列表（收到的和发出的）
 @app.post("/get-friend-requests")
 def get_friend_requests(body: Get_Friend_Reqs_Req):
     user_id = resolve_user(body.cookie)
@@ -2323,11 +2424,13 @@ def get_friend_requests(body: Get_Friend_Reqs_Req):
         "outgoing": [dict(r) for r in outgoing]
     }
 
+# 处理好友申请请求模型
 class Handle_Friend_Req_Req(BaseModel):
     cookie: str
     request_id: int
     action: str   # "accept" | "reject"
 
+# 处理好友申请（接受或拒绝）
 @app.post("/handle-friend-request")
 def handle_friend_request(body: Handle_Friend_Req_Req):
     user_id = resolve_user(body.cookie)
@@ -2368,10 +2471,12 @@ def handle_friend_request(body: Handle_Friend_Req_Req):
 
 # ── 用户帖子列表 ──
 
+# 获取用户帖子列表请求模型
 class UserPostsReq(BaseModel):
     cookie: str
     publisher_id: int
 
+# 获取某个用户的帖子 ID 列表
 @app.post("/get-user-posts")
 def get_user_posts(body: UserPostsReq):
     row = db_fetchone("SELECT user_id FROM cookies WHERE token = ?", (body.cookie,))
@@ -2383,6 +2488,7 @@ def get_user_posts(body: UserPostsReq):
     )
     return {"post_ids": [p["id"] for p in posts]}
 
+# 获取某个用户的帖子详细信息列表
 @app.post("/get-user-posts-detail")
 def get_user_posts_detail(body: UserPostsReq):
     row = db_fetchone("SELECT user_id FROM cookies WHERE token = ?", (body.cookie,))
@@ -2419,10 +2525,12 @@ def get_user_posts_detail(body: UserPostsReq):
 
 # ── 屏蔽 / 取消屏蔽 ──
 
+# 屏蔽用户请求模型
 class Block_User_Req(BaseModel):
     cookie: str
     blocked_id: int
 
+# 屏蔽某个用户
 @app.post("/block")
 def block_user(body: Block_User_Req):
     user_id = resolve_user(body.cookie)
@@ -2432,6 +2540,7 @@ def block_user(body: Block_User_Req):
     log_api("POST /block", user_id, f"target={body.blocked_id}", result.get("status", "error"))
     return result
 
+# 取消屏蔽某个用户
 @app.post("/unblock")
 def unblock_user(body: Block_User_Req):
     user_id = resolve_user(body.cookie)
@@ -2440,6 +2549,7 @@ def unblock_user(body: Block_User_Req):
     result = social_mod.unblock(user_id, body.blocked_id)
     return result
 
+# 获取屏蔽用户列表
 @app.post("/get-blocked")
 def get_blocked_list(body: Get_Follower):
     user_id = resolve_user(body.cookie)
@@ -2449,10 +2559,12 @@ def get_blocked_list(body: Get_Follower):
 
 # ── 静音 / 取消静音 ──
 
+# 静音用户请求模型
 class Mute_Req(BaseModel):
     cookie: str
     muted_id: int
 
+# 静音某个用户（不看对方帖子）
 @app.post("/mute")
 def mute_user(body: Mute_Req):
     user_id = resolve_user(body.cookie)
@@ -2461,6 +2573,7 @@ def mute_user(body: Mute_Req):
     result = social_mod.mute(user_id, body.muted_id)
     return result
 
+# 取消静音某个用户
 @app.post("/unmute")
 def unmute_user(body: Mute_Req):
     user_id = resolve_user(body.cookie)
@@ -2469,6 +2582,7 @@ def unmute_user(body: Mute_Req):
     result = social_mod.unmute(user_id, body.muted_id)
     return result
 
+# 获取静音用户列表
 @app.post("/get-muted")
 def get_muted_list(body: Get_Follower):
     user_id = resolve_user(body.cookie)
@@ -2478,11 +2592,13 @@ def get_muted_list(body: Get_Follower):
 
 # ── FTS5 全文搜索 ──
 
+# 社交搜索请求模型
 class Social_Search_Req(BaseModel):
     cookie: str
     query: str
     limit: int = 20
 
+# 综合搜索（帖子、用户、标签）
 @app.post("/social/search")
 def social_search_api(body: Social_Search_Req):
     user_id = resolve_user(body.cookie)
@@ -2492,6 +2608,7 @@ def social_search_api(body: Social_Search_Req):
     log_api("POST /social/search", user_id, f"query={body.query}", f"posts={len(result.get('posts',[]))} users={len(result.get('users',[]))} tags={len(result.get('tags',[]))}")
     return result
 
+# 仅搜索用户
 @app.post("/social/search-users")
 def social_search_users(body: Social_Search_Req):
     user_id = resolve_user(body.cookie)
@@ -2499,6 +2616,7 @@ def social_search_users(body: Social_Search_Req):
         return {"error": "Bad cookie."}
     return {"users": social_search.search_users(body.query, limit=body.limit)}
 
+# 仅搜索帖子
 @app.post("/social/search-posts")
 def social_search_posts(body: Social_Search_Req):
     user_id = resolve_user(body.cookie)
@@ -2508,11 +2626,13 @@ def social_search_posts(body: Social_Search_Req):
 
 # ── 通知 ──
 
+# 通知请求模型
 class Notification_Req(BaseModel):
     cookie: str
     limit: int = 40
     offset: int = 0
 
+# 获取通知列表
 @app.post("/notifications")
 def get_notifications(body: Notification_Req):
     user_id = resolve_user(body.cookie)
@@ -2520,6 +2640,7 @@ def get_notifications(body: Notification_Req):
         return {"error": "Bad cookie."}
     return {"notifications": social_notify.get_notifications(user_id, limit=body.limit, offset=body.offset)}
 
+# 获取未读通知数量
 @app.post("/notifications/unread-count")
 def unread_count(body: Get_Follower):
     user_id = resolve_user(body.cookie)
@@ -2527,10 +2648,12 @@ def unread_count(body: Get_Follower):
         return {"error": "Bad cookie."}
     return {"count": social_notify.get_unread_count(user_id)}
 
+# 标记通知已读请求模型
 class Mark_Read_Req(BaseModel):
     cookie: str
     notification_ids: list[int]
 
+# 标记指定通知为已读
 @app.post("/notifications/mark-read")
 def mark_notifications_read(body: Mark_Read_Req):
     user_id = resolve_user(body.cookie)
@@ -2539,6 +2662,7 @@ def mark_notifications_read(body: Mark_Read_Req):
     count = social_notify.mark_read(body.notification_ids, user_id)
     return {"marked": count}
 
+# 标记全部通知为已读
 @app.post("/notifications/mark-all-read")
 def mark_all_read(body: Get_Follower):
     user_id = resolve_user(body.cookie)
@@ -2549,6 +2673,7 @@ def mark_all_read(body: Get_Follower):
 
 # ── 推荐 ──
 
+# 推荐关注用户
 @app.post("/recommend/users")
 def recommend_users(body: Notification_Req):
     user_id = resolve_user(body.cookie)
@@ -2556,6 +2681,7 @@ def recommend_users(body: Notification_Req):
         return {"error": "Bad cookie."}
     return {"users": social_mod.recommend_users(user_id, limit=body.limit)}
 
+# 推荐热门帖子
 @app.post("/recommend/posts")
 def recommend_posts(body: Social_Search_Req):
     user_id = resolve_user(body.cookie)
@@ -2565,10 +2691,12 @@ def recommend_posts(body: Social_Search_Req):
 
 # ── 好友分组 ──
 
+# 创建好友分组请求模型
 class Create_Friend_Group_Req(BaseModel):
     cookie: str
     name: str
 
+# 创建好友分组
 @app.post("/friend-groups/create")
 def create_friend_group(body: Create_Friend_Group_Req):
     user_id = resolve_user(body.cookie)
@@ -2578,10 +2706,12 @@ def create_friend_group(body: Create_Friend_Group_Req):
     log_api("POST /friend-groups/create", user_id, f"name={body.name}", result.get("status", "error"))
     return result
 
+# 删除好友分组请求模型
 class Delete_Friend_Group_Req(BaseModel):
     cookie: str
     group_id: int
 
+# 删除好友分组
 @app.post("/friend-groups/delete")
 def delete_friend_group(body: Delete_Friend_Group_Req):
     user_id = resolve_user(body.cookie)
@@ -2589,6 +2719,7 @@ def delete_friend_group(body: Delete_Friend_Group_Req):
         return {"error": "Bad cookie."}
     return social_mod.delete_friend_group(body.group_id, user_id)
 
+# 获取好友分组列表
 @app.post("/friend-groups/list")
 def list_friend_groups(body: Get_Follower):
     user_id = resolve_user(body.cookie)
@@ -2596,11 +2727,13 @@ def list_friend_groups(body: Get_Follower):
         return {"error": "Bad cookie."}
     return {"groups": social_mod.get_friend_groups(user_id)}
 
+# 好友分组成员操作请求模型
 class Friend_Group_Member_Req(BaseModel):
     cookie: str
     group_id: int
     friend_id: int
 
+# 将好友加入分组
 @app.post("/friend-groups/add-member")
 def add_to_friend_group(body: Friend_Group_Member_Req):
     user_id = resolve_user(body.cookie)
@@ -2608,6 +2741,7 @@ def add_to_friend_group(body: Friend_Group_Member_Req):
         return {"error": "Bad cookie."}
     return social_mod.add_to_friend_group(body.group_id, user_id, body.friend_id)
 
+# 将好友移出分组
 @app.post("/friend-groups/remove-member")
 def remove_from_friend_group(body: Friend_Group_Member_Req):
     user_id = resolve_user(body.cookie)
@@ -2617,10 +2751,12 @@ def remove_from_friend_group(body: Friend_Group_Member_Req):
 
 # ── 检查好友关系 ──
 
+# 检查好友关系请求模型
 class Check_Friend_Req(BaseModel):
     cookie: str
     target_id: int
 
+# 检查与目标用户是否为好友
 @app.post("/check-friend")
 def check_friend(body: Check_Friend_Req):
     user_id = resolve_user(body.cookie)
@@ -2628,6 +2764,7 @@ def check_friend(body: Check_Friend_Req):
         return {"error": "Bad cookie."}
     return {"are_friends": social_mod.are_friends(user_id, body.target_id)}
 
+# 获取好友列表
 @app.post("/get-friends")
 def get_friends(body: Get_Follower):
     user_id = resolve_user(body.cookie)
@@ -2637,11 +2774,13 @@ def get_friends(body: Get_Follower):
 
 # ── 审核 / 举报 ──
 
+# 举报内容请求模型
 class Report_Req(BaseModel):
     cookie: str
     post_id: int
     reason: str = ""
 
+# 举报帖子
 @app.post("/report")
 def report_content(body: Report_Req):
     user_id = resolve_user(body.cookie)
@@ -2651,15 +2790,18 @@ def report_content(body: Report_Req):
     log_api("POST /report", user_id, f"post={body.post_id}", result.get("status", "error"))
     return result
 
+# 管理员基础请求模型
 class Admin_Base_Req(BaseModel):
     cookie: str
 
+# 管理员审核请求模型
 class Admin_Review_Req(BaseModel):
     cookie: str
     report_id: int
     action: str = ""    # "dismiss" | "delete_post" | "ban_user"
     note: str = ""
 
+# 获取举报列表（管理员）
 @app.post("/admin/reports")
 def get_reports(body: Admin_Base_Req):
     user_id = resolve_user(body.cookie)
@@ -2667,6 +2809,7 @@ def get_reports(body: Admin_Base_Req):
         return {"error": "Bad cookie."}
     return {"reports": social_mod.get_reports(user_id)}
 
+# 审核举报（管理员）
 @app.post("/admin/review-report")
 def review_report(body: Admin_Review_Req):
     user_id = resolve_user(body.cookie)
@@ -2674,11 +2817,13 @@ def review_report(body: Admin_Review_Req):
         return {"error": "Bad cookie."}
     return social_mod.review_report(body.report_id, user_id, body.action, body.note)
 
+# 封禁/解封用户请求模型
 class Admin_Ban_Req(BaseModel):
     cookie: str
     target_id: int
     reason: str = ""
 
+# 封禁用户（管理员）
 @app.post("/admin/ban")
 def ban_user(body: Admin_Ban_Req):
     user_id = resolve_user(body.cookie)
@@ -2686,6 +2831,7 @@ def ban_user(body: Admin_Ban_Req):
         return {"error": "Bad cookie."}
     return social_mod.ban_user(user_id, body.target_id, body.reason)
 
+# 解封用户（管理员）
 @app.post("/admin/unban")
 def unban_user(body: Admin_Ban_Req):
     user_id = resolve_user(body.cookie)

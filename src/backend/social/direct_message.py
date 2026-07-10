@@ -15,6 +15,7 @@ from social.db import get_conn, transactional
 # 会话管理
 # ---------------------------------------------------------------------------
 
+# 创建新会话或返回已有会话
 @transactional#包裹在事务内，保证原子性
 def create_conversation(user_ids: list[int]) -> dict:
     """
@@ -60,6 +61,7 @@ def create_conversation(user_ids: list[int]) -> dict:
     return {"status": "created", "conversation_id": conv_id}#返回会话id
 
 
+# 在指定会话中发送私信，创建 visibility='direct' 的帖子
 @transactional
 def send_direct_message(sender_id: int,
                         conversation_id: int,
@@ -180,6 +182,7 @@ def send_direct_message(sender_id: int,
 # 会话查询
 # ---------------------------------------------------------------------------
 
+# 获取用户的会话列表，按最后消息时间倒序
 def get_conversations(user_id: int,
                       limit: int = 20,
                       offset: int = 0) -> list[dict]:#只读，不必保证原子性
@@ -227,6 +230,7 @@ def get_conversations(user_id: int,
     return result
 
 
+# 获取指定会话的消息列表，需验证访问权限，支持分页
 def get_messages(conversation_id: int,
                  user_id: int,
                  limit: int = 40,
@@ -289,9 +293,9 @@ def get_messages(conversation_id: int,
     return rows_list
 
 
+# 标记会话为已读
 @transactional
 def mark_conversation_read(conversation_id: int, user_id: int) -> dict:
-    """标记会话为已读"""
     conn = get_conn()
 
     member = conn.execute(
@@ -309,8 +313,8 @@ def mark_conversation_read(conversation_id: int, user_id: int) -> dict:
     return {"status": "read"}
 
 
+# 获取未读会话数
 def get_unread_conversation_count(user_id: int) -> int:
-    """获取未读会话数"""
     conn = get_conn()
     row = conn.execute("""
         SELECT COUNT(*) AS cnt
@@ -325,5 +329,5 @@ def get_unread_conversation_count(user_id: int) -> int:
 # 辅助
 # ---------------------------------------------------------------------------
 
+# 获取当前 UTC 时间的 ISO 格式字符串
 def _now() -> str:#记录创建时间戳
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")

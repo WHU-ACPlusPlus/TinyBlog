@@ -15,12 +15,8 @@ from social.db import get_conn, transactional
 _social_tables_created = False
 
 
+# 确保 social 模块所需的所有表、视图、列存在
 def _ensure_social_tables():
-    """
-    确保 social 模块所需的所有表、视图、列存在。
-    兼容 main.db 的现有结构：添加缺失列、创建 VIEW、创建新表。
-    也支持独立运行：在没有 main.db 的情况下创建基础表。
-    """
     global _social_tables_created
     if _social_tables_created:
         return
@@ -347,6 +343,7 @@ def _ensure_social_tables():
 # ---------------------------------------------------------------------------
 
 @transactional
+# 关注一个用户，若目标锁定则创建关注请求
 def follow(follower_id: int, following_id: int, show_reblogs: bool = True,
            notify: bool = False, languages: list | None = None) -> dict:
     """
@@ -429,6 +426,7 @@ def follow(follower_id: int, following_id: int, show_reblogs: bool = True,
 
 
 @transactional
+# 取关一个用户
 def unfollow(follower_id: int, following_id: int) -> dict:
     """取关一个用户"""
     _ensure_social_tables()
@@ -465,6 +463,7 @@ def unfollow(follower_id: int, following_id: int) -> dict:
 # ---------------------------------------------------------------------------
 
 @transactional
+# 批准关注请求，建立关注关系
 def accept_follow_request(request_id: int, user_id: int) -> dict:
     """批准关注请求"""
     conn = get_conn()
@@ -506,9 +505,9 @@ def accept_follow_request(request_id: int, user_id: int) -> dict:
     return {"status": "accepted"}
 
 
+# 拒绝关注请求
 @transactional
 def reject_follow_request(request_id: int, user_id: int) -> dict:
-    """拒绝关注请求"""
     _ensure_social_tables()
     conn = get_conn()
     deleted = conn.execute(
@@ -522,6 +521,7 @@ def reject_follow_request(request_id: int, user_id: int) -> dict:
 # 查询接口
 # ---------------------------------------------------------------------------
 
+# 获取粉丝列表
 def get_followers(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
     """获取粉丝列表"""
     _ensure_social_tables()
@@ -538,6 +538,7 @@ def get_followers(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# 获取关注列表
 def get_following(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
     """获取关注列表"""
     _ensure_social_tables()
@@ -554,6 +555,7 @@ def get_following(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# 检查是否已关注
 def is_following(follower_id: int, following_id: int) -> bool:
     """检查是否已关注"""
     _ensure_social_tables()
@@ -564,6 +566,7 @@ def is_following(follower_id: int, following_id: int) -> bool:
     ).fetchone() is not None
 
 
+# 获取待处理的关注请求列表
 def get_follow_requests(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
     """获取待处理的关注请求"""
     _ensure_social_tables()
@@ -584,12 +587,9 @@ def get_follow_requests(user_id: int, limit: int = 40, offset: int = 0) -> list[
 # 屏蔽
 # ---------------------------------------------------------------------------
 
+# 屏蔽一个用户，同时自动双向取关并删除关注请求
 @transactional
 def block(user_id: int, blocked_id: int) -> dict:
-    """
-    屏蔽一个用户。
-    副作用：自动取关（双向），移除粉丝关系，删除关注请求。
-    """
     _ensure_social_tables()
     conn = get_conn()
 
@@ -634,6 +634,7 @@ def block(user_id: int, blocked_id: int) -> dict:
 
 
 @transactional
+# 取消屏蔽
 def unblock(user_id: int, blocked_id: int) -> dict:
     """取消屏蔽"""
     _ensure_social_tables()
@@ -645,8 +646,8 @@ def unblock(user_id: int, blocked_id: int) -> dict:
     return {"status": "unblocked" if deleted else "not_blocked"}
 
 
+# 获取屏蔽列表
 def get_blocked(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
-    """获取屏蔽列表"""
     conn = get_conn()
     rows = conn.execute("""
         SELECT u.id, u.username, u.display_name, u.acct, u.avatar,
@@ -660,8 +661,8 @@ def get_blocked(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# 检查是否已屏蔽
 def is_blocked(user_id: int, target_id: int) -> bool:
-    """检查是否已屏蔽"""
     _ensure_social_tables()
     conn = get_conn()
     return conn.execute(
@@ -675,6 +676,7 @@ def is_blocked(user_id: int, target_id: int) -> bool:
 # ---------------------------------------------------------------------------
 
 @transactional
+# 静音一个用户，可设置过期时间
 def mute(user_id: int, muted_id: int, mute_notifications: bool = True,
          expire_at: str | None = None) -> dict:
     """
@@ -700,6 +702,7 @@ def mute(user_id: int, muted_id: int, mute_notifications: bool = True,
 
 
 @transactional
+# 取消静音
 def unmute(user_id: int, muted_id: int) -> dict:
     """取消静音"""
     _ensure_social_tables()
@@ -711,8 +714,8 @@ def unmute(user_id: int, muted_id: int) -> dict:
     return {"status": "unmuted" if deleted else "not_muted"}
 
 
+# 获取静音列表
 def get_muted(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
-    """获取静音列表"""
     _ensure_social_tables()
     conn = get_conn()
     rows = conn.execute("""
@@ -727,6 +730,7 @@ def get_muted(user_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# 检查是否已静音
 def is_muted(user_id: int, target_id: int) -> bool:
     """检查是否已静音"""
     _ensure_social_tables()
@@ -741,9 +745,9 @@ def is_muted(user_id: int, target_id: int) -> bool:
 # 域名屏蔽
 # ---------------------------------------------------------------------------
 
+# 屏蔽整个域名
 @transactional
 def domain_block(user_id: int, domain: str) -> dict:
-    """屏蔽整个域名"""
     _ensure_social_tables()
     conn = get_conn()
     try:
@@ -757,6 +761,7 @@ def domain_block(user_id: int, domain: str) -> dict:
 
 
 @transactional
+# 取消域名屏蔽
 def domain_unblock(user_id: int, domain: str) -> dict:
     """取消域名屏蔽"""
     _ensure_social_tables()
@@ -768,8 +773,8 @@ def domain_unblock(user_id: int, domain: str) -> dict:
     return {"status": "unblocked" if deleted else "not_blocked"}
 
 
+# 获取域名屏蔽列表
 def get_domain_blocks(user_id: int) -> list[dict]:
-    """获取域名屏蔽列表"""
     _ensure_social_tables()
     conn = get_conn()
     rows = conn.execute(
@@ -783,8 +788,8 @@ def get_domain_blocks(user_id: int) -> list[dict]:
 # 好友判断（互相关注即为好友）
 # ---------------------------------------------------------------------------
 
+# 判断两个用户是否为好友（互相关注）
 def are_friends(user_a_id: int, user_b_id: int) -> bool:
-    """判断两个用户是否为好友（互相关注）。粉丝和关注都属于好友。"""
     if user_a_id == user_b_id:
         return True
     _ensure_social_tables()
@@ -800,8 +805,8 @@ def are_friends(user_a_id: int, user_b_id: int) -> bool:
     return a_follows_b and b_follows_a
 
 
+# 获取好友列表（互相关注的用户）
 def get_friends(user_id: int, limit: int = 100, offset: int = 0) -> list[dict]:
-    """获取好友列表（互相关注的用户，粉丝和关注都属于好友）"""
     _ensure_social_tables()
     conn = get_conn()
     rows = conn.execute("""
@@ -826,8 +831,8 @@ def get_friends(user_id: int, limit: int = 100, offset: int = 0) -> list[dict]:
 _visibility_table_created = False
 
 
+# 创建 post_visibility_rules 表（如不存在）
 def _ensure_visibility_table():
-    """创建 post_visibility_rules 表（如不存在）"""
     global _visibility_table_created
     if _visibility_table_created:
         return
@@ -842,6 +847,7 @@ def _ensure_visibility_table():
     _visibility_table_created = True
 
 
+# 设置帖子的可见性白名单和黑名单
 @transactional
 def set_post_visibility(post_id: int, user_id: int,
                         visible_to: list[int] | None = None,
@@ -868,19 +874,8 @@ def set_post_visibility(post_id: int, user_id: int,
     return {"status": "updated"}
 
 
+# 检查帖子对指定用户是否可见，返回 (is_visible, reason)
 def check_post_visibility(post_id: int, viewer_id: int | None) -> tuple[bool, str]:
-    """
-    检查帖子对指定用户是否可见，返回 (is_visible, reason)。
-
-    规则优先级（从高到低）：
-      1. 作者始终可见
-      2. invisible_to 黑名单（谁不可以看）
-      3. direct:  仅作者和 @提及者可见
-      4. private: 仅作者、@提及者、visible_to 白名单可见
-      5. friends_only: 仅好友（互相关注）和 visible_to 白名单可见
-      6. visible_to 白名单（谁可以看）
-      7. public / unlisted: 公开可见
-    """
     conn = get_conn()
     import json
 
@@ -967,6 +962,7 @@ def check_post_visibility(post_id: int, viewer_id: int | None) -> tuple[bool, st
 _friend_group_tables_created = False
 
 
+# 创建好友分组相关表
 def _ensure_friend_group_tables():
     global _friend_group_tables_created
     if _friend_group_tables_created:
@@ -992,9 +988,9 @@ def _ensure_friend_group_tables():
     _friend_group_tables_created = True
 
 
+# 创建好友分组
 @transactional
 def create_friend_group(user_id: int, name: str) -> dict:
-    """创建好友分组"""
     _ensure_friend_group_tables()
     conn = get_conn()
     try:
@@ -1007,9 +1003,9 @@ def create_friend_group(user_id: int, name: str) -> dict:
         return {"status": "duplicate", "message": "分组名已存在"}
 
 
+# 删除好友分组
 @transactional
 def delete_friend_group(group_id: int, user_id: int) -> dict:
-    """删除好友分组"""
     _ensure_friend_group_tables()
     conn = get_conn()
     deleted = conn.execute(
@@ -1022,9 +1018,9 @@ def delete_friend_group(group_id: int, user_id: int) -> dict:
     return {"status": "not_found"}
 
 
+# 将好友添加到分组
 @transactional
 def add_to_friend_group(group_id: int, user_id: int, friend_id: int) -> dict:
-    """将好友添加到分组"""
     _ensure_friend_group_tables()
     conn = get_conn()
     # 验证分组属于该用户
@@ -1044,9 +1040,9 @@ def add_to_friend_group(group_id: int, user_id: int, friend_id: int) -> dict:
     return {"status": "added"}
 
 
+# 从分组中移除好友
 @transactional
 def remove_from_friend_group(group_id: int, user_id: int, friend_id: int) -> dict:
-    """从分组中移除好友"""
     _ensure_friend_group_tables()
     conn = get_conn()
     grp = conn.execute(
@@ -1062,8 +1058,8 @@ def remove_from_friend_group(group_id: int, user_id: int, friend_id: int) -> dic
     return {"status": "removed" if deleted else "not_in_group"}
 
 
+# 获取用户的所有好友分组及成员
 def get_friend_groups(user_id: int) -> list[dict]:
-    """获取用户的所有好友分组及成员"""
     _ensure_friend_group_tables()
     conn = get_conn()
     groups = conn.execute(
@@ -1092,6 +1088,7 @@ def get_friend_groups(user_id: int) -> list[dict]:
 _reaction_tables_created = False
 
 
+# 创建 reaction 和兴趣标签相关表
 def _ensure_reaction_tables():
     global _reaction_tables_created
     if _reaction_tables_created:
@@ -1118,16 +1115,8 @@ def _ensure_reaction_tables():
     _reaction_tables_created = True
 
 
+# 基于共同好友和兴趣标签推荐用户
 def recommend_users(user_id: int, limit: int = 20) -> list[dict]:
-    """
-    基于共同好友 + 兴趣标签推荐用户。
-
-    算法：
-      1. 找到"好友的好友"（二阶邻居）
-      2. 按共同好友数量排序
-      3. 叠加兴趣标签重合度
-      4. 排除：自己、已是好友、已屏蔽/被屏蔽
-    """
     conn = get_conn()
     _ensure_social_tables()
     _ensure_reaction_tables()
@@ -1176,17 +1165,8 @@ def recommend_users(user_id: int, limit: int = 20) -> list[dict]:
     return result
 
 
+# 基于兴趣标签和可见性推荐帖子
 def recommend_posts(user_id: int, limit: int = 20, offset: int = 0) -> list[dict]:
-    """
-    基于兴趣标签推荐动态。
-
-    算法：
-      1. 获取用户兴趣标签及权重
-      2. 找到含这些标签的帖子
-      3. 排除：作者已被屏蔽、已标记不感兴趣
-      4. 不感兴趣的标签权重降低
-      5. 按匹配权重排序，考虑可见性
-    """
     conn = get_conn()
     _ensure_social_tables()
     _ensure_reaction_tables()
@@ -1289,12 +1269,9 @@ def recommend_posts(user_id: int, limit: int = 20, offset: int = 0) -> list[dict
 # 不感兴趣
 # ---------------------------------------------------------------------------
 
+# 标记帖子为"不感兴趣"，降低相关标签权重
 @transactional
 def mark_not_interested(user_id: int, post_id: int) -> dict:
-    """
-    标记动态为"不感兴趣"。
-    后续推荐会降低含有相同标签动态的推送概率。
-    """
     conn = get_conn()
     _ensure_reaction_tables()
     now = _now()
@@ -1338,8 +1315,8 @@ def mark_not_interested(user_id: int, post_id: int) -> dict:
     return {"status": "marked", "affected_tags": len(tags)}
 
 
+# 获取已标记为不感兴趣的帖子列表
 def get_not_interested_posts(user_id: int, limit: int = 20, offset: int = 0) -> list[dict]:
-    """获取已标记为不感兴趣的帖子列表"""
     conn = get_conn()
     _ensure_reaction_tables()
     rows = conn.execute("""
@@ -1363,6 +1340,7 @@ def get_not_interested_posts(user_id: int, limit: int = 20, offset: int = 0) -> 
 _moderation_tables_created = False
 
 
+# 创建审核相关表（reports、moderation_logs、bans）
 def _ensure_moderation_tables():
     global _moderation_tables_created
     conn = get_conn()
@@ -1420,12 +1398,9 @@ def _ensure_moderation_tables():
     _moderation_tables_created = True
 
 
+# 举报内容（所有用户均可），同一用户对同一帖子不能重复举报
 @transactional
 def report_content(reporter_id: int, post_id: int, reason: str = "") -> dict:
-    """
-    举报内容（所有用户均可）。
-    一条帖子可以被多次举报，但同一用户对同一帖子不能重复举报。
-    """
     _ensure_moderation_tables()
     conn = get_conn()
     now = _now()
@@ -1458,8 +1433,8 @@ def report_content(reporter_id: int, post_id: int, reason: str = "") -> dict:
     return {"status": "reported", "report_id": cursor.lastrowid}
 
 
+# 获取举报列表（仅管理员）
 def get_reports(admin_id: int,
-                status: str | None = None,
                 limit: int = 40,
                 offset: int = 0) -> list[dict]:
     """
@@ -1502,9 +1477,9 @@ def get_reports(admin_id: int,
     return [dict(r) for r in rows]
 
 
+# 审核举报（仅管理员），支持 resolve / ignore / delete_post / ban_user
 @transactional
 def review_report(report_id: int, admin_id: int,
-                  action: str,  # 'resolve' | 'ignore' | 'delete_post' | 'ban_user'
                   note: str = "") -> dict:
     """
     审核举报（仅管理员）。
@@ -1562,13 +1537,9 @@ def review_report(report_id: int, admin_id: int,
     return {"status": "reviewed", "action": action}
 
 
+# 封禁用户（仅管理员）
 @transactional
 def ban_user(admin_id: int, target_id: int,
-             reason: str = "", expire_at: str | None = None) -> dict:
-    """
-    封禁用户（仅管理员）。
-    封禁后用户无法登录、发帖、关注、发私信。
-    """
     from social.models import check_permission
     if not check_permission(admin_id, "moderate_content"):
         return {"status": "forbidden", "message": "仅管理员可封禁用户"}
@@ -1595,9 +1566,8 @@ def ban_user(admin_id: int, target_id: int,
     return {"status": "banned"}
 
 
+# 内部：执行封禁，设置 limited=1 并插入 bans 表
 def _apply_ban(conn, target_id: int, admin_id: int,
-               reason: str, expire_at: str | None, now: str):
-    """内部：执行封禁。设置 limited=1，插入 bans 表。"""
     conn.execute(
         "INSERT OR REPLACE INTO bans (user_id, admin_id, reason, expire_at, created_at) "
         "VALUES (?, ?, ?, ?, ?)",
@@ -1606,11 +1576,9 @@ def _apply_ban(conn, target_id: int, admin_id: int,
     conn.execute("UPDATE users SET limited = 1 WHERE id = ?", (target_id,))
 
 
+# 解封用户（仅管理员）
 @transactional
 def unban_user(admin_id: int, target_id: int) -> dict:
-    """
-    解封用户（仅管理员）。
-    """
     from social.models import check_permission
     if not check_permission(admin_id, "moderate_content"):
         return {"status": "forbidden", "message": "仅管理员可解封用户"}
@@ -1631,8 +1599,8 @@ def unban_user(admin_id: int, target_id: int) -> dict:
     return {"status": "unbanned" if deleted else "not_banned"}
 
 
+# 检查用户是否被封禁（含过期自动解封）
 def is_banned(user_id: int) -> bool:
-    """检查用户是否被封禁（含过期检查）"""
     _ensure_moderation_tables()
     conn = get_conn()
     row = conn.execute(
@@ -1649,8 +1617,8 @@ def is_banned(user_id: int) -> bool:
     return True
 
 
+# 获取封禁用户列表（仅管理员）
 def get_banned_users(admin_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
-    """获取封禁用户列表（仅管理员）"""
     from social.models import check_permission
     if not check_permission(admin_id, "moderate_content"):
         raise ValueError("仅管理员可查看封禁列表")
@@ -1670,8 +1638,8 @@ def get_banned_users(admin_id: int, limit: int = 40, offset: int = 0) -> list[di
     return [dict(r) for r in rows]
 
 
+# 获取审核日志（仅管理员）
 def get_moderation_log(admin_id: int, limit: int = 40, offset: int = 0) -> list[dict]:
-    """获取审核日志（仅管理员）"""
     from social.models import check_permission
     if not check_permission(admin_id, "moderate_content"):
         raise ValueError("仅管理员可查看审核日志")
@@ -1695,35 +1663,36 @@ def get_moderation_log(admin_id: int, limit: int = 40, offset: int = 0) -> list[
 # 内部辅助
 # ---------------------------------------------------------------------------
 
+# 获取当前 UTC 时间的 ISO 格式字符串
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
+# 将对象序列化为 JSON 字符串
 def _json(obj) -> str:
     import json
     return json.dumps(obj, ensure_ascii=False)
 
 
+# 递增表中某列的计数值
 def _incr(conn, table: str, column: str, pk: int):
     conn.execute(
         f"UPDATE {table} SET {column} = MAX(0, {column} + 1) WHERE id = ?", (pk,)
     )
 
 
+# 递减表中某列的计数值（不小于0）
 def _decr(conn, table: str, column: str, pk: int):
     conn.execute(
         f"UPDATE {table} SET {column} = MAX(0, {column} - 1) WHERE id = ?", (pk,)
     )
 
 
+# 创建通知，自动跳过被静音、屏蔽和自己的通知
 def _create_notification(conn, user_id: int, ntype: str,
                          from_user_id: int | None = None,
                          post_id: int | None = None,
                          created_at: str | None = None):
-    """
-    创建通知。
-    自动跳过：被静音、被屏蔽、自己对自己的通知。
-    """
     _ensure_social_tables()
 
     if from_user_id == user_id:

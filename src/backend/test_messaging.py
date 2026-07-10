@@ -35,9 +35,11 @@ conversation_ids: list[int] = []
 #  工具函数
 # ═══════════════════════════════════════════════════════
 
+# 生成随机小写字母字符串
 def rand_str(min_len=4, max_len=12) -> str:
     return ''.join(random.choices(string.ascii_lowercase, k=random.randint(min_len, max_len)))
 
+# 记录测试结果并打印
 def record(endpoint: str, case: str, passed: bool, detail: str = "", response: Any = None):
     test_results.append({
         "endpoint": endpoint,
@@ -62,6 +64,7 @@ def post(path: str, body: dict, expect_ok: bool = True) -> tuple[bool, dict]:
     except Exception as e:
         return False, {"_exception": str(e)}
 
+# 封装GET请求
 def get(path: str, params: dict = None) -> tuple[bool, dict]:
     try:
         r = requests.get(f"{BASE_URL}{path}", params=params, timeout=TIMEOUT)
@@ -69,6 +72,7 @@ def get(path: str, params: dict = None) -> tuple[bool, dict]:
     except Exception as e:
         return False, {"_exception": str(e)}
 
+# 注册随机测试用户并返回用户信息
 def register(username_prefix="msgtest") -> dict | None:
     u = f"{username_prefix}_{rand_str(4, 8)}"
     ok, resp = post("/register-request", {
@@ -82,6 +86,7 @@ def register(username_prefix="msgtest") -> dict | None:
 #  第0步：环境检查
 # ═══════════════════════════════════════════════════════
 
+# 检查服务器连通性
 def check_environment():
     print("=" * 60)
     print("[环境] 检查服务器连通性...")
@@ -125,6 +130,7 @@ def prepare_users():
 #  第2步：正常场景测试（17个端点）
 # ═══════════════════════════════════════════════════════
 
+# 覆盖全部消息API端点的正常场景测试
 def test_normal_all_endpoints():
     global users, groups, conversation_ids
     print("=" * 60)
@@ -309,6 +315,7 @@ def test_normal_all_endpoints():
 #  第3步：边界值与异常输入测试
 # ═══════════════════════════════════════════════════════
 
+# 边界值与异常输入测试（空值、无效cookie、SQL注入等）
 def test_edge_cases():
     global users, groups
     print("=" * 60)
@@ -510,6 +517,7 @@ def test_consistency():
 #  第5步：生成报告
 # ═══════════════════════════════════════════════════════
 
+# 生成测试报告并保存到文件
 def generate_report():
     total = len(test_results)
     passed = sum(1 for t in test_results if t["passed"])
@@ -598,6 +606,7 @@ def generate_report():
 #  入口
 # ═══════════════════════════════════════════════════════
 
+# 主入口函数：依次执行环境检查、准备数据、测试、生成报告
 def main():
     print("=" * 60)
     print("  TinyBlog 消息功能单元测试")
