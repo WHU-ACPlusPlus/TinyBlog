@@ -39,6 +39,7 @@ class ApiClient : public QObject {
     Q_PROPERTY(QString baseUrl READ baseUrl WRITE setBaseUrl NOTIFY baseUrlChanged)
     Q_PROPERTY(bool isAndroid READ isAndroid CONSTANT)
     Q_PROPERTY(QString wallpaperPath READ wallpaperPath WRITE setWallpaperPath NOTIFY wallpaperPathChanged)
+    Q_PROPERTY(QString videoWallpaperPath READ videoWallpaperPath WRITE setVideoWallpaperPath NOTIFY videoWallpaperPathChanged)
 
     void setBaseUrl(const QString& url);  // e.g. "http://becharmkon.cn:18999"
     QString baseUrl() const;
@@ -63,11 +64,17 @@ class ApiClient : public QObject {
     QString wallpaperPath() const;
     Q_INVOKABLE void clearWallpaper();
 
+    // ── 视频壁纸 ──
+    Q_INVOKABLE void setVideoWallpaperPath(const QString& path);
+    QString videoWallpaperPath() const;
+    Q_INVOKABLE void clearVideoWallpaper();
+
    signals:
     void loggedInChanged();
     void baseUrlChanged();
     void languageChanged();
     void wallpaperPathChanged();
+    void videoWallpaperPathChanged();
 
    public slots:
 
@@ -260,6 +267,7 @@ class ApiClient : public QObject {
     QString m_baseUrl;
     QString m_cookie;
     QString m_wallpaperPath;
+    QString m_videoWallpaperPath;
     int m_checkCookieRetries = 0;
     static constexpr int kMaxCheckCookieRetries = 3;
     QTranslator* m_translator;

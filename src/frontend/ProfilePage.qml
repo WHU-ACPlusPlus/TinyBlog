@@ -164,11 +164,21 @@ Rectangle {
         title: qsTr("选择聊天壁纸")
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"]
         onAccepted: {
-            // 将本地文件路径转为 file:// URL
             var filePath = String(selectedFile)
-            // Qt 的 selectedFile 已经是 file:// URL 格式
             api.setWallpaperPath(filePath)
             console.log("[ProfilePage] 壁纸已设置: " + filePath)
+        }
+    }
+
+    // ── 视频壁纸选择对话框 ──
+    FileDialog {
+        id: videoWallpaperPicker
+        title: qsTr("选择视频壁纸")
+        nameFilters: ["视频文件 (*.mp4 *.webm *.avi *.mkv *.mov)"]
+        onAccepted: {
+            var filePath = String(selectedFile)
+            api.setVideoWallpaperPath(filePath)
+            console.log("[ProfilePage] 视频壁纸已设置: " + filePath)
         }
     }
 
@@ -573,6 +583,99 @@ Rectangle {
                         color: "#4a90d9"
                     }
                     onClicked: wallpaperPicker.open()
+                }
+            }
+        }
+
+        // ── 视频壁纸设置 ──
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 80
+            color: root.glassMode
+                ? Qt.rgba(1, 1, 1, 0.08)
+                : window.bgSurface
+            radius: 10
+            border.color: root.glassMode ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            border.width: root.glassMode ? 0.5 : 0
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 12
+
+                // 视频图标
+                Rectangle {
+                    Layout.preferredWidth: 56
+                    Layout.preferredHeight: 56
+                    radius: 8
+                    color: "#1a1a2e"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "🎬"
+                        font.pixelSize: 24
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        text: qsTr("视频壁纸")
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: root.textPrimary
+                    }
+                    Text {
+                        text: api.videoWallpaperPath.length > 0
+                              ? qsTr("已设置动态视频壁纸")
+                              : qsTr("未设置，选择视频作为动态背景")
+                        font.pixelSize: 12
+                        color: root.textTertiary
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // 清除按钮
+                Button {
+                    Layout.preferredWidth: 60
+                    Layout.preferredHeight: 32
+                    visible: api.videoWallpaperPath.length > 0
+                    text: qsTr("清除")
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#e55"
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 6
+                        color: "transparent"
+                        border.color: "#e55"
+                        border.width: 1
+                    }
+                    onClicked: api.clearVideoWallpaper()
+                }
+
+                // 选择按钮
+                Button {
+                    Layout.preferredWidth: 60
+                    Layout.preferredHeight: 32
+                    text: qsTr("选择")
+                    contentItem: Text {
+                        text: parent.text
+                        color: window.bgSurface
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 6
+                        color: "#e85d75"  // 视频主题红色调
+                    }
+                    onClicked: videoWallpaperPicker.open()
                 }
             }
         }

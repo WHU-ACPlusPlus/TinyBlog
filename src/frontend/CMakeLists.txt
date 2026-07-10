@@ -46,6 +46,7 @@ qt_add_qml_module(appfrontend
         ChatPanel.qml
         MessageBubble.qml
         VideoPlayerOverlay.qml
+        VideoWallpaperBg.qml
         GlassCard.qml
 )
 

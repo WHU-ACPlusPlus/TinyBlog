@@ -76,10 +76,17 @@ ApiClient::ApiClient(QObject* parent)
         m_baseUrl = savedUrl;
     // 加载壁纸路径
     m_wallpaperPath = settings.value("app/wallpaperPath").toString();
+    m_videoWallpaperPath = settings.value("app/videoWallpaperPath").toString();
 
     // Cookie 存在时异步验证服务器端是否仍然有效
     if (!m_cookie.isEmpty())
         QTimer::singleShot(0, this, &ApiClient::checkCookie);
+
+    // 启动后通知 QML 已加载的壁纸路径（构造函数中不能直接 emit）
+    if (!m_wallpaperPath.isEmpty())
+        QTimer::singleShot(0, this, [this]() { emit wallpaperPathChanged(); });
+    if (!m_videoWallpaperPath.isEmpty())
+        QTimer::singleShot(0, this, [this]() { emit videoWallpaperPathChanged(); });
 }
 
 void ApiClient::setBaseUrl(const QString& url) {
@@ -135,6 +142,35 @@ QString ApiClient::wallpaperPath() const { return m_wallpaperPath; }
 
 void ApiClient::clearWallpaper() {
     setWallpaperPath(QString());
+}
+
+// ─── 视频壁纸 ───
+
+void ApiClient::setVideoWallpaperPath(const QString& path) {
+    // 规范化路径：file:/// → 本地绝对路径（MediaPlayer 兼容性更好）
+    QString normalized = path;
+    QUrl url(path);
+    if (url.isLocalFile())
+        normalized = url.toLocalFile();
+    else if (normalized.startsWith("file://"))
+        normalized = QUrl(normalized).toLocalFile();
+
+    qDebug() << "[ApiClient] setVideoWallpaperPath raw=" << path << "normalized=" << normalized;
+
+    if (m_videoWallpaperPath == normalized) return;
+    m_videoWallpaperPath = normalized;
+    QSettings settings;
+    if (normalized.isEmpty())
+        settings.remove("app/videoWallpaperPath");
+    else
+        settings.setValue("app/videoWallpaperPath", normalized);
+    emit videoWallpaperPathChanged();
+}
+
+QString ApiClient::videoWallpaperPath() const { return m_videoWallpaperPath; }
+
+void ApiClient::clearVideoWallpaper() {
+    setVideoWallpaperPath(QString());
 }
 
 QString ApiClient::markdownToHtml(const QString& markdown) {

@@ -16,7 +16,9 @@ Rectangle {
     property bool softUIMode: styleMode === 2
 
     // 普通模式下跟随系统主题，其他风格使用固定色板
+    // 视频壁纸激活时透明，让视频透过来
     color: {
+        if (api.videoWallpaperPath.length > 0) return "transparent"
         if (softUIMode) return "#e8edf2"
         if (glassMode)  return "transparent"
         return window.bgSurface

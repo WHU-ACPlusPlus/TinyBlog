@@ -11,6 +11,7 @@ import QtQuick.Layouts
 Rectangle {
 id: root
     color: {
+        if (api.videoWallpaperPath.length > 0) return "transparent"
         if (softUIMode) return "#e8edf2"
         if (glassMode) return "transparent"
         if (window.darkMode) return "#1a1a1a"
