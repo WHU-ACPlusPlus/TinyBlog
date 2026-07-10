@@ -195,17 +195,21 @@ id: root
     // ── P2: 搜索结果用户点击处理（根据关注状态）──
     function handleSearchUserClick(userData) {
         searchPopup.close()
-        root.searchResults = ({ users: [], groups: [] })
         console.log("[MessagesPage] handleSearchUserClick: " + (userData.nickname || userData.username) +
                     " is_following=" + userData.is_following + " is_mutual=" + userData.is_mutual)
+        root.searchResults = ({ users: [], groups: [] })
 
-        if (!userData.is_following && !userData.is_mutual) {
-            // 未关注 → 先关注再聊天
-            console.log("[MessagesPage] 未关注用户, 自动follow")
-            api.follow(userData.id)
+        if (userData.is_mutual) {
+            // 已是好友 → 直接聊天
+            api.fetchPrivateMessages(userData.id, 0, 20)
+        } else if (userData.is_following) {
+            // 已关注但非互关 → 直接聊天（单向限制由后端控制）
+            api.fetchPrivateMessages(userData.id, 0, 20)
+        } else {
+            // 未关注 → 发送好友申请
+            api.sendFriendRequest(userData.id)
+            console.log("[MessagesPage] 发送好友申请 to=" + userData.id)
         }
-        // 直接打开聊天
-        api.fetchPrivateMessages(userData.id, 0, 20)
         if (root.isNarrowMode) root.narrowViewIndex = 1
     }
 
@@ -313,6 +317,9 @@ id: root
         function onContactsSearched(users, groups) {
             console.log("[MessagesPage] contactsSearched: users=" + users.length + " groups=" + groups.length)
             root.searchResults = { users: users, groups: groups }
+            if (users.length > 0 || groups.length > 0) {
+                searchPopup.open()
+            }
         }
 
         // ── 详情 ──
@@ -338,6 +345,16 @@ id: root
             root._contacts = contacts
             root._followedOnly = followedOnly
             mergeConversationsAndContacts()
+        }
+
+        // ── 好友申请 ──
+        function onFriendRequestSent() {
+            console.log("[MessagesPage] 好友申请已发送")
+            safeFetchConversations("friendReq")
+        }
+        function onFriendRequestHandled(result) {
+            console.log("[MessagesPage] 好友申请处理结果: " + result)
+            safeFetchConversations("friendReqHandled")
         }
     }
 
@@ -469,12 +486,298 @@ color: root.softUIMode ? Qt.rgba(0.64, 0.69, 0.77, 0.4) : (root.glassMode ? Qt.r
         if (root.isNarrowMode) root.narrowViewIndex = 1
     }
 
-    // ── 创建群聊 ──
+    // ═══════════════════════════════════════════════════
+    // ── 搜索结果弹窗（磨砂玻璃风格）──
+    // ═══════════════════════════════════════════════════
+    Popup {
+        id: searchPopup
+        width: Math.min(400, root.width - 40)
+        height: Math.min(400, root.height - 100)
+        anchors.centerIn: parent
+        modal: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+        // 防重复打开
+        property bool _opening: false
+        onAboutToShow: {
+            if (_opening) { close(); return }
+            _opening = true
+        }
+        onClosed: _opening = false
+
+        background: Rectangle {
+            radius: 14
+            color: window.darkMode ? "#2a2a2a" : Qt.rgba(1,1,1,0.92)
+            border.color: window.darkMode ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
+            border.width: 1
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 0
+
+            // 标题栏
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 44
+                radius: 14
+                color: "transparent"
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: window.divider }
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("搜索结果")
+                    font.pixelSize: 15; font.bold: true
+                    color: window.textPrimary
+                }
+            }
+
+            // 用户结果
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: 200
+                clip: true
+                model: root.searchResults.users
+                visible: count > 0
+                delegate: Rectangle {
+                    width: parent.width; height: 56
+                    color: mouseArea.containsMouse ? (window.darkMode ? "#3a3a3a" : "#f0f0f0") : "transparent"
+                    RowLayout {
+                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                        Rectangle {
+                            Layout.preferredWidth: 36; Layout.preferredHeight: 36; radius: 18
+                            color: window.divider
+                            Text { anchors.centerIn: parent; text: (modelData.nickname||modelData.username||"?").charAt(0); font.pixelSize: 14; color: window.textSecondary }
+                        }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 2
+                            Text { text: modelData.nickname || modelData.username; font.pixelSize: 14; color: window.textPrimary }
+                            Text { text: "@" + (modelData.username||""); font.pixelSize: 11; color: window.textSecondary }
+                        }
+                        Text {
+                            text: modelData.is_mutual ? qsTr("好友") : (modelData.is_following ? qsTr("已关注") : qsTr("+ 添加"))
+                            font.pixelSize: 12; color: modelData.is_mutual ? "#4a9" : (modelData.is_following ? window.textSecondary : window.accent)
+                        }
+                    }
+                    MouseArea { id: mouseArea; anchors.fill: parent; hoverEnabled: true
+                        onClicked: root.handleSearchUserClick(modelData)
+                    }
+                }
+            }
+
+            // 群组结果
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: 200
+                clip: true
+                model: root.searchResults.groups
+                visible: count > 0
+                delegate: Rectangle {
+                    width: parent.width; height: 56
+                    color: mouseArea2.containsMouse ? (window.darkMode ? "#3a3a3a" : "#f0f0f0") : "transparent"
+                    RowLayout {
+                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                        Rectangle {
+                            Layout.preferredWidth: 36; Layout.preferredHeight: 36; radius: 18
+                            color: window.accent
+                            Text { anchors.centerIn: parent; text: "👥"; font.pixelSize: 16 }
+                        }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 2
+                            Text { text: modelData.name || qsTr("未命名"); font.pixelSize: 14; color: window.textPrimary }
+                            Text { text: modelData.is_member ? qsTr("已加入") : qsTr("未加入"); font.pixelSize: 11; color: window.textSecondary }
+                        }
+                        Text {
+                            text: modelData.is_member ? qsTr("打开") : qsTr("+ 加入")
+                            font.pixelSize: 12; color: modelData.is_member ? "#4a9" : window.accent
+                        }
+                    }
+                    MouseArea { id: mouseArea2; anchors.fill: parent; hoverEnabled: true
+                        onClicked: root.handleSearchGroupClick(modelData)
+                    }
+                }
+            }
+
+            // 无结果
+            Text {
+                Layout.fillWidth: true; Layout.fillHeight: true
+                visible: root.searchResults.users.length === 0 && root.searchResults.groups.length === 0
+                text: qsTr("未找到结果"); font.pixelSize: 14; color: window.textSecondary
+                horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+            }
+        }
+    }
+
+    // ── 添加好友弹窗 ──
+    Dialog {
+        id: addFriendDialog
+        title: qsTr("添加好友")
+        width: 340; height: 220
+        anchors.centerIn: parent
+        modal: true
+        property bool _opening: false
+        onAboutToShow: { if (_opening) { close(); return }; _opening = true }
+        onClosed: { _opening = false; friendSearchField.text = "" }
+        background: Rectangle {
+            radius: 14
+            color: window.darkMode ? "#2a2a2a" : Qt.rgba(1,1,1,0.92)
+            border.color: window.darkMode ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
+            border.width: 1
+        }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 16; spacing: 12
+            Text {
+                text: qsTr("搜索用户"); font.pixelSize: 13; color: window.textSecondary
+            }
+            Rectangle {
+                Layout.fillWidth: true; Layout.preferredHeight: 40; radius: 8
+                color: window.darkMode ? "#3a3a3a" : "#f0f0f0"
+                TextInput {
+                    id: friendSearchField
+                    anchors.fill: parent; anchors.margins: 10
+                    font.pixelSize: 14; color: window.textPrimary
+                    Text { anchors.fill: parent; text: qsTr("输入用户名或昵称"); font.pixelSize: 14; color: window.textSecondary; visible: !parent.text && !parent.activeFocus }
+                    onAccepted: {
+                        if (text.trim()) { api.searchContacts(text.trim(), "user"); addFriendDialog.close() }
+                    }
+                }
+            }
+            RowLayout { Layout.fillWidth: true; spacing: 8
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    Layout.preferredWidth: 64; Layout.preferredHeight: 34; radius: 8
+                    color: closeBtnHover.hovered ? (window.darkMode ? "#444" : "#e0e0e0") : "transparent"
+                    Text { anchors.centerIn: parent; text: qsTr("取消"); font.pixelSize: 14; color: window.textSecondary }
+                    MouseArea { anchors.fill: parent; onClicked: addFriendDialog.close() }
+                    HoverHandler { id: closeBtnHover; cursorShape: Qt.PointingHandCursor }
+                }
+                Rectangle {
+                    Layout.preferredWidth: 64; Layout.preferredHeight: 34; radius: 8
+                    color: window.accent
+                    Text { anchors.centerIn: parent; text: qsTr("搜索"); font.pixelSize: 14; color: "white" }
+                    MouseArea { anchors.fill: parent
+                        onClicked: {
+                            if (friendSearchField.text.trim()) {
+                                api.searchContacts(friendSearchField.text.trim(), "user")
+                                addFriendDialog.close()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── 创建群聊弹窗 ──
     Dialog {
         id: createGroupDialog
         title: qsTr("创建群聊")
-        width: 300
+        width: 340; height: 200
         anchors.centerIn: parent
+        modal: true
+        property bool _opening: false
+        onAboutToShow: { if (_opening) { close(); return }; _opening = true }
+        onClosed: { _opening = false; groupNameField.text = "" }
+        background: Rectangle {
+            radius: 14
+            color: window.darkMode ? "#2a2a2a" : Qt.rgba(1,1,1,0.92)
+            border.color: window.darkMode ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
+            border.width: 1
+        }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 16; spacing: 12
+            Text { text: qsTr("群聊名称"); font.pixelSize: 13; color: window.textSecondary }
+            Rectangle {
+                Layout.fillWidth: true; Layout.preferredHeight: 40; radius: 8
+                color: window.darkMode ? "#3a3a3a" : "#f0f0f0"
+                TextInput {
+                    id: groupNameField
+                    anchors.fill: parent; anchors.margins: 10
+                    font.pixelSize: 14; color: window.textPrimary
+                    Text { anchors.fill: parent; text: qsTr("输入群聊名称"); font.pixelSize: 14; color: window.textSecondary; visible: !parent.text && !parent.activeFocus }
+                }
+            }
+            RowLayout { Layout.fillWidth: true; spacing: 8
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    Layout.preferredWidth: 64; Layout.preferredHeight: 34; radius: 8
+                    color: gCloseHover.hovered ? (window.darkMode ? "#444" : "#e0e0e0") : "transparent"
+                    Text { anchors.centerIn: parent; text: qsTr("取消"); font.pixelSize: 14; color: window.textSecondary }
+                    MouseArea { anchors.fill: parent; onClicked: createGroupDialog.close() }
+                    HoverHandler { id: gCloseHover; cursorShape: Qt.PointingHandCursor }
+                }
+                Rectangle {
+                    Layout.preferredWidth: 64; Layout.preferredHeight: 34; radius: 8
+                    color: window.accent
+                    Text { anchors.centerIn: parent; text: qsTr("创建"); font.pixelSize: 14; color: "white" }
+                    MouseArea { anchors.fill: parent
+                        onClicked: {
+                            if (groupNameField.text.trim()) {
+                                api.createGroup(groupNameField.text.trim())
+                                createGroupDialog.close()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── 加入群聊弹窗 ──
+    Dialog {
+        id: joinGroupDialog
+        title: qsTr("加入群聊")
+        width: 340; height: 220
+        anchors.centerIn: parent
+        modal: true
+        property bool _opening: false
+        onAboutToShow: { if (_opening) { close(); return }; _opening = true }
+        onClosed: { _opening = false; joinGroupField.text = "" }
+        background: Rectangle {
+            radius: 14
+            color: window.darkMode ? "#2a2a2a" : Qt.rgba(1,1,1,0.92)
+            border.color: window.darkMode ? Qt.rgba(1,1,1,0.10) : Qt.rgba(0,0,0,0.08)
+            border.width: 1
+        }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 16; spacing: 12
+            Text { text: qsTr("搜索群聊"); font.pixelSize: 13; color: window.textSecondary }
+            Rectangle {
+                Layout.fillWidth: true; Layout.preferredHeight: 40; radius: 8
+                color: window.darkMode ? "#3a3a3a" : "#f0f0f0"
+                TextInput {
+                    id: joinGroupField
+                    anchors.fill: parent; anchors.margins: 10
+                    font.pixelSize: 14; color: window.textPrimary
+                    Text { anchors.fill: parent; text: qsTr("输入群名或群号"); font.pixelSize: 14; color: window.textSecondary; visible: !parent.text && !parent.activeFocus }
+                    onAccepted: {
+                        if (text.trim()) { api.searchContacts(text.trim(), "group"); joinGroupDialog.close() }
+                    }
+                }
+            }
+            RowLayout { Layout.fillWidth: true; spacing: 8
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    Layout.preferredWidth: 64; Layout.preferredHeight: 34; radius: 8
+                    color: jCloseHover.hovered ? (window.darkMode ? "#444" : "#e0e0e0") : "transparent"
+                    Text { anchors.centerIn: parent; text: qsTr("取消"); font.pixelSize: 14; color: window.textSecondary }
+                    MouseArea { anchors.fill: parent; onClicked: joinGroupDialog.close() }
+                    HoverHandler { id: jCloseHover; cursorShape: Qt.PointingHandCursor }
+                }
+                Rectangle {
+                    Layout.preferredWidth: 64; Layout.preferredHeight: 34; radius: 8
+                    color: window.accent
+                    Text { anchors.centerIn: parent; text: qsTr("搜索"); font.pixelSize: 14; color: "white" }
+                    MouseArea { anchors.fill: parent
+                        onClicked: {
+                            if (joinGroupField.text.trim()) {
+                                api.searchContacts(joinGroupField.text.trim(), "group")
+                                joinGroupDialog.close()
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

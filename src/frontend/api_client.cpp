@@ -1521,3 +1521,38 @@ void ApiClient::fetchGroupDetail(int group_id) {
         emit groupDetailFetched(obj.toVariantMap());
     });
 }
+
+// ─── 好友申请 ───
+
+void ApiClient::sendFriendRequest(int to_user_id) {
+    QJsonObject body = withCookie({{"to_user_id", to_user_id}});
+    QNetworkReply* reply = postJson("/send-friend-request", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) return;
+        emit friendRequestSent();
+    });
+}
+
+void ApiClient::getFriendRequests() {
+    QJsonObject body = withCookie();
+    QNetworkReply* reply = postJson("/get-friend-requests", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) return;
+        QJsonArray incoming = obj.value("incoming").toArray();
+        QJsonArray outgoing = obj.value("outgoing").toArray();
+        emit friendRequestsFetched(incoming.toVariantList(), outgoing.toVariantList());
+    });
+}
+
+void ApiClient::handleFriendRequest(int request_id, const QString& action) {
+    QJsonObject body = withCookie({{"request_id", request_id}, {"action", action}});
+    QNetworkReply* reply = postJson("/handle-friend-request", body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, action]() {
+        QJsonObject obj;
+        if (!checkReply(reply, obj)) return;
+        emit friendRequestHandled(action);
+    });
+}
+
