@@ -93,6 +93,9 @@ class ApiClient : public QObject {
     void follow(int followee_id);
     void unfollow(int followee_id);
     void fetchFollowList();
+    void block(int user_id);
+    void unblock(int user_id);
+    void fetchBlocked();
 
     // 帖子
     void publishPost(const QString& text, const QStringList& media = {});
@@ -140,6 +143,7 @@ class ApiClient : public QObject {
 
     // 搜索联系人/群组
     void searchContacts(const QString& keyword, const QString& type = "all");
+    void socialSearch(const QString& query, int limit = 20);    // FTS5 全文搜索
 
     // 联系人列表
     void fetchContacts();
@@ -175,6 +179,10 @@ class ApiClient : public QObject {
     // ── 社交 ──
     void followListFetched(const QList<UserInfo>& followers,
                            const QList<UserInfo>& followees);
+    void userBlocked();
+    void userUnblocked();
+    void blockedFetched(const QVariantList& blocked);
+    void socialSearchDone(const QVariantMap& results);
 
     // ── 帖子 ──
     void postPublished();
