@@ -6,6 +6,7 @@
 #include <QTranslator>
 #include <QLocale>
 #include <QDir>
+#include <QFontDatabase>
 #include <QIcon>
 #include "api_client.h"
 
@@ -55,6 +56,16 @@ int main(int argc, char *argv[])
 
     // 设置窗口图标
     app.setWindowIcon(QIcon(":/assets/icon.png"));
+
+    // ── 注册 Noto Emoji 字体（解决 Android 及无 emoji 字体平台的图标显示）──
+    int fontId = QFontDatabase::addApplicationFont(":/fonts/NotoEmoji-Regular.ttf");
+    QStringList fams = QFontDatabase::applicationFontFamilies(fontId);
+    if (!fams.isEmpty()) {
+        QFont sysFont = app.font();
+        QStringList families = {sysFont.family(), fams.first()};
+        sysFont.setFamilies(families);
+        app.setFont(sysFont);
+    }
 
     // ── 关闭 Qt 调试日志（避免在前端控制台打印 HTTP 请求体和 base64 数据）──
     QLoggingCategory::setFilterRules("*.debug=false");
