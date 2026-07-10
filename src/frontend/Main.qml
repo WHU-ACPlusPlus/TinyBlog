@@ -38,6 +38,7 @@ ApplicationWindow {
     // ── 视频内嵌播放（B站/视频卡片触发）──
     property string videoPlayBvid: ""
     property string videoPlayCid: ""
+    property bool showVideoBg: false
 
     // ── 最小化动画 ──
     function animateMinimize() {
@@ -146,6 +147,27 @@ ApplicationWindow {
                 // 登出后重新显示登录页，MainPage 被隐藏时 SquarePage 等子组件也随之卸载
             }
         }
+    }
+
+    // ── 视频壁纸背景层 ──
+    VideoWallpaperBg {
+        id: videoBg
+        width: window.width
+        height: window.height
+        z: -10
+        visible: window.showVideoBg
+    }
+
+    // 同步 api 属性到 window 属性
+    Connections {
+        target: api
+        function onVideoWallpaperPathChanged() {
+            window.showVideoBg = (api.videoWallpaperPath.length > 0)
+        }
+    }
+    Timer {
+        interval: 200; running: true; repeat: false
+        onTriggered: { window.showVideoBg = (api.videoWallpaperPath.length > 0) }
     }
 
     // ── 视频内嵌播放弹窗 ──

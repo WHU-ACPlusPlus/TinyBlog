@@ -7,6 +7,7 @@ import QtMultimedia
 Rectangle {
     id: root
     color: {
+        if (api.videoWallpaperPath.length > 0) return "transparent"
         if (softUIMode) return "#e8edf2"
         if (glassMode) return "transparent"
         if (window.darkMode) return Qt.rgba(0.08, 0.08, 0.08, 0.88)
