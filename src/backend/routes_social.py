@@ -15,6 +15,7 @@ router = APIRouter()
 # 通用辅助
 # =============================================================================
 
+# 根据 cookie 令牌获取用户 ID
 def get_user_id(cookie: str) -> int | None:
     conn = get_conn()
     row = conn.execute(
@@ -23,6 +24,7 @@ def get_user_id(cookie: str) -> int | None:
     return row["user_id"] if row else None
 
 
+# 检查用户是否为管理员
 def check_admin(user_id: int) -> bool:
     try:
         return models.check_permission(user_id, "admin")
@@ -38,6 +40,7 @@ class Role_Req(BaseModel):
     cookie: str
 
 @router.post("/get-role")
+# 获取当前用户的角色
 def api_get_role(body: Role_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -52,6 +55,7 @@ class Set_Role_Req(BaseModel):
     role: str  # normal | creator | admin
 
 @router.post("/set-role")
+# 管理员设置用户角色
 def api_set_role(body: Set_Role_Req):
     uid = get_user_id(body.cookie)
     if not uid or not check_admin(uid):
@@ -77,6 +81,7 @@ def api_block(body: Block_Req):
 
 
 @router.post("/unblock")
+# 取消屏蔽指定用户
 def api_unblock(body: Block_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -85,6 +90,7 @@ def api_unblock(body: Block_Req):
 
 
 @router.post("/get-blocked")
+# 获取当前用户已屏蔽的用户列表
 def api_get_blocked(body: Role_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -98,6 +104,7 @@ def api_get_blocked(body: Role_Req):
 
 
 @router.post("/mute")
+# 静音指定用户
 def api_mute(body: Block_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -106,6 +113,7 @@ def api_mute(body: Block_Req):
 
 
 @router.post("/unmute")
+# 取消静音指定用户
 def api_unmute(body: Block_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -114,6 +122,7 @@ def api_unmute(body: Block_Req):
 
 
 @router.post("/get-muted")
+# 获取当前用户已静音的用户列表
 def api_get_muted(body: Role_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -136,6 +145,7 @@ class Report_Req(BaseModel):
     reason: str = ""
 
 @router.post("/report")
+# 举报帖子内容
 def api_report(body: Report_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -163,6 +173,7 @@ class Ban_Req(BaseModel):
     ban_type: str = "spam"
 
 @router.post("/ban-user")
+# 管理员封禁用户
 def api_ban_user(body: Ban_Req):
     uid = get_user_id(body.cookie)
     if not uid or not check_admin(uid):
@@ -176,6 +187,7 @@ class ModLog_Req(BaseModel):
     offset: int = 0
 
 @router.post("/get-moderation-log")
+# 管理员获取审核日志
 def api_get_mod_log(body: ModLog_Req):
     uid = get_user_id(body.cookie)
     if not uid or not check_admin(uid):
@@ -189,6 +201,7 @@ def api_get_mod_log(body: ModLog_Req):
 
 
 @router.post("/get-reports")
+# 管理员获取举报列表
 def api_get_reports(body: ModLog_Req):
     uid = get_user_id(body.cookie)
     if not uid or not check_admin(uid):
@@ -221,6 +234,7 @@ def api_search(body: Search_Req):
 
 
 @router.post("/search-posts")
+# 按关键词搜索帖子
 def api_search_posts(body: Search_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -230,6 +244,7 @@ def api_search_posts(body: Search_Req):
 
 
 @router.post("/search-users")
+# 按关键词搜索用户
 def api_search_users(body: Search_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -239,6 +254,7 @@ def api_search_users(body: Search_Req):
 
 
 @router.post("/search-tags")
+# 按关键词搜索标签
 def api_search_tags(body: Search_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -257,6 +273,7 @@ class AdvSearch_Req(BaseModel):
     offset: int = 0
 
 @router.post("/advanced-search")
+# 高级搜索（支持关键词、标签、用户、最少点赞数等多条件筛选）
 def api_advanced_search(body: AdvSearch_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -274,6 +291,7 @@ class Suggest_Req(BaseModel):
     count: int = 5
 
 @router.post("/search-suggest")
+# 搜索自动补全建议
 def api_search_suggest(body: Suggest_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -292,6 +310,7 @@ class Notif_Req(BaseModel):
     offset: int = 0
 
 @router.post("/get-notifications")
+# 获取当前用户的通知列表
 def api_get_notifications(body: Notif_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -304,6 +323,7 @@ class Unread_Req(BaseModel):
     cookie: str
 
 @router.post("/get-unread-count")
+# 获取当前用户的未读通知数量
 def api_get_unread_count(body: Unread_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -317,6 +337,7 @@ class MarkRead_Req(BaseModel):
     notification_ids: list[int] = []
 
 @router.post("/mark-notification-read")
+# 标记指定通知为已读
 def api_mark_read(body: MarkRead_Req):
     uid = get_user_id(body.cookie)
     if not uid:
@@ -341,6 +362,7 @@ class MarkAllRead_Req(BaseModel):
     cookie: str
 
 @router.post("/mark-all-read")
+# 标记所有通知为已读
 def api_mark_all_read(body: MarkAllRead_Req):
     uid = get_user_id(body.cookie)
     if not uid:

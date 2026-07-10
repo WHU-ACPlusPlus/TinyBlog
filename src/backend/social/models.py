@@ -32,6 +32,7 @@ PERMISSION_ROLE = {
 }
 
 
+# 获取用户角色（内部调用，不检查用户是否存在）
 def _get_user_role(user_id: int) -> str:
     """获取用户角色（仅供内部调用，不检查用户是否存在）"""
     conn = get_conn()
@@ -42,11 +43,13 @@ def _get_user_role(user_id: int) -> str:
     return role if role in VALID_ROLES else "normal"
 
 
+# 获取用户角色
 def get_user_role(user_id: int) -> str:
     """获取用户角色"""
     return _get_user_role(user_id)
 
 
+# 迁移角色列：兼容旧数据，将旧角色统一为新角色体系
 def _migrate_role_column():
     """
     迁移：确保 users 表的 role 列默认为 'normal'。
@@ -63,6 +66,7 @@ def _migrate_role_column():
 _user_migration_done = False
 
 
+# 确保用户表结构完整，兼容旧表并补全缺失列
 def _ensure_user_migration():
     global _user_migration_done
     if _user_migration_done:
@@ -115,6 +119,7 @@ def _ensure_user_migration():
     _user_migration_done = True
 
 
+# 设置用户角色（仅管理员可操作）
 @transactional
 def set_user_role(target_id: int, role: str, admin_id: int) -> dict:
     """
@@ -137,6 +142,7 @@ def set_user_role(target_id: int, role: str, admin_id: int) -> dict:
     return {"status": "updated", "old_role": old_role, "new_role": role}
 
 
+# 检查用户是否有权限执行指定操作
 def check_permission(user_id: int | None, action: str) -> bool:
     """
     检查用户是否有权限执行某操作。
@@ -164,6 +170,7 @@ except Exception:
 # 用户
 # ---------------------------------------------------------------------------
 
+# 通过用户ID获取单个用户信息
 def get_user(user_id: int) -> dict | None:
     """获取单个用户信息"""
     conn = get_conn()
@@ -171,6 +178,7 @@ def get_user(user_id: int) -> dict | None:
     return dict(row) if row else None#查到数据则转成字典并返回
 
 
+# 通过用户名查找用户
 def get_user_by_username(username: str) -> dict | None:
     """通过用户名查找用户"""
     conn = get_conn()
@@ -180,6 +188,7 @@ def get_user_by_username(username: str) -> dict | None:
     return dict(row) if row else None
 
 
+# 通过邮箱查找用户
 def get_user_by_email(email: str) -> dict | None:
     """通过邮箱查找用户"""
     conn = get_conn()
@@ -190,6 +199,7 @@ def get_user_by_email(email: str) -> dict | None:
 
 
 @transactional
+# 创建新用户，兼容 nickname 和 display_name 字段
 def create_user(username: str,
                 email: str,
                 password_hash: str,
@@ -229,6 +239,7 @@ def create_user(username: str,
 
 
 @transactional
+# 更新用户字段（仅允许修改白名单内的字段）
 def update_user(user_id: int, **kwargs) -> dict:
     """更新用户字段"""
     conn = get_conn()
@@ -262,6 +273,7 @@ def update_user(user_id: int, **kwargs) -> dict:
 # 帖子
 # ---------------------------------------------------------------------------
 
+# 获取单条帖子，带可见性检查及媒体、提及、标签等关联数据
 def get_post(post_id: int, viewer_id: int | None = None) -> dict | None:
     """
     获取单条帖子。
@@ -319,6 +331,7 @@ def get_post(post_id: int, viewer_id: int | None = None) -> dict | None:
 # 辅助
 # ---------------------------------------------------------------------------
 
+# 获取当前 UTC 时间的 ISO 格式字符串
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 

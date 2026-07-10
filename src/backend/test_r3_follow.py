@@ -24,6 +24,7 @@ print(f"  A={idA}, B={idB}\n")
 passed = 0
 failed = 0
 
+# 记录测试结果并输出（通过/失败）
 def check(name, cond, detail=""):
     global passed, failed
     if cond:

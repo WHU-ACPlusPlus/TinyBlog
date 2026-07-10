@@ -25,6 +25,7 @@ from social.db import get_conn, transactional
 _tables_created = False
 
 
+# 创建群聊相关表
 def _ensure_tables():
     global _tables_created
     if _tables_created:
@@ -64,12 +65,9 @@ def _ensure_tables():
 # 群聊 CRUD
 # ---------------------------------------------------------------------------
 
+# 创建群聊，群主自动加入并拥有最高权限
 @transactional
 def create_group(owner_id: int, name: str) -> dict:
-    """
-    创建群聊。
-    群主自动加入群聊并拥有最高权限。
-    """
     _ensure_tables()
     conn = get_conn()
     now = _now()
@@ -93,12 +91,9 @@ def create_group(owner_id: int, name: str) -> dict:
     return {"status": "created", "group_id": group_id}
 
 
+# 解散群聊，仅群主可操作，会删除群聊、成员和聊天记录
 @transactional
 def dissolve_group(group_id: int, owner_id: int) -> dict:
-    """
-    解散群聊。
-    仅群主可以操作，会删除群聊、成员关系和所有聊天记录。
-    """
     _ensure_tables()
     conn = get_conn()
 
@@ -129,12 +124,9 @@ def dissolve_group(group_id: int, owner_id: int) -> dict:
 # 成员管理（群主权限）
 # ---------------------------------------------------------------------------
 
+# 添加群成员，仅群主可操作
 @transactional
 def add_member(group_id: int, owner_id: int, user_id: int) -> dict:
-    """
-    添加群成员。
-    仅群主可以操作。
-    """
     _ensure_tables()
     conn = get_conn()
 
@@ -157,12 +149,9 @@ def add_member(group_id: int, owner_id: int, user_id: int) -> dict:
     return {"status": "added"}
 
 
+# 移除群成员，仅群主可操作，不能移除群主自己
 @transactional
 def remove_member(group_id: int, owner_id: int, user_id: int) -> dict:
-    """
-    移除群成员。
-    仅群主可以操作，但不能移除群主自己。
-    """
     _ensure_tables()
     conn = get_conn()
 
@@ -187,6 +176,7 @@ def remove_member(group_id: int, owner_id: int, user_id: int) -> dict:
 # 文件修改权限
 # ---------------------------------------------------------------------------
 
+# 设置群成员的文件修改权限，仅群主可操作
 @transactional
 def set_file_permission(group_id: int, owner_id: int,
                         user_id: int, can_modify: bool) -> dict:
@@ -213,8 +203,8 @@ def set_file_permission(group_id: int, owner_id: int,
     return {"status": "updated" if updated else "not_member"}
 
 
+# 获取某成员在群中的权限信息
 def get_member_permissions(group_id: int, user_id: int) -> dict | None:
-    """获取某成员在群中的权限信息"""
     _ensure_tables()
     conn = get_conn()
     row = conn.execute("""
@@ -227,8 +217,8 @@ def get_member_permissions(group_id: int, user_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+# 获取群成员列表（含权限和群主标识）
 def get_group_members(group_id: int) -> list[dict]:
-    """获取群成员列表（含权限）"""
     _ensure_tables()
     conn = get_conn()
     rows = conn.execute("""
@@ -244,8 +234,8 @@ def get_group_members(group_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# 获取用户参与的所有群聊
 def get_user_groups(user_id: int) -> list[dict]:
-    """获取用户参与的所有群聊"""
     _ensure_tables()
     conn = get_conn()
     rows = conn.execute("""
@@ -266,6 +256,7 @@ def get_user_groups(user_id: int) -> list[dict]:
 # 聊天记录
 # ---------------------------------------------------------------------------
 
+# 保存一条聊天记录，发送者必须是群成员
 @transactional
 def save_chat_message(group_id: int, sender_id: int,
                       message_type: str = "text",
@@ -294,6 +285,7 @@ def save_chat_message(group_id: int, sender_id: int,
     return {"status": "saved", "message_id": cursor.lastrowid}
 
 
+# 获取聊天记录，需验证是否为群成员，支持分页加载更早消息
 def get_chat_history(group_id: int, user_id: int,
                      limit: int = 50, before_id: int | None = None) -> list[dict]:
     """
@@ -344,5 +336,6 @@ def get_chat_history(group_id: int, user_id: int,
 # 辅助
 # ---------------------------------------------------------------------------
 
+# 获取当前 UTC 时间的 ISO 格式字符串
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")

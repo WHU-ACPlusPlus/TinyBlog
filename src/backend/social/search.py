@@ -18,12 +18,9 @@ from social.db import get_conn, transactional
 # FTS5 索引初始化（首次运行需执行一次）
 # ---------------------------------------------------------------------------
 
+# 创建 FTS5 全文搜索虚拟表及触发器，并初始化已有数据
 @transactional
 def init_fts():
-    """
-    创建 FTS5 全文搜索虚拟表及触发器。
-    建表后执行一次即可，后续通过触发器自动同步。
-    """
     conn = get_conn()
 
     # --- 帖子 FTS 索引 ---
@@ -128,6 +125,7 @@ def init_fts():
 # 帖子全文搜索
 # ---------------------------------------------------------------------------
 
+# 全文搜索帖子，支持 relevance / recent / popular 三种排序
 def search_posts(query: str,#搜索词
                  viewer_id: int | None = None,
                  limit: int = 20,
@@ -214,6 +212,7 @@ def search_posts(query: str,#搜索词
 # 用户搜索
 # ---------------------------------------------------------------------------
 
+# 全文搜索用户，按相关性排序
 def search_users(query: str,
                  limit: int = 20,
                  offset: int = 0) -> list[dict]:
@@ -248,6 +247,7 @@ def search_users(query: str,
 # 标签搜索
 # ---------------------------------------------------------------------------
 
+# 搜索标签，按使用量排序
 def search_tags(query: str,
                 limit: int = 20,
                 offset: int = 0) -> list[dict]:
@@ -279,6 +279,7 @@ def search_tags(query: str,
 # 标签下的帖子搜索
 # ---------------------------------------------------------------------------
 
+# 搜索某个标签下的帖子
 def search_posts_by_tag(tag_name: str,
                         viewer_id: int | None = None,
                         limit: int = 20,
@@ -318,6 +319,7 @@ def search_posts_by_tag(tag_name: str,
 # 混合搜索（帖子 + 用户 + 标签）
 # ---------------------------------------------------------------------------
 
+# 混合搜索，一次性返回帖子、用户、标签三类结果
 def search_all(query: str,
                viewer_id: int | None = None,
                limit: int = 20) -> dict:
@@ -336,6 +338,7 @@ def search_all(query: str,
 # 带过滤的高级搜索
 # ---------------------------------------------------------------------------
 
+# 高级组合搜索，支持关键词、作者、标签、时间范围等条件
 def advanced_search(keyword: str | None = None,
                     author_id: int | None = None,
                     tag: str | None = None,
@@ -417,8 +420,8 @@ def advanced_search(keyword: str | None = None,
 # 搜索建议（自动补全）
 # ---------------------------------------------------------------------------
 
+# 搜索建议 / 自动补全，返回匹配的标签和用户名
 def search_suggest(query: str,
-                   max_results: int = 8) -> dict:
     """
     搜索建议 / 自动补全。
     返回匹配的标签 + 用户名建议。
@@ -458,8 +461,8 @@ def search_suggest(query: str,
 # 管理员全量搜索（不受可见性限制，用于审核）
 # ---------------------------------------------------------------------------
 
+# 管理员审核搜索，可查看所有可见性帖子（含 direct）
 def moderation_search(keyword: str | None = None,
-                     admin_id: int | None = None,
                      include_direct: bool = True,
                      include_deleted_author: bool = True,
                      limit: int = 50,
@@ -513,11 +516,8 @@ def moderation_search(keyword: str | None = None,
 # 内部辅助
 # ---------------------------------------------------------------------------
 
+# 清理 & 转义搜索查询，处理 FTS5 特殊字符
 def _sanitize_query(query: str) -> str:
-    """
-    清理 & 转义搜索查询。
-    FTS5 语法处理：将用户输入的纯文本转为安全的 MATCH 表达式。
-    """
     if not query:
         return ""
     # 去除 FTS5 特殊字符，防止语法错误
@@ -530,20 +530,16 @@ def _sanitize_query(query: str) -> str:
     return " AND ".join(f'"{t}"*' for t in terms)
 
 
+# 获取用户屏蔽的 ID 列表
 def _get_blocked_ids(conn, user_id: int) -> list[int]:
-    """获取用户屏蔽的 ID 列表"""
     rows = conn.execute(
         "SELECT blocked_id FROM blocks WHERE user_id = ?", (user_id,)
     ).fetchall()
     return [r[0] for r in rows]
 
 
+# 统一过滤帖子可见性，通过 check_post_visibility 实现
 def _filter_post_visibility(post: dict, viewer_id: int | None) -> dict | None:
-    """
-    统一过滤帖子可见性。
-    支持: public / unlisted / friends_only / private / direct + 黑白名单
-    通过 social.check_post_visibility 实现。
-    """
     from social.social import check_post_visibility
     visible, _ = check_post_visibility(post["id"], viewer_id)
     return post if visible else None

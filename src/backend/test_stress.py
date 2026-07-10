@@ -29,6 +29,7 @@ def do_send_msg(c0, id1, idx):
         if ok: results["ok"] += 1
         else: results["fail"] += 1
 
+# 并发查询会话列表的工作线程
 def do_get_conv(c):
     try:
         r = requests.post(f"{BASE}/get-conversations", json={"cookie":c}, timeout=TIMEOUT)
@@ -49,6 +50,7 @@ def do_send_group(c0, gid, idx):
         if ok: results["ok"] += 1
         else: results["fail"] += 1
 
+# 混合压测（发送消息/查询会话/搜索联系人）的工作线程
 def do_mixed(c0, id1, idx):
     eps = ["send-msg", "get-conversations", "search-contacts", "get-private-messages"]
     ep = eps[idx % 4]
@@ -87,6 +89,7 @@ def run_test(name, func, args_iter, concurrent, total):
     elapsed = (time.time() - t0) * 1000
     print(f"  成功:{results['ok']}  失败:{results['fail']}  耗时:{elapsed:.0f}ms  QPS:{total/(elapsed/1000):.1f}")
 
+# 主函数：依次执行各场景压力测试并验证数据一致性
 def main():
     print("=" * 60)
     print("  TinyBlog 消息API 高并发压力测试")

@@ -28,6 +28,7 @@ print(f"  A={idA}, B={idB}, C={idC}\n")
 passed = 0
 failed = 0
 
+# 校验测试预期并记录结果（通过/失败）
 def check(name, expected_ok, resp):
     global passed, failed
     has_error = "error" in resp
