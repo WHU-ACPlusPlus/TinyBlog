@@ -8,7 +8,11 @@ ApplicationWindow {
     minimumWidth: 360
     minimumHeight: 500
     visible: true
-    flags: Qt.FramelessWindowHint | Qt.Window
+    flags: {
+        // 移动端不要 FramelessWindowHint（Android Activity 原生标题栏由 Java 端控制）
+        if (isMobile) return Qt.Window
+        return Qt.FramelessWindowHint | Qt.Window
+    }
     color: "transparent"
     title: Qt.locale().name.substring(0, 2) === "zh" ? "微微博" : "Tiny Blog"
 
@@ -58,10 +62,13 @@ ApplicationWindow {
     }
 
     // ═══════════════════════════════════════════
-    // 全局标题栏（无边框窗口控制，始终可见）
+    // 全局标题栏（无边框窗口控制，桌面端可见，移动端隐藏）
     // ═══════════════════════════════════════════
+    property bool isMobile: Qt.platform.os === "android" || Qt.platform.os === "ios"
+
     Rectangle {
         id: titleBar
+        visible: !isMobile
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
