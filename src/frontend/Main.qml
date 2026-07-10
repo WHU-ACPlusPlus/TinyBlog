@@ -35,6 +35,10 @@ ApplicationWindow {
     readonly property color divider:   (activeStyleMode !== 0) ? "#eee"       : (darkMode ? "#3a3a3a" : "#eee")
     readonly property color selectedBg: (activeStyleMode !== 0) ? "#4a4a4a"   : (darkMode ? "#3a3a3a" : "#4a4a4a")
 
+    // ── 视频内嵌播放（B站/视频卡片触发）──
+    property string videoPlayBvid: ""
+    property string videoPlayCid: ""
+
     // ── 最小化动画 ──
     function animateMinimize() {
         minimizeAnim.start()
@@ -141,6 +145,25 @@ ApplicationWindow {
             if (!api.isLoggedIn) {
                 // 登出后重新显示登录页，MainPage 被隐藏时 SquarePage 等子组件也随之卸载
             }
+        }
+    }
+
+    // ── 视频内嵌播放弹窗 ──
+    VideoPlayerOverlay {
+        id: videoOverlay
+        width: window.width
+        height: window.height
+        visible: window.videoPlayBvid !== ""
+        bvid: window.videoPlayBvid
+        onClosed: {
+            window.videoPlayBvid = ""
+            window.videoPlayCid = ""
+        }
+    }
+
+    onVideoPlayBvidChanged: {
+        if (window.videoPlayBvid !== "") {
+            api.fetchVideoPlayUrl(window.videoPlayBvid, window.videoPlayCid)
         }
     }
 }

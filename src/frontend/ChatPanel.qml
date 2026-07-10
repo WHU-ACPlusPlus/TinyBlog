@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 // ═══════════════════════════════════════════════════════
 // ChatPanel — 聊天区域面板
@@ -383,6 +384,29 @@ wrapMode: TextArea.Wrap
                             }
                         }
                     }
+                }
+
+                // 图片按钮
+                Rectangle {
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    Layout.alignment: Qt.AlignBottom
+                    radius: 6
+                    color: imgBtnHover.hovered ? (window.darkMode ? "#444" : "#e0e0e0") : "transparent"
+                    Text { anchors.centerIn: parent; text: "🖼"; font.pixelSize: 16 }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: chatImagePicker.open() }
+                    HoverHandler { id: imgBtnHover }
+                }
+                // 视频按钮
+                Rectangle {
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    Layout.alignment: Qt.AlignBottom
+                    radius: 6
+                    color: vidBtnHover.hovered ? (window.darkMode ? "#444" : "#e0e0e0") : "transparent"
+                    Text { anchors.centerIn: parent; text: "🎬"; font.pixelSize: 16 }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: chatVideoPicker.open() }
+                    HoverHandler { id: vidBtnHover }
                 }
 
                 // 发送按钮
@@ -773,7 +797,9 @@ color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : 
     // ── BUG6修复: 乐观更新消息列表 ──
     function sendMessage() {
         var text = sendTextArea.text.trim()
-        if (text.length === 0) {
+        var hasImage = root.pendingImageB64 !== ""
+        var hasVideo = root.pendingVideoB64 !== ""
+        if (text.length === 0 && !hasImage && !hasVideo) {
             console.log("[ChatPanel] 消息为空，忽略发送")
             return
         }
@@ -782,9 +808,19 @@ color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : 
             return
         }
 
+        // 构建消息内容（图片/视频以 data URI 前缀嵌入）
+        var content = text
+        if (hasImage) {
+            content = "data:" + root.pendingImageMime + ";base64," + root.pendingImageB64 + "\n" + content
+        }
+        if (hasVideo) {
+            content = "data:" + root.pendingVideoMime + ";base64," + root.pendingVideoB64 + "\n" + content
+        }
+
         console.log("[ChatPanel] 发送消息: type=" + root.currentConversation.type +
                     " target_id=" + root.currentConversation.target_id +
-                    " text_len=" + text.length)
+                    " content_len=" + content.length +
+                    " hasImage=" + hasImage + " hasVideo=" + hasVideo)
 
         // BUG2修复: 乐观追加到_displayMessages（不破坏messages绑定）
         var now = new Date()
@@ -798,7 +834,7 @@ color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : 
             id: -Date.now(),                    // 临时负数ID
             sender_id: root.currentUserId,
             sender_name: "\u6211",              // "我"
-            content: text,
+            content: content,
             sent_at: timeStr,
             is_read: false
         }
@@ -807,14 +843,18 @@ color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : 
         root._displayMessages = newMsgs
         console.log("[ChatPanel] 乐观追加到_displayMessages id=" + optimisticMsg.id + " total=" + newMsgs.length)
 
-        // 清空输入框
+        // 清空输入框和媒体附件
         sendTextArea.text = ""
+        root.pendingImageB64 = ""
+        root.pendingImageMime = ""
+        root.pendingVideoB64 = ""
+        root.pendingVideoMime = ""
 
         // 异步发送
         if (root.currentConversation.type === "private") {
-            api.sendMessage(root.currentConversation.target_id, text)
+            api.sendMessage(root.currentConversation.target_id, content)
         } else if (root.currentConversation.type === "group") {
-            api.sendGroupMessage(root.currentConversation.target_id, text)
+            api.sendGroupMessage(root.currentConversation.target_id, content)
         }
 
         console.log("[ChatPanel] API发送请求已发出")
@@ -843,4 +883,68 @@ color: root.glassMode ? Qt.rgba(1, 1, 1, 0.10) : (window.darkMode ? "#3a3a3a" : 
     // 如需刷新会话列表，通过信号通知父组件
     // ═══════════════════════════════════════════════════
     signal refreshConversationsRequested()
+
+    // ── 媒体附件属性 ──
+    property string pendingImageB64: ""
+    property string pendingImageMime: ""
+    property string pendingVideoB64: ""
+    property string pendingVideoMime: ""
+
+    // ── 图片选择器 ──
+    FileDialog {
+        id: chatImagePicker
+        title: qsTr("选择图片")
+        nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)", "所有文件 (*)"]
+        onAccepted: {
+            let filePath = selectedFile.toString()
+            // 去掉 file:// 前缀
+            if (filePath.startsWith("file:///")) filePath = filePath.slice(8)
+            else if (filePath.startsWith("file://")) filePath = filePath.slice(7)
+            // Windows 路径处理
+            if (filePath.startsWith("/")) filePath = filePath.slice(1)
+            let b64 = api.readFileAsBase64(filePath)
+            if (b64 === "") {
+                console.warn("[ChatPanel] 图片读取失败: " + filePath)
+                return
+            }
+            // 获取 MIME 类型
+            let mime = "image/png"
+            let lowerPath = filePath.toLowerCase()
+            if (lowerPath.endsWith(".jpg") || lowerPath.endsWith(".jpeg")) mime = "image/jpeg"
+            else if (lowerPath.endsWith(".gif")) mime = "image/gif"
+            else if (lowerPath.endsWith(".webp")) mime = "image/webp"
+            else if (lowerPath.endsWith(".bmp")) mime = "image/bmp"
+            root.pendingImageB64 = b64
+            root.pendingImageMime = mime
+            console.log("[ChatPanel] 图片已选择: " + filePath + " (" + mime + " " + b64.length + " chars)")
+        }
+    }
+
+    // ── 视频选择器 ──
+    FileDialog {
+        id: chatVideoPicker
+        title: qsTr("选择视频")
+        nameFilters: ["视频文件 (*.mp4 *.webm *.ogg *.mov *.avi *.mkv)", "所有文件 (*)"]
+        onAccepted: {
+            let filePath = selectedFile.toString()
+            if (filePath.startsWith("file:///")) filePath = filePath.slice(8)
+            else if (filePath.startsWith("file://")) filePath = filePath.slice(7)
+            if (filePath.startsWith("/")) filePath = filePath.slice(1)
+            let b64 = api.readFileAsBase64(filePath)
+            if (b64 === "") {
+                console.warn("[ChatPanel] 视频读取失败: " + filePath)
+                return
+            }
+            let mime = "video/mp4"
+            let lowerPath = filePath.toLowerCase()
+            if (lowerPath.endsWith(".webm")) mime = "video/webm"
+            else if (lowerPath.endsWith(".ogg")) mime = "video/ogg"
+            else if (lowerPath.endsWith(".mov")) mime = "video/quicktime"
+            else if (lowerPath.endsWith(".avi")) mime = "video/x-msvideo"
+            else if (lowerPath.endsWith(".mkv")) mime = "video/x-matroska"
+            root.pendingVideoB64 = b64
+            root.pendingVideoMime = mime
+            console.log("[ChatPanel] 视频已选择: " + filePath + " (" + mime + " " + b64.length + " chars)")
+        }
+    }
 }

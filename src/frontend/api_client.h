@@ -55,6 +55,7 @@ class ApiClient : public QObject {
     Q_INVOKABLE QString videoThumbnailFromBase64(const QString& b64);                                        // 从 base64 视频数据提取缩略图
     Q_INVOKABLE QString saveBase64ToTempFile(const QString& b64, const QString& ext);                        // base64 → 临时文件 → file:// URL
     Q_INVOKABLE void extractVideoThumbnailAsync(const QString& postId, int mediaIndex, const QString& b64);  // 异步抽视频第一帧
+    Q_INVOKABLE void fetchVideoPlayUrl(const QString& bvid, const QString& cid);                             // 获取 B站视频直链（→ videoPlayUrlReady 信号）
     bool isAndroid() const;                                                                                     // 编译时判断是否为 Android 平台
 
     // ── 壁纸 ──
@@ -189,6 +190,7 @@ class ApiClient : public QObject {
 
     // ── 媒体 ──
     void videoThumbnailExtracted(const QString& postId, int mediaIndex, const QString& thumbnailB64);
+    void videoPlayUrlReady(const QString& bvid, const QString& url, const QString& format);
 
     // ── Android 文件选择 ──
     void mediaFilesPicked(const QVariantList& files);
