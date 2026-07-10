@@ -8,6 +8,8 @@ ApplicationWindow {
     minimumWidth: 360
     minimumHeight: 500
     visible: true
+    flags: Qt.FramelessWindowHint | Qt.Window
+    color: "transparent"
     title: Qt.locale().name.substring(0, 2) === "zh" ? "微微博" : "Tiny Blog"
 
     // ── 深色模式色板 ──
@@ -32,6 +34,28 @@ ApplicationWindow {
     readonly property color border:    (activeStyleMode !== 0) ? "#ddd"       : (darkMode ? "#444444" : "#ddd")
     readonly property color divider:   (activeStyleMode !== 0) ? "#eee"       : (darkMode ? "#3a3a3a" : "#eee")
     readonly property color selectedBg: (activeStyleMode !== 0) ? "#4a4a4a"   : (darkMode ? "#3a3a3a" : "#4a4a4a")
+
+    // ── 最小化动画 ──
+    function animateMinimize() {
+        minimizeAnim.start()
+    }
+
+    SequentialAnimation {
+        id: minimizeAnim
+        PropertyAnimation {
+            target: window
+            property: "opacity"
+            to: 0
+            duration: 150
+            easing.type: Easing.InCubic
+        }
+        ScriptAction {
+            script: {
+                window.opacity = 1   // 先恢复透明度再最小化
+                winHelper.minimize()
+            }
+        }
+    }
 
     // 主页面通过 visible 切换：没登录 → LoginFlow，已登录 → MainPage
     LoginFlow {

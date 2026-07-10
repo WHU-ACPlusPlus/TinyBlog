@@ -4,7 +4,7 @@
 
 # Databases
 
-import base64, io, random, sqlite3, bcrypt, secrets, threading, logging, sys
+import base64, io, os, random, sqlite3, bcrypt, secrets, threading, logging, sys
 from datetime import datetime, timezone, timedelta
 
 # ── 日志系统配置 ──

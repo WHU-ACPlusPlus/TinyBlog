@@ -4,6 +4,8 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
+    radius: 12
+    clip: true
 
     // ── 当前页面索引 ──
     property int currentIndex: 0
@@ -52,6 +54,101 @@ Rectangle {
     }
     function styleLabel(mode) {
         switch (mode) { case 1: return qsTr("玻璃"); case 2: return qsTr("柔和"); default: return qsTr("普通") }
+    }
+
+    // ═══════════════════════════════════════════
+    // 自定义标题栏（无边框模式下的窗口控制）
+    // ═══════════════════════════════════════════
+    Rectangle {
+        id: titleBar
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 32
+        z: 100
+        color: {
+            if (root.softUIMode) return Qt.rgba(0.84, 0.89, 0.93, 0.92)
+            if (root.glassMode)  return Qt.rgba(1, 1, 1, 0.08)
+            if (window.darkMode) return "#1a1a1a"
+            return "transparent"
+        }
+
+        // 拖拽移动
+        MouseArea {
+            anchors.fill: parent
+            anchors.rightMargin: 120  // 给右侧按钮留空间
+            property point lastPos: Qt.point(0, 0)
+            onPressed: function(mouse) {
+                lastPos = Qt.point(mouse.x, mouse.y)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed) {
+                    var dx = mouse.x - lastPos.x
+                    var dy = mouse.y - lastPos.y
+                    window.x += dx
+                    window.y += dy
+                }
+            }
+        }
+
+        // 窗口控制按钮
+        Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 8
+            spacing: 4
+
+            // 最小化
+            Rectangle {
+                width: 28; height: 28; radius: 6
+                color: minHover.hovered ? Qt.rgba(1,1,1,0.15) : "transparent"
+                Text {
+                    anchors.centerIn: parent
+                    text: "─"
+                    font.pixelSize: 14
+                    color: window.textPrimary
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: window.animateMinimize()
+                }
+                HoverHandler { id: minHover; cursorShape: Qt.PointingHandCursor }
+            }
+
+            // 最大化/还原
+            Rectangle {
+                width: 28; height: 28; radius: 6
+                color: maxHover.hovered ? Qt.rgba(1,1,1,0.15) : "transparent"
+                Text {
+                    anchors.centerIn: parent
+                    text: window.visibility === Window.Maximized ? "❐" : "□"
+                    font.pixelSize: 12
+                    color: window.textPrimary
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: winHelper.toggleMaximize()
+                }
+                HoverHandler { id: maxHover; cursorShape: Qt.PointingHandCursor }
+            }
+
+            // 关闭
+            Rectangle {
+                width: 28; height: 28; radius: 6
+                color: closeHover.hovered ? "#e55" : "transparent"
+                Text {
+                    anchors.centerIn: parent
+                    text: "✕"
+                    font.pixelSize: 13
+                    color: closeHover.hovered ? "white" : window.textPrimary
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: winHelper.closeWindow()
+                }
+                HoverHandler { id: closeHover; cursorShape: Qt.PointingHandCursor }
+            }
+        }
     }
 
     // ═══════════════════════════════════════════
@@ -168,6 +265,7 @@ Rectangle {
     // ═══════════════════════════════════════════
     Item {
         anchors.fill: parent
+        anchors.topMargin: 32
         visible: width >= 700
 
         // ── 内容区（z:1，全屏）──
@@ -429,6 +527,7 @@ Rectangle {
     // ═══════════════════════════════════════════
     ColumnLayout {
         anchors.fill: parent
+        anchors.topMargin: 32
         spacing: 0
         visible: width < 700
 
