@@ -1,0 +1,14 @@
+--resource
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/rcc/qmake_frontend.qrc
+--resource
+C:/Users/HP/Desktop/TinyBlog/TinyBlog/src/frontend/build/.qt/rcc/appfrontend_raw_qml_0.qrc
+/qt/qml/frontend/Main.qml
+/qt/qml/frontend/LoginFlow.qml
+/qt/qml/frontend/MainPage.qml
+/qt/qml/frontend/SquarePage.qml
+/qt/qml/frontend/MessagesPage.qml
+/qt/qml/frontend/ProfilePage.qml
+/qt/qml/frontend/ConversationListPanel.qml
+/qt/qml/frontend/ConversationItem.qml
+/qt/qml/frontend/ChatPanel.qml
+/qt/qml/frontend/MessageBubble.qml

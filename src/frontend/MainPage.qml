@@ -310,9 +310,9 @@ Rectangle {
                 // ═══════════════════════════════════════
                 Repeater {
                     model: [
-                        { icon: "▪", tip: qsTr("广场") },
-                        { icon: "≡", tip: qsTr("消息") },
-                        { icon: "●", tip: qsTr("我的") }
+                        { icon: "🌐", tip: qsTr("广场") },
+                        { icon: "💬", tip: qsTr("消息") },
+                        { icon: "👤", tip: qsTr("我的") }
                     ]
 
                     Rectangle {
@@ -478,9 +478,9 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { icon: "▪", label: qsTr("广场") },
-                        { icon: "≡", label: qsTr("消息") },
-                        { icon: "●", label: qsTr("我的") }
+                        { icon: "🌐", label: qsTr("广场") },
+                        { icon: "💬", label: qsTr("消息") },
+                        { icon: "👤", label: qsTr("我的") }
                     ]
 
                     Item {

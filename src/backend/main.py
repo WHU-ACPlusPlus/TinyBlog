@@ -4,8 +4,13 @@
 
 # Databases
 
-import base64, io, os, random, sqlite3, bcrypt, secrets, threading, logging, sys
+import os, re, base64, io, random, sqlite3, bcrypt, secrets, threading, logging, sys
 from datetime import datetime, timezone, timedelta
+
+# ── Social 模块 ──
+import social.social as social_mod
+import social.search as social_search
+import social.notification as social_notify
 
 # ── 日志系统配置 ──
 # 北京时间 (UTC+8)
@@ -129,19 +134,18 @@ def get_user_id(cookie):
     """Check cookie validity and auto-extend (+1 hour), return user_id or None."""
     if not cookie:
         return None
-    with db_lock:
-        row = conn.execute(
-            "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
-            (cookie,)
-        ).fetchone()
-        if not row:
-            return None
-        conn.execute(
-            "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
-            (cookie,)
-        )
-        conn.commit()
-        return row['user_id']
+    row = db_fetchone(
+        "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
+        (cookie,)
+    )
+    if not row:
+        return None
+    db_execute(
+        "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
+        (cookie,)
+    )
+    db_commit()
+    return row['user_id']
 
 if __name__ == "__main__":
     db_execute("""
@@ -375,6 +379,11 @@ if __name__ == "__main__":
         )
     """)
     db_commit()
+
+    # ── 初始化 Social 模块表结构 ──
+    print("[social] Initializing social tables...")
+    social_mod._ensure_social_tables()
+    print("[social] Social tables ready.")
 
 # =============================================================================
 # 头像生成：新用户注册时自动生成彩色首字母头像
@@ -1114,43 +1123,41 @@ def follow(body: Follow_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    if user_id == body.followee_id:
-        log_api("POST /follow", user_id, "to=self", "Cannot follow yourself")
-        return {"error": "Cannot follow yourself."}
-    target = db_fetchone(
-            "SELECT id FROM users WHERE id = ?",
-            (body.followee_id,)
-            )
-    if not target:
-        log_api("POST /follow", user_id, f"to={body.followee_id}", "User not exist")
-        return {"error": "User not exist."}
-    db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
-            (user_id, body.followee_id)
-            )
+    # 委托给 social 模块（同步维护 follows + following 两表）
+    try:
+        result = social_mod.follow(user_id, body.followee_id)
+    except ValueError as e:
+        log_api("POST /follow", user_id, f"to={body.followee_id}", str(e))
+        return {"error": str(e)}
+    if result["status"] == "blocked":
+        log_api("POST /follow", user_id, f"to={body.followee_id}", result.get("message", "blocked"))
+        return {"error": result.get("message", "你已被该用户屏蔽，无法关注")}
+    if result["status"] == "banned":
+        return {"error": result.get("message", "你已被封禁")}
     # 关注成功后，为关注者创建占位会话（使对方出现在会话列表中）
-    db_execute("""
-        INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count)
-        VALUES (?, 'private', ?, '', datetime('now'), 0)
-    """, (user_id, body.followee_id))
-    db_commit()
-    log_api("POST /follow", user_id, f"to={body.followee_id}", "success + conversation created")
-    return {"status": "success"}
+    if result["status"] in ("followed", "requested", "already_following"):
+        db_execute("""
+            INSERT OR IGNORE INTO conversations (user_id, type, target_id, last_message, last_message_time, unread_count)
+            VALUES (?, 'private', ?, '', datetime('now'), 0)
+        """, (user_id, body.followee_id))
+        db_commit()
+    log_api("POST /follow", user_id, f"to={body.followee_id}", result["status"])
+    return {"status": result["status"]}
 
 @app.post("/unfollow")
 def unfollow(body: Follow_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    db_execute("DELETE FROM following WHERE follower = ? AND followee = ?",
-            (user_id, body.followee_id)
-            )
-    # 同时隐藏与该用户的会话
+    # social_mod.unfollow 已处理表删除
+    result = social_mod.unfollow(user_id, body.followee_id)
+    # 同时隐藏与该用户的会话（YFunction）
     db_execute(
         "UPDATE conversations SET is_hidden = 1 WHERE user_id = ? AND type = 'private' AND target_id = ?",
         (user_id, body.followee_id)
     )
     db_commit()
-    return {"status": "success"}
+    return result
 
 class Like_Req(BaseModel):
     cookie: str
@@ -1206,8 +1213,6 @@ def comment(body: Comment_Req):
         return {"error": "Bad cookie."}
     if not body.content:
         return {"error": "Empty comment not allowed."}
-    if contains_blocked(body.content):
-        return {"error": "内容不符合发布要求"}
     post = db_fetchone(
             "SELECT id FROM posts WHERE id = ?",
             (body.post_id,)
@@ -1258,15 +1263,14 @@ def send_msg(body: Send_Msg):
     if not existence:
         log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Bad to_whom_id")
         return {"error": "Bad `to_whom_id`"}
+    # ── 空消息检查 ──
     if not body.content:
         log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "Empty message")
         return {"error": "Empty message not allowed."}
+    # ── 敏感词检查 ──
     if contains_blocked(body.content):
         log_api("POST /send-msg", user_id, f"to={body.to_whom_id}", "blocked")
         return {"error": "消息包含不允许的内容"}
-
-    # 单向关注限制
-        return {"error": "Empty message not allowed."}
     # ── 单向关注限制：对方未关注我且未回复 → 只能发1条 ──
     mutual = db_fetchone("""
         SELECT 1 FROM following f1
@@ -1295,7 +1299,7 @@ def send_msg(body: Send_Msg):
         else:
             log_api("POST /send-msg", user_id,
                     f"to={body.to_whom_id} one_way(replied)", "allowed")
-    # 1. 插入消息
+    # 双写：offline_messages（旧 TinyBlog）+ private_messages（LYC 会话系统）
     db_execute("INSERT INTO offline_messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
             (user_id, body.to_whom_id, body.content,)
             )
@@ -1358,11 +1362,9 @@ def pub_post(body: Pub_Post):
         return {"error": "Empty post not allowed."}
     if len(body.media) > 9:
         return {"error": "Too many media."}
-    if contains_blocked(body.text):
-        return {"error": "内容不符合发布要求"}
     for medium in body.media:
-        if len(medium) > 5 * 1024 * 1024:
-            return {"error": "Media too large (max 5MB base64 / ~3.75MB raw)."}
+        if len(medium) > (1 << 24):
+            return {"error": "Media cannot be larger than 16MiB."}
     db_execute("INSERT INTO posts (publisher_id, content) VALUES (?, ?)",
             (user_id, body.text)
             )
@@ -1478,64 +1480,6 @@ def get_post(body: Get_Post):
         "media": [dict(m) for m in media]
     }
 
-class Get_User_Posts_Req(BaseModel):
-    cookie: str
-    publisher_id: int
-
-@app.post("/get-user-posts")
-def get_user_posts(body: Get_User_Posts_Req):
-    user_id = get_user_id(body.cookie)
-    if not user_id:
-        return {"error": "Bad cookie."}
-    posts = db_fetchall(
-        "SELECT id FROM posts WHERE publisher_id = ? ORDER BY created_at DESC LIMIT 100",
-        (body.publisher_id,)
-    )
-    log_api("POST /get-user-posts", user_id,
-            f"publisher_id={body.publisher_id}", f"count={len(posts)}")
-    return {"post_ids": [p["id"] for p in posts]}
-
-class Get_User_Posts_Detail_Req(BaseModel):
-    cookie: str
-    publisher_id: int
-
-@app.post("/get-user-posts-detail")
-def get_user_posts_detail(body: Get_User_Posts_Detail_Req):
-    user_id = get_user_id(body.cookie)
-    if not user_id:
-        return {"error": "Bad cookie."}
-    posts = db_fetchall(
-        "SELECT p.*, u.username, u.nickname FROM posts p "
-        "JOIN users u ON u.id = p.publisher_id "
-        "WHERE p.publisher_id = ? ORDER BY p.created_at DESC LIMIT 100",
-        (body.publisher_id,)
-    )
-    result = []
-    for post in posts:
-        media = db_fetchall(
-            "SELECT offset, content FROM post_media WHERE post_id = ? ORDER BY offset",
-            (post["id"],)
-        )
-        liked = db_fetchone(
-            "SELECT 1 FROM liking_users WHERE post_id = ? AND liker_id = ?",
-            (post["id"], user_id)
-        )
-        result.append({
-            "id": post["id"],
-            "publisher_id": post["publisher_id"],
-            "username": post["username"],
-            "nickname": post["nickname"],
-            "content": post["content"],
-            "like_num": post["like_num"],
-            "liked": liked is not None,
-            "created_at": post["created_at"],
-            "repost_id": post["repost_id"],
-            "media": [dict(m) for m in media]
-        })
-    log_api("POST /get-user-posts-detail", user_id,
-            f"publisher_id={body.publisher_id}", f"count={len(result)}")
-    return {"posts": result}
-
 class Create_Group_Req(BaseModel):
     cookie: str
     name: str
@@ -1637,7 +1581,6 @@ def send_group_msg(body: Send_Group_Msg_Req):
     if contains_blocked(body.content):
         log_api("POST /send-group-msg", user_id, f"group={body.group_id}", "blocked")
         return {"error": "消息包含不允许的内容"}
-
     # 1. 插入群消息
     db_execute("INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)",
             (body.group_id, user_id, body.content)
@@ -1790,30 +1733,24 @@ def check_cookie(body: Check_Cookie_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"valid": False}
-    # 在一次锁内读取所有用户数据，确保一致性
-    with db_lock:
-        user = conn.execute(
-                "SELECT id, username, nickname, avatar, signature, email FROM users WHERE id = ?",
-                (user_id,)
-                ).fetchone()
-        if not user:
-            return {"valid": False}
-        post_count = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM posts WHERE publisher_id = ?",
-                (user["id"],)
-            ).fetchone()
-        follower_count = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM following WHERE followee = ?",
-                (user["id"],)
-            ).fetchone()
-        followee_count = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM following WHERE follower = ?",
-                (user["id"],)
-            ).fetchone()
-    avatar_preview = (user["avatar"][:80] + "...") if user["avatar"] and len(user["avatar"]) > 80 else (user["avatar"] or "(empty)")
-    log_api("POST /check-cookie", user_id,
-            f"avatar_len={len(user['avatar']) if user['avatar'] else 0}",
-            f"avatar_head={avatar_preview}")
+    user = db_fetchone(
+            "SELECT id, username, nickname, avatar, signature, email FROM users WHERE id = ?",
+            (user_id,)
+            )
+    if not user:
+        return {"valid": False}
+    post_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM posts WHERE publisher_id = ?",
+            (user["id"],)
+        )
+    follower_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM following WHERE followee = ?",
+            (user["id"],)
+        )
+    followee_count = db_fetchone(
+            "SELECT COUNT(*) AS cnt FROM following WHERE follower = ?",
+            (user["id"],)
+        )
     return {
         "valid": True,
         "user_id": user["id"],
@@ -1933,8 +1870,6 @@ def edit_profile(body: Edit_Profile_Req):
     if not user_id:
         return {"error": "Bad cookie."}
     if body.nickname:
-        if contains_blocked(body.nickname):
-            return {"error": "昵称包含不允许的内容"}
         db_execute(
                 "UPDATE users SET nickname = ? WHERE id = ?",
                 (body.nickname, user_id)
@@ -2044,8 +1979,6 @@ def repost(body: Repost_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    if contains_blocked(body.text):
-        return {"error": "内容不符合发布要求"}
     original = db_fetchone(
             "SELECT id, publisher_id FROM posts WHERE id = ?",
             (body.post_id,)
@@ -2071,22 +2004,16 @@ def patch_avatar(body: Patch_Avatar_Req):
     user_id = get_user_id(body.cookie)
     if not user_id:
         return {"error": "Bad cookie."}
-    if body.signature and contains_blocked(body.signature):
-        return {"error": "个性签名包含不允许的内容"}
-    with db_lock:
-        if body.avatar:
-            conn.execute("UPDATE users SET avatar = ? WHERE id = ?",
-                    (body.avatar, user_id)
-                    )
-        if body.signature:
-            conn.execute(
-                    "UPDATE users SET signature = ? WHERE id = ?",
-                    (body.signature, user_id)
-                    )
-        conn.commit()
-    log_api("POST /avatar", user_id,
-            f"avatar_len={len(body.avatar) if body.avatar else 0}, sig_len={len(body.signature) if body.signature else 0}",
-            "success")
+    if body.avatar:
+        db_execute("UPDATE users SET avatar = ? WHERE id = ?",
+                (body.avatar, user_id)
+                )
+    if body.signature:
+        db_execute(
+                "UPDATE users SET signature = ? WHERE id = ?",
+                (body.signature, user_id)
+                )
+    db_commit()
     return {"status": "success"}
 
 @app.get("/avatar")
@@ -2589,6 +2516,500 @@ def handle_friend_request(body: Handle_Friend_Req_Req):
                    (req["to_user_id"], req["from_user_id"]))
         db_execute("UPDATE friend_requests SET status = 'accepted' WHERE id = ?",
                    (body.request_id,))
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "accepted")
+    else:
+        db_execute("UPDATE friend_requests SET status = 'rejected' WHERE id = ?",
+                   (body.request_id,))
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "rejected")
+    db_commit()
+    return {"status": "success", "result": body.action}
+
+# ── 用户帖子列表 ──
+
+class UserPostsReq(BaseModel):
+    cookie: str
+    publisher_id: int
+
+@app.post("/get-user-posts")
+def get_user_posts(body: UserPostsReq):
+    row = db_fetchone("SELECT user_id FROM cookies WHERE token = ?", (body.cookie,))
+    if not row:
+        return {"error": "Bad cookie."}
+    posts = db_fetchall(
+        "SELECT id FROM posts WHERE publisher_id = ? ORDER BY id DESC",
+        (body.publisher_id,)
+    )
+    return {"post_ids": [p["id"] for p in posts]}
+
+@app.post("/get-user-posts-detail")
+def get_user_posts_detail(body: UserPostsReq):
+    row = db_fetchone("SELECT user_id FROM cookies WHERE token = ?", (body.cookie,))
+    if not row:
+        return {"error": "Bad cookie."}
+    post_rows = db_fetchall(
+        "SELECT p.*, u.username, u.nickname FROM posts p JOIN users u ON u.id = p.publisher_id WHERE p.publisher_id = ? ORDER BY p.id DESC",
+        (body.publisher_id,)
+    )
+    posts = []
+    for p in post_rows:
+        media = db_fetchall("SELECT content FROM post_media WHERE post_id = ?", (p["id"],))
+        tags = db_fetchall("SELECT tag FROM post_tags WHERE post_id = ?", (p["id"],))
+        posts.append({
+            "id": p["id"],
+            "publisher_id": p["publisher_id"],
+            "username": p["username"],
+            "nickname": p["nickname"],
+            "content": p["content"],
+            "like_num": p["like_num"],
+            "favourites_count": p.get("favourites_count", 0),
+            "reblogs_count": p.get("reblogs_count", 0),
+            "replies_count": p.get("replies_count", 0),
+            "created_at": p["created_at"],
+            "repost_id": p.get("repost_id"),
+            "media": [dict(m) for m in media],
+            "tags": [r["tag"] for r in tags],
+        })
+    return {"posts": posts}
+
+# =============================================================================
+# Social 模块路由 — 屏蔽、搜索、通知、推荐、审核
+# =============================================================================
+
+# ── 屏蔽 / 取消屏蔽 ──
+
+class Block_User_Req(BaseModel):
+    cookie: str
+    blocked_id: int
+
+@app.post("/block")
+def block_user(body: Block_User_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    result = social_mod.block(user_id, body.blocked_id)
+    log_api("POST /block", user_id, f"target={body.blocked_id}", result.get("status", "error"))
+    return result
+
+@app.post("/unblock")
+def unblock_user(body: Block_User_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    result = social_mod.unblock(user_id, body.blocked_id)
+    return result
+
+@app.post("/get-blocked")
+def get_blocked_list(body: Get_Follower):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"blocked": social_mod.get_blocked(user_id)}
+
+# ── 静音 / 取消静音 ──
+
+class Mute_Req(BaseModel):
+    cookie: str
+    muted_id: int
+
+@app.post("/mute")
+def mute_user(body: Mute_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    result = social_mod.mute(user_id, body.muted_id)
+    return result
+
+@app.post("/unmute")
+def unmute_user(body: Mute_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    result = social_mod.unmute(user_id, body.muted_id)
+    return result
+
+@app.post("/get-muted")
+def get_muted_list(body: Get_Follower):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"muted": social_mod.get_muted(user_id)}
+
+# ── FTS5 全文搜索 ──
+
+class Social_Search_Req(BaseModel):
+    cookie: str
+    query: str
+    limit: int = 20
+
+@app.post("/social/search")
+def social_search_api(body: Social_Search_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    result = social_search.search_all(body.query, viewer_id=user_id, limit=body.limit)
+    log_api("POST /social/search", user_id, f"query={body.query}", f"posts={len(result.get('posts',[]))} users={len(result.get('users',[]))} tags={len(result.get('tags',[]))}")
+    return result
+
+@app.post("/social/search-users")
+def social_search_users(body: Social_Search_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"users": social_search.search_users(body.query, limit=body.limit)}
+
+@app.post("/social/search-posts")
+def social_search_posts(body: Social_Search_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"posts": social_search.search_posts(body.query, viewer_id=user_id, limit=body.limit)}
+
+# ── 通知 ──
+
+class Notification_Req(BaseModel):
+    cookie: str
+    limit: int = 40
+    offset: int = 0
+
+@app.post("/notifications")
+def get_notifications(body: Notification_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"notifications": social_notify.get_notifications(user_id, limit=body.limit, offset=body.offset)}
+
+@app.post("/notifications/unread-count")
+def unread_count(body: Get_Follower):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"count": social_notify.get_unread_count(user_id)}
+
+class Mark_Read_Req(BaseModel):
+    cookie: str
+    notification_ids: list[int]
+
+@app.post("/notifications/mark-read")
+def mark_notifications_read(body: Mark_Read_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    count = social_notify.mark_read(body.notification_ids, user_id)
+    return {"marked": count}
+
+@app.post("/notifications/mark-all-read")
+def mark_all_read(body: Get_Follower):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    count = social_notify.mark_all_read(user_id)
+    return {"marked": count}
+
+# ── 推荐 ──
+
+@app.post("/recommend/users")
+def recommend_users(body: Notification_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"users": social_mod.recommend_users(user_id, limit=body.limit)}
+
+@app.post("/recommend/posts")
+def recommend_posts(body: Social_Search_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"posts": social_mod.recommend_posts(user_id, limit=body.limit)}
+
+# ── 好友分组 ──
+
+class Create_Friend_Group_Req(BaseModel):
+    cookie: str
+    name: str
+
+@app.post("/friend-groups/create")
+def create_friend_group(body: Create_Friend_Group_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    result = social_mod.create_friend_group(user_id, body.name)
+    log_api("POST /friend-groups/create", user_id, f"name={body.name}", result.get("status", "error"))
+    return result
+
+class Delete_Friend_Group_Req(BaseModel):
+    cookie: str
+    group_id: int
+
+@app.post("/friend-groups/delete")
+def delete_friend_group(body: Delete_Friend_Group_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return social_mod.delete_friend_group(body.group_id, user_id)
+
+@app.post("/friend-groups/list")
+def list_friend_groups(body: Get_Follower):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"groups": social_mod.get_friend_groups(user_id)}
+
+class Friend_Group_Member_Req(BaseModel):
+    cookie: str
+    group_id: int
+    friend_id: int
+
+@app.post("/friend-groups/add-member")
+def add_to_friend_group(body: Friend_Group_Member_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return social_mod.add_to_friend_group(body.group_id, user_id, body.friend_id)
+
+@app.post("/friend-groups/remove-member")
+def remove_from_friend_group(body: Friend_Group_Member_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return social_mod.remove_from_friend_group(body.group_id, user_id, body.friend_id)
+
+# ── 检查好友关系 ──
+
+class Check_Friend_Req(BaseModel):
+    cookie: str
+    target_id: int
+
+@app.post("/check-friend")
+def check_friend(body: Check_Friend_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"are_friends": social_mod.are_friends(user_id, body.target_id)}
+
+@app.post("/get-friends")
+def get_friends(body: Get_Follower):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"friends": social_mod.get_friends(user_id)}
+
+# ── 审核 / 举报 ──
+
+class Report_Req(BaseModel):
+    cookie: str
+    post_id: int
+    reason: str = ""
+
+@app.post("/report")
+def report_content(body: Report_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    result = social_mod.report_content(user_id, body.post_id, body.reason)
+    log_api("POST /report", user_id, f"post={body.post_id}", result.get("status", "error"))
+    return result
+
+class Admin_Base_Req(BaseModel):
+    cookie: str
+
+class Admin_Review_Req(BaseModel):
+    cookie: str
+    report_id: int
+    action: str = ""    # "dismiss" | "delete_post" | "ban_user"
+    note: str = ""
+
+@app.post("/admin/reports")
+def get_reports(body: Admin_Base_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return {"reports": social_mod.get_reports(user_id)}
+
+@app.post("/admin/review-report")
+def review_report(body: Admin_Review_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return social_mod.review_report(body.report_id, user_id, body.action, body.note)
+
+class Admin_Ban_Req(BaseModel):
+    cookie: str
+    target_id: int
+    reason: str = ""
+
+@app.post("/admin/ban")
+def ban_user(body: Admin_Ban_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return social_mod.ban_user(user_id, body.target_id, body.reason)
+
+@app.post("/admin/unban")
+def unban_user(body: Admin_Ban_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        return {"error": "Bad cookie."}
+    return social_mod.unban_user(user_id, body.target_id)
+
+# ── 补充：POST /update-group（更新群名称/头像，仅群主可操作）──
+
+@app.post("/update-group")
+def update_group(body: Update_Group_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /update-group", None, f"group={body.group_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    group = db_fetchone(
+            "SELECT id, owner_id FROM groups WHERE id = ?",
+            (body.group_id,)
+            )
+    if not group:
+        log_api("POST /update-group", user_id, f"group={body.group_id}", "Group not exist")
+        return {"error": "Group not exist."}
+    if group["owner_id"] != user_id:
+        log_api("POST /update-group", user_id, f"group={body.group_id}", "Not owner")
+        return {"error": "Only group owner can update group info."}
+    changes = []
+    if body.name:
+        db_execute(
+                "UPDATE groups SET name = ? WHERE id = ?",
+                (body.name, body.group_id)
+                )
+        changes.append("name")
+    if body.avatar:
+        db_execute(
+                "UPDATE groups SET avatar = ? WHERE id = ?",
+                (body.avatar, body.group_id)
+                )
+        changes.append("avatar")
+    db_commit()
+    log_api("POST /update-group", user_id, f"group={body.group_id}", f"updated: {','.join(changes) if changes else 'nothing'}")
+    return {"status": "success"}
+
+# =============================================================================
+# 好友申请系统 (BUG 1 修复)
+# =============================================================================
+
+class Send_Friend_Req_Req(BaseModel):
+    cookie: str
+    to_user_id: int
+
+@app.post("/send-friend-request")
+def send_friend_request(body: Send_Friend_Req_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /send-friend-request", None, f"to={body.to_user_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    if user_id == body.to_user_id:
+        log_api("POST /send-friend-request", user_id, "to=self", "Cannot friend yourself")
+        return {"error": "Cannot send friend request to yourself."}
+    target = db_fetchone("SELECT id FROM users WHERE id = ?", (body.to_user_id,))
+    if not target:
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "User not exist")
+        return {"error": "User not exist."}
+    # 检查是否已是好友（双向关注）
+    mutual = db_fetchone("""
+        SELECT 1 FROM following f1
+        WHERE f1.follower = ? AND f1.followee = ?
+        INTERSECT
+        SELECT 1 FROM following f2
+        WHERE f2.follower = ? AND f2.followee = ?
+    """, (user_id, body.to_user_id, body.to_user_id, user_id))
+    if mutual:
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "Already friends")
+        return {"error": "Already friends."}
+    # 检查是否已有待处理申请
+    existing = db_fetchone(
+        "SELECT id, status FROM friend_requests WHERE from_user_id = ? AND to_user_id = ?",
+        (user_id, body.to_user_id)
+    )
+    if existing:
+        if existing["status"] == "pending":
+            log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "Request already pending")
+            return {"error": "Friend request already sent."}
+        # 之前被拒绝过，允许重新发送：更新状态
+        db_execute(
+            "UPDATE friend_requests SET status = 'pending', created_at = datetime('now') WHERE id = ?",
+            (existing["id"],)
+        )
+        db_commit()
+        log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", "request re-sent")
+        return {"status": "success", "request_id": existing["id"]}
+    db_execute(
+        "INSERT INTO friend_requests (from_user_id, to_user_id) VALUES (?, ?)",
+        (user_id, body.to_user_id)
+    )
+    db_commit()
+    log_api("POST /send-friend-request", user_id, f"to={body.to_user_id}", f"request_id={db_lastrowid()}")
+    return {"status": "success", "request_id": db_lastrowid()}
+
+class Get_Friend_Reqs_Req(BaseModel):
+    cookie: str
+
+@app.post("/get-friend-requests")
+def get_friend_requests(body: Get_Friend_Reqs_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /get-friend-requests", None, "", "Bad cookie")
+        return {"error": "Bad cookie."}
+    # 收到的申请
+    incoming = db_fetchall("""
+        SELECT fr.id, fr.from_user_id, u.username, u.nickname, u.avatar, fr.status, fr.created_at
+        FROM friend_requests fr
+        JOIN users u ON u.id = fr.from_user_id
+        WHERE fr.to_user_id = ? AND fr.status = 'pending'
+        ORDER BY fr.created_at DESC
+    """, (user_id,))
+    # 发出的申请
+    outgoing = db_fetchall("""
+        SELECT fr.id, fr.to_user_id, u.username, u.nickname, u.avatar, fr.status, fr.created_at
+        FROM friend_requests fr
+        JOIN users u ON u.id = fr.to_user_id
+        WHERE fr.from_user_id = ?
+        ORDER BY fr.created_at DESC
+    """, (user_id,))
+    log_api("POST /get-friend-requests", user_id, "",
+            f"incoming={len(incoming)} outgoing={len(outgoing)}")
+    return {
+        "incoming": [dict(r) for r in incoming],
+        "outgoing": [dict(r) for r in outgoing]
+    }
+
+class Handle_Friend_Req_Req(BaseModel):
+    cookie: str
+    request_id: int
+    action: str   # "accept" | "reject"
+
+@app.post("/handle-friend-request")
+def handle_friend_request(body: Handle_Friend_Req_Req):
+    user_id = resolve_user(body.cookie)
+    if not user_id:
+        log_api("POST /handle-friend-request", None, f"req={body.request_id}", "Bad cookie")
+        return {"error": "Bad cookie."}
+    if body.action not in ("accept", "reject"):
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", f"Bad action: {body.action}")
+        return {"error": "Action must be 'accept' or 'reject'."}
+    req = db_fetchone(
+        "SELECT id, from_user_id, to_user_id, status FROM friend_requests WHERE id = ?",
+        (body.request_id,)
+    )
+    if not req:
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "Request not found")
+        return {"error": "Friend request not found."}
+    if req["to_user_id"] != user_id:
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "Not your request")
+        return {"error": "This request is not for you."}
+    if req["status"] != "pending":
+        log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", f"Already {req['status']}")
+        return {"error": f"Request already {req['status']}."}
+    if body.action == "accept":
+        # 双向关注 → 成为好友
+        db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
+                   (req["from_user_id"], req["to_user_id"]))
+        db_execute("INSERT OR IGNORE INTO following (follower, followee) VALUES (?, ?)",
+                   (req["to_user_id"], req["from_user_id"]))
+        db_execute("UPDATE friend_requests SET status = 'accepted' WHERE id = ?",
+                   (body.request_id,))
         # 为双方创建会话记录
         now = _beijing_time()
         db_execute(
@@ -2604,6 +3025,5 @@ def handle_friend_request(body: Handle_Friend_Req_Req):
         log_api("POST /handle-friend-request", user_id, f"req={body.request_id}", "rejected")
     db_commit()
     return {"status": "success", "result": body.action}
-
 if __name__ == "__main__":
     uvicorn.run(app, port = 18999, access_log = False)
