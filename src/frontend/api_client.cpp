@@ -240,8 +240,14 @@ void ApiClient::setLanguage(const QString& locale) {
     if (locale != "zh_CN") {
         m_translator = new QTranslator(this);
         QStringList searchPaths = {
-            QCoreApplication::applicationDirPath() + "/appfrontend_" + locale + ".qm",               // dev: build/
-            QCoreApplication::applicationDirPath() + "/translations/appfrontend_" + locale + ".qm",  // installed
+            // dev: build/Release/appfrontend_*.qm
+            QCoreApplication::applicationDirPath() + "/appfrontend_" + locale + ".qm",
+            // installed: /usr/bin/translations/appfrontend_*.qm
+            QCoreApplication::applicationDirPath() + "/translations/appfrontend_" + locale + ".qm",
+            // installed via package: /usr/share/tinyblog/translations/appfrontend_*.qm
+            QCoreApplication::applicationDirPath() + "/../share/tinyblog/translations/appfrontend_" + locale + ".qm",
+            // fallback: next to binary but one level up (e.g. dev build layout)
+            QCoreApplication::applicationDirPath() + "/../appfrontend_" + locale + ".qm",
         };
         bool loaded = false;
         for (const auto& path : searchPaths) {
@@ -881,9 +887,15 @@ void ApiClient::checkCookie() {
     if (m_cookie.isEmpty())
         return;
 
-    QJsonObject body{{"cookie", m_cookie}};
+    // 记录发起请求时的 cookie 值，防止响应到达时已被登录/登出操作替换
+    QString cookieAtSend = m_cookie;
+    QJsonObject body{{"cookie", cookieAtSend}};
     QNetworkReply* reply = postJson("/check-cookie", body);
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, cookieAtSend]() {
+        // 过时响应：cookie 在请求发出后已被修改（用户已主动登录或登出），忽略本次结果
+        if (m_cookie != cookieAtSend)
+            return;
+
         if (reply->error() != QNetworkReply::NoError) {
             reply->deleteLater();
             m_checkCookieRetries++;
