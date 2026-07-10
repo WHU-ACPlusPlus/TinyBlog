@@ -2366,6 +2366,53 @@ def handle_friend_request(body: Handle_Friend_Req_Req):
     db_commit()
     return {"status": "success", "result": body.action}
 
+# ── 用户帖子列表 ──
+
+class UserPostsReq(BaseModel):
+    cookie: str
+    publisher_id: int
+
+@app.post("/get-user-posts")
+def get_user_posts(body: UserPostsReq):
+    row = db_fetchone("SELECT user_id FROM cookies WHERE token = ?", (body.cookie,))
+    if not row:
+        return {"error": "Bad cookie."}
+    posts = db_fetchall(
+        "SELECT id FROM posts WHERE publisher_id = ? ORDER BY id DESC",
+        (body.publisher_id,)
+    )
+    return {"post_ids": [p["id"] for p in posts]}
+
+@app.post("/get-user-posts-detail")
+def get_user_posts_detail(body: UserPostsReq):
+    row = db_fetchone("SELECT user_id FROM cookies WHERE token = ?", (body.cookie,))
+    if not row:
+        return {"error": "Bad cookie."}
+    post_rows = db_fetchall(
+        "SELECT p.*, u.username, u.nickname FROM posts p JOIN users u ON u.id = p.publisher_id WHERE p.publisher_id = ? ORDER BY p.id DESC",
+        (body.publisher_id,)
+    )
+    posts = []
+    for p in post_rows:
+        media = db_fetchall("SELECT content FROM post_media WHERE post_id = ?", (p["id"],))
+        tags = db_fetchall("SELECT tag FROM post_tags WHERE post_id = ?", (p["id"],))
+        posts.append({
+            "id": p["id"],
+            "publisher_id": p["publisher_id"],
+            "username": p["username"],
+            "nickname": p["nickname"],
+            "content": p["content"],
+            "like_num": p["like_num"],
+            "favourites_count": p.get("favourites_count", 0),
+            "reblogs_count": p.get("reblogs_count", 0),
+            "replies_count": p.get("replies_count", 0),
+            "created_at": p["created_at"],
+            "repost_id": p.get("repost_id"),
+            "media": [dict(m) for m in media],
+            "tags": [r["tag"] for r in tags],
+        })
+    return {"posts": posts}
+
 # =============================================================================
 # Social 模块路由 — 屏蔽、搜索、通知、推荐、审核
 # =============================================================================
