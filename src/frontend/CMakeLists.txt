@@ -83,6 +83,15 @@ set_target_properties(appfrontend PROPERTIES
     QT_ANDROID_TARGET_SDK_VERSION 33
 )
 
+# Bundle translation .qm files into Android assets
+if(ANDROID)
+    qt_add_resources(appfrontend translations_bundle
+        PREFIX "/"
+        BASE ${CMAKE_CURRENT_BINARY_DIR}
+        FILES ${appfrontend_qm_files}
+    )
+endif()
+
 install(TARGETS appfrontend
     BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
