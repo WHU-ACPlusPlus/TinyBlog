@@ -221,6 +221,7 @@ def _ensure_social_tables():
     try:
         existing_notif_cols = [r[1] for r in conn.execute("PRAGMA table_info(notifications)").fetchall()]
         for col_name, col_def in [
+            ("post_id", "INTEGER"),
             ("report_data", "TEXT DEFAULT NULL"),
             ("relationship_severance", "TEXT DEFAULT NULL"),
             ("moderation_warning", "TEXT DEFAULT NULL"),

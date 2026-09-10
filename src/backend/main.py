@@ -7,11 +7,6 @@
 import os, re, base64, io, random, sqlite3, bcrypt, secrets, threading, logging, sys
 from datetime import datetime, timezone, timedelta
 
-# ── Social 模块 ──
-import social.social as social_mod
-import social.search as social_search
-import social.notification as social_notify
-
 # ── 日志系统配置 ──
 # 北京时间 (UTC+8)
 TZ_BEIJING = timezone(timedelta(hours=8))
@@ -100,6 +95,16 @@ conn.execute("PRAGMA busy_timeout=5000")
 # 线程锁：保护所有数据库操作，防止并发读同一连接导致段错误
 db_lock = threading.Lock()
 
+# -- 让 social 模块使用同样的连接 --
+import social.db as _sdb
+_sdb.get_conn = lambda: conn
+_sdb.close_conn()
+
+# ── Social 模块 ──
+import social.social as social_mod
+import social.search as social_search
+import social.notification as social_notify
+
 # 用 conn.execute() 替代全局 cursor，每次获取新游标，线程安全
 _last_cursor = None
 
@@ -111,11 +116,17 @@ def db_execute(sql, params=()):
 
 def db_fetchone(sql, params=()):
     with db_lock:
-        return conn.execute(sql, params).fetchone()
+        cur = conn.execute(sql, params)
+        row = cur.fetchone()
+        conn.commit()  # close implicit read txn
+        return row
 
 def db_fetchall(sql, params=()):
     with db_lock:
-        return conn.execute(sql, params).fetchall()
+        cur = conn.execute(sql, params)
+        rows = cur.fetchall()
+        conn.commit()  # close implicit read txn
+        return rows
 
 def db_commit():
     with db_lock:
@@ -135,25 +146,30 @@ def get_user_id(cookie):
     """Check cookie validity and auto-extend (+1 hour), return user_id or None."""
     if not cookie:
         return None
-    row = db_fetchone(
-        "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
-        (cookie,)
-    )
-    if not row:
-        return None
-    db_execute(
-        "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
-        (cookie,)
-    )
-    db_commit()
+    # 原子化操作：单次 db_lock 中完成读+写，避免多线程下隐式事务冲突
+    with db_lock:
+        global _last_cursor
+        cur = conn.execute(
+            "SELECT user_id FROM cookies WHERE token = ? AND expires_at > datetime('now')",
+            (cookie,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        conn.execute(
+            "UPDATE cookies SET expires_at = datetime('now', '+1 hour') WHERE token = ?",
+            (cookie,)
+        )
+        conn.commit()
+        _last_cursor = conn.execute("SELECT 1")
     return row['user_id']
 
 # -- 让 social 模块使用同样的连接 --
-import social.db as _sdb
-_sdb.get_conn = lambda: conn
-_sdb.close_conn()  # close the connection created during social module import
 
-if __name__ == "__main__":
+
+def init_db():
+    """Create every table the app needs — single source of truth for the schema."""
+    print("[db] init_db: creating schema...")
     db_execute("""
                    CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -390,6 +406,8 @@ if __name__ == "__main__":
     print("[social] Initializing social tables...")
     social_mod._ensure_social_tables()
     print("[social] Social tables ready.")
+    # 收尾提交：init 阶段若有未提交写入，会一直占着 SQLite 写锁
+    db_commit()
 
 # =============================================================================
 # 头像生成：新用户注册时自动生成彩色首字母头像
@@ -2997,4 +3015,5 @@ def handle_friend_request(body: Handle_Friend_Req_Req):
     return {"status": "success", "result": body.action}
 
 if __name__ == "__main__":
+    init_db()
     uvicorn.run(app, port = 18999, access_log = False)
